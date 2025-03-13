@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools >= 69.5.1", "setuptools_scm[toml]>=8.1.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cassy"
+license = {file = "LICENSE"}
+dynamic = ["version"]
+authors = [
+  { name="F4E engineering analyses unit", email="davide.laghi@f4e.europa.eu" },
+]
+description = "Perform stress assessment following design codes"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)",
+]
+dependencies = [
+    "pandas",
+    "scipy",
+    "shapely",
+    "python-docx",
+    "seaborn",
+    "xlwings",
+    "tqdm",
+    "pyvista",
+    "openpyxl",
+    "xlrd"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff"
+]
+
+# [project.urls]
+# Homepage = "https://github.com/fusion4energy"
+# Repository = "https://github.com/Fusion4Energy/F4Enix"
+# Documentation = "https://f4enix.readthedocs.io/en/latest/"
+
+[tool.setuptools_scm]
+write_to = "src/_version.py"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+"cassy" = ["**/*.xlsx", "**/*.txt", "**/*.csv", "**/*.docx"]

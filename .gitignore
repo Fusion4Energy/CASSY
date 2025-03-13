@@ -1,0 +1,10 @@
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyc
+*.pyc
+~$template.xlsx
+.vscode/
+.ruff_cache/
+cassy.egg-info/
+_version.py

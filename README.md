@@ -1,93 +1,381 @@
 # CASSY
+CASSY is an automated tool for stress assessment following design codes.
 
+Authors: F4E engineering analyses unit
 
+## Requirements
 
-## Getting started
+**IGNORE FOR THE MOMENT THIS SECTION**
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://eng-gitlab.f4e.europa.eu/f4e-projects/cassy.git
-git branch -M main
-git push -uf origin main
-```
-
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://eng-gitlab.f4e.europa.eu/f4e-projects/cassy/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+- Windows operative system (Linux or MacOS compatibility has not been tested);
+- Up-to-date Anaconda distribution (Python 3, the recommended version is python 3.9.12);
+- Microsoft Office suite (Excel and Word);
+- Python packages:
+  - numpy (recommended version is 1.22.3)
+  - pandas (recommended version is 1.4.2)
+  - scipy (recommended version is 1.8.0)
+  - shapely(recommended version is 1.8.0)
+  - python-docx (recommended version is 0.8.11)
+  - xlrd (recommended version is 2.0.1)
+  - seaborn (recommended version is 0.11.2)
+  - xlwings (recommended version is 0.27.15)
+  - tqdm
+  - pyvista (recommended version is 0.34.2)
+  - openpyxl (recommended version is 3.0.9)
+  
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+
+### User Installation
+The procedure to install cassy is the following:
+
+1) Create a new environment. If you are using anaconda as python package manager you can do this with:
+
+    ```
+    conda create -n cassy python=3.12
+    ```
+
+2) Activate the newly created python environment. If you are using anaconda:
+
+    ```
+    conda activate cassy
+    ```
+
+2) Install the cassy package. To do that, move into the (un-zipped) root folder
+   and type:
+
+    ```
+    pip install .
+    ```
+
+    With this local installation, pip will use the information found in the
+    ``pyproject.toml`` file to handle all required dependencies.
+  
+### Developer installation
+
+To perform a developer installation, follow the same step 1) and 2) of the 
+User installation.
+
+Then, you should clone the GitLab repository into a folder of your choice.
+Move into the chosen folder and type:
+
+    ```
+    git clone https://eng-gitlab.f4e.europa.eu/f4e-projects/cassy.git
+    ```
+
+If it is the first time that you connect to the F4E GitLab you will be requested
+to autenthicate yourself. In case of an SSL certificate error, you can solve it
+through:
+
+    ```
+    git config --global http.sslBackend schannel
+    ```
+
+After the repository has been cloned, perform an "editable" installation:
+
+    ```
+    pip install -e .[dev]
+    ```
+
+the flag ``-e`` tells pip that this is an editable installation. This means
+that the code of the package is not stored in the manager folders but a link
+is created with the cloned repository instead. Changing the code in the repo
+(i.e. modifications or switching branches) will change the behaviour of the
+package in real time.
+The ``[dev]`` tells pip to install some additional dependencies that are
+useful for development purposes such as ``pytest`` or ``ruff`.
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+Once the package has been installed, the user should create a folder
+where a specific assessment will be performed. From now on, such folder is referred as ``<root>``
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+1. create a folder of Input/Output (from now on ``<root>\<IO>``), the ``<IO>`` folder architectures are provided in an example folder together with cassy;
+2. set the excel configuration files depending on the assessment to perform in ``<root>\<IO>\Configuration``;
+3. Set the ``<IO>`` folder path into the main file (``<Code folder\main_file.py>``); 
+4. open an anaconda prompt shell and change directory to ``<root>\<Code folder>`` Then type:
+    ```
+    python -m cassy.<main file to be run without ".py">
+    ```
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+## Input-output folder structure
+### Paths
+Inside `src/cassy/main.py` only two variables need to be specified which
+are `MAIN_IO` and `fatigue`. `fatigue` can be set to True or False depending if the fatigue assessment shall be carried out. The `MAIN_IO` will need to be populated with all necessary inputs for the code to run. Outputs will be dumped in the same  `MAIN_IO` folder.
+Inside `MAIN_IO`, 2 folders need to be created by the user:
+* `Configurations`, that contains all the configuration file for each model to be assessed excel configuration files examples can be found in the example folder;
+* `Paths`, that contains a subfolder for each model (named as the configuration file). Each model subfolder must contain a subfolder for each analysis run in ANSYS that will contain two excel files for each timestep of the ANSYS analysis. The first excel file will contain the linearized stress tensors for all paths at the start nodes, while the second file will contain the linearized stress tensors for all paths at the end nodes. Excel load files examples can be found in the example folder.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+The final input tree should look like this:
+```
+MAIN_IO
+    |
+    |------ Configurations
+    |         |------ <model1>.xlsx
+    |         |------ <model2>.xlsx
+    |         |------ ...
+    |
+    |------ Paths
+    |         |------ <model1>
+    |         |          |------ <single_load1>
+    |         |          |              |------ <Loadstep1_begin>.xlsx
+    |         |          |              |------ <Loadstep1_end>.xlsx
+    |         |          |              |------ <Loadstep2_begin>.xlsx
+    |         |          |              |------ <Loadstep2_end>.xlsx
+    |         |          |              |------ ...
+    |         |          |
+    |         |          |------ <single_load2>
+    |         |          |              |------ <Loadstep1_begin>.xlsx
+    |         |          |              |------ <Loadstep1_end>.xlsx
+    |         |          |              |------ <Loadstep2_begin>.xlsx
+    |         |          |              |------ <Loadstep2_end>.xlsx
+    |         |          |              |------ ...
+    |         |          |
+    |         |          |------ ...
+    |         |
+    |         |------ ...
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```
+#### The configuration file
+As specified in the previous section, for each model to be assessed, a
+configuration file needs to be generated and stored inside the `MAIN_IO/Configuration`
+folder. The excel is composed by 6 sheets which are described hereafter.
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+###### General
+This sheet contains the general parameters for the assesment:
+* `Design Code`, name of the design code as specified in the allowable codes in the same sheet.
 
-## License
-For open source projects, say how it is licensed.
+###### Paths
+This sheet is related to the definitionof the paths parameters. For each path,
+the following data is specified:
+* **Path N**, this is the identification number of the path that identifies it 
+    and that needs to be the same as the one specified in the load excel files;
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+###### Load steps
+This sheet is related to the configuration of the single loads. For each load,
+the following data is specified:
+* **Load**, this is the name of the single loads that identify it and that needs
+    to be recalled in loads recombination;
+* **Analysis Name**, this is the name of the folder that contains the linearized 
+    stresses related to this load in the correspondent `MAIN_IO/Paths/model` 
+    subfolder;
+* **Timestep**, this specifies the timestep of the ANSYS analysis related to this 
+    specific single load.
+
+###### Stresses
+This sheet is related to the configuration of the single loads. For each load,
+the following data is specified:
+* **Load**, this is the name of the single loads that identify it and that needs
+    to be the same as the one specified in the `Load step` sheet;
+* **Unit**, this is the units used for the linearized stress tensors in the excel
+    load files. Typycally MPa or Pa;
+* **Stress Type**, this is the type of stress related to the specific load, 
+    either P or Q;
+* **Load Type**, this is the type of the specific load, either Inertial or Volumetric;
+* **Scale**, factor that scales the stress tensors related to the specific load;
+* **Spatial Recombination**, type of spatial recombination of inertial stresses,
+    typically srss;
+* **Is Cyclic**, either True or False;
+* **Derives from Plasma Disruption**, either True or False;
+* **Is Pressure**, either True or False;
+* **Is Occasional**, either True or False.
+
+##### Reference Event
+This sheet is related to the configuration of the reference events (i.e. load
+combination). For each reference event, the following data is specified:
+* **Path N**, this is the identification number of the path as specified in the 
+    Paths sheet;
+* **ID**, identified for the reference event;
+* **Loads**, list of single loads (separated by commas) that compose the event;
+* **Operating Conditions**, description of the event, it is not mandatory for 
+    the assessment;
+* **Initiating Event**, description of the event, it is not mandatory for 
+    the assessment;
+* **Concatenated Event**, description of the event, it is not mandatory for 
+    the assessment;
+* **Loading ctg**, either I, II, III or IV;
+* **Service Level**, either "A", "C" or "D";
+* **T**, maximum temperature for the specific path during the specific reference
+    event;
+* **DPA**, maximum displacements per atom for the specific path during the
+    specific reference event.
+
+##### RE fatigue
+This sheet is related to the configuration of the reference events (i.e. load
+combination) for fatigue. For each reference event, the following data is
+specified:
+* **Path N**, this is the identification number of the path as specified in the 
+    Paths sheet;
+* **ID**, identified for the reference event;
+* **Loads**, list of single loads (separated by commas) that compose the event;
+* **Operating Conditions**, description of the event, it is not mandatory for 
+    the assessment;
+* **Initiating Event**, description of the event, it is not mandatory for 
+    the assessment;
+* **Concatenated Event**, description of the event, it is not mandatory for 
+    the assessment;
+* **Loading ctg**, either I, II, III or IV;
+* **Service Level**, either "A", "C" or "D";
+* **N cycles**, number of cycles to be considered for the specific load combination;
+* **T**, maximum temperature for the specific path during the specific reference
+    event;
+* **DPA**, maximum displacements per atom for the specific path during the
+    specific reference event.
+
+#### Outputs
+once the input folders have been correctly populated, the code can be run.
+Different outputs will be provided in the `MAIN_IO` folder. All subfolders
+are automatically generated.
+
+* `Assessment`, a folder containing assessment excel files for each path;
+* `Images`, a folder containing summary picturestaken from the assessment excel files;
+* `Recap.docx`, a word file containing summary tables of the results and the pictures
+  from the `Images` folder.
+
+### Bolts
+Inside `src/cassy/main_bolts.py` only two variables need to be specified which
+are `MAIN_IO` and `fatigue`. `fatigue` can be set to True or False depending if the fatigue assessment shall be carried out. The `MAIN_IO` will need to be populated with all necessary inputs for the code to run. Outputs will be dumped in the same  `MAIN_IO` folder.
+Inside `MAIN_IO`, 2 folders need to be created by the user:
+* `Configuration`, that contains a subfolder for each model. Each model subfolder must contain an excel configuration file for each bolt. Excel configuration files examples can be found in the example folder;
+* `Actions`, that contains a subfolder for each model (named as the configuration folders). Each model subfolder must contain a subfolder for each analysis run in ANSYS that will contain a text files for each timestep of the ANSYS analysis. The text files will contain the actions on for all bolts at the start nodes. Excel load files examples can be found in the example folder.
+
+The final input tree should look like this:
+```
+MAIN_IO
+    |
+    |------ Configurations
+    |         |------ <model1>
+    |         |           |------ <bolt1>.xlsx
+    |         |           |------ <bolt2>.xlsx
+    |         |           |------ ...
+    |         |
+    |         |------ <model2>
+    |         |           |------ <bolt1>.xlsx
+    |         |           |------ <bolt2>.xlsx
+    |         |           |------ ...
+    |
+    |------ Actions
+    |         |------ <model1>
+    |         |          |------ <single_load1>
+    |         |          |              |------ <Loadstep1>.txt
+    |         |          |              |------ <Loadstep2>.txt
+    |         |          |              |------ ...
+    |         |          |
+    |         |          |------ <single_load2>
+    |         |          |              |------ <Loadstep1>.txt
+    |         |          |              |------ <Loadstep2>.txt
+    |         |          |              |------ ...
+    |         |          |
+    |         |          |------ ...
+    |         |
+    |         |------ ...
+
+```
+#### The configuration file
+As specified in the previous section, for each model to be assessed, a
+configuration file needs to be generated and stored inside the `MAIN_IO/Configurations`
+folder. The excel is composed by 5 sheets which are described hereafter.
+
+###### Additional Data
+This sheet contains the general parameters for the assesment:
+* `Code`, name of the design code, either RCC-MRx, RCC-MR or SDC-IC
+* `Preload`, the value of the preload for the bolt in Newton
+
+###### Bolt Data
+This sheet is related to the specification of the geometrical and material data 
+for the bolt.
+
+###### Insert Data
+This sheet is related to the specification of the geometrical and material data 
+for the base material where the bolt is screwed.
+
+##### REs
+This sheet is related to the configuration of the reference events (i.e. load
+combination). For each reference event, the following data is specified:
+* **ID**, identified for the reference event;
+* **Operating Conditions**, description of the event, it is not mandatory for 
+    the assessment;
+* **Initiating Event**, description of the event, it is not mandatory for 
+    the assessment;
+* **Concatenated Event**, description of the event, it is not mandatory for 
+    the assessment;
+* **T**, maximum temperature for the bolt during the specific reference
+    event;
+* **DPA**, maximum displacements per atom for the specific bolt during the
+    specific reference event.
+* **Primary**, combined primary loads that compose the event, the name of 
+    the single load shall be same as the name of the .txt action file without the
+    file extension;
+* **All**, combined single loads that compose the event the name of 
+    the single load shall be same as the name of the .txt action file without the
+    file extension;
+* **Loading category**, either I, II, III or IV;
+* **Service Level**, either "A", "C" or "D".
+
+##### REs fatigue
+This sheet is related to the configuration of the reference events (i.e. load
+combination) for fatigue. For each reference event, the following data is
+specified:
+* **ID**, identified for the reference event;
+* **Operating Conditions**, description of the event, it is not mandatory for 
+    the assessment;
+* **Initiating Event**, description of the event, it is not mandatory for 
+    the assessment;
+* **Concatenated Event**, description of the event, it is not mandatory for 
+    the assessment;
+* **T**, maximum temperature for the bolt during the specific reference
+    event;
+* **DPA**, maximum displacements per atom for the specific bolt during the
+    specific reference event;
+* **Total number of cycles**, number of cycles to be considered for the specific
+    load combination;
+* **Sigma sustained**, combined primary loads that compose the event;
+* **Delta sigma**, combined cyclic loads that compose impose the delta of the
+    actions. It can be specified either as a difference of loads (loads divided
+    by '-') or as a single load;
+* **Loading category**, either I, II, III or IV;
+* **Service Level**, either "A", "C" or "D".
+
+#### Outputs
+once the input folders have been correctly populated, the code can be run.
+Different outputs will be provided in the `MAIN_IO` folder. All subfolders
+are automatically generated.
+
+* `Assessment`, a folder containing assessment 2 excel files for each bolt (one
+   for the bolt and one for the base material);
+* `Images`, a folder containing summary pictures taken from the assessment excel files;
+* `Recap.docx`, a word file containing summary tables of the results and the pictures
+  from the `Images` folder.
+
+## Usage
+### Implemented design codes
+Hereinafter are listed the design codes that have been implemented in the tool.
+#### On linearized Stresses
+- RCC-MRx
+- RCC-MR
+- SDC-IC
+
+#### On Bolts
+- RCC-MRx
+- RCC-MR/SDC-IC
+
+#### On piping
+- RCC-MRx
+
+## Known Limitations
+Hereinafter are listed the known limitation for the tool.
+### General
+- material properties should be always double checked, in particular the validity ranges that not always are taken into account by the code;
+#### Trixiality factor
+- triaxility factor has been considered equal to 2 by default. This is a conservative assumption considering the related allowable stresses.
+- only linear elastic analysis routes are implemented;
+- the assessment may be considered valid only if creep can be neglected.
+### Paths
+- fatigue for materials with a fatigue curve depending on stress is not currently supported;
+- RCC-MRx rules for significant irradiation (RB 3251.21) are not yet implemented;
+- In RCC-MRx ratcheting efficieny index rules are commented out and should be double checked if are to be used.
+### Bolts
+- fatigue for SDC-IC/RCC-MR is implemented without Neuber's rule since all materials tested up to know had the cyclic stress-strain curve missing;
+- fatigue for materials with a fatigue curve depending on strain is not currently supported.
+
+

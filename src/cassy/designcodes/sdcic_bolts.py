@@ -1,0 +1,580 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Dec 22 11:48:39 2020
+
+@author: davide laghi
+"""
+
+from cassy.designcodes.codes import Code, Rule
+
+ASSESSMENTS = {
+    "cross section": "Minimum bolt cross-sectional area for bolted flanged joints which do not have to satisfy leaktightness",
+    "plastic collapse": "Rules for the prevention of M type damage, Immediate plastic collapse or excessive plastic deformation",
+    "flow localization": "Rules for the prevention of M type damage, Immediate flow localization and immediate local fracture due to exhaustion of ductility",
+}
+
+
+class SDC_IC_Bolts(Code):
+    def __init__(self, failure_modes=None):
+        super().__init__(failure_modes=failure_modes, name="SDC-IC (Bolts)")
+        # Minimum bolt cross-sectional area for bolted flanged joints which do
+        # not have to satisfy leaktightness
+        primary = {"Primary Stress": IC6113()}
+        plastic_collapse = {
+            "Mean Stress Limits": IC6121_1_3_1(),
+            "Maximum Stress Limits": IC6121_1_3_2(),
+            "Shear Stress Limits": IC6121_1_3_3(),
+            "Contact pressure limits": IC6121_1_3_4(),
+        }
+        flow_localization = {
+            "Mean Stress Limits": IC6122_1_1(),
+            "Maximum Stress Limits:": IC6122_1_2(),
+        }
+        rules = {
+            ASSESSMENTS["cross section"]: primary,
+            ASSESSMENTS["plastic collapse"]: plastic_collapse,
+            ASSESSMENTS["flow localization"]: flow_localization,
+        }
+        self.rules = rules
+
+        # --- Customized rule sets ---
+        # Base material threads assessment
+        pc = {
+            "Shear Stress Limits": IC6121_1_3_3_insert(),
+            "Contact pressure limits": IC6121_1_3_4_insert(),
+        }
+        base_material = {ASSESSMENTS["plastic collapse"]: pc}
+
+        self.custom_rules = {"Insert": base_material}
+
+    def computeVj(self, boltAction, material, T, dpa, Kf):
+        """
+        Asses the Rule
+        Parameters
+        ----------
+        boltAction : section_action.ReferenceEvent
+            reference event to assess.
+        material : material.Material
+            Material data.
+        T : float
+            Temperature of the path.
+        dpa : float
+            Displacement per atom value in the path.
+        Kf : float
+            fatigue stress reduction factor (IC 2753) for the application
+            of the Neuber's rule.
+
+        Returns
+        -------
+        dictionary containing: sigma bar, epsilon bar, N, Rule ID,
+        epsilon plasticity, signa_pre, epsilon N, sigma N.
+        """
+        ruleID = "IC 6131.2.1"
+        T_dpa = (T, dpa)
+        # In a bolt action for fatigue, the primary stress are to be used for
+        # sigma pre and the all loads for the stress intensity range
+        s_tens_sust = boltAction.sigma_tensile
+        ds_tens = boltAction.stresses["all"]["Primary stress"]
+        s_pre = s_tens_sust + ds_tens
+
+        # Nominal stress intensity range
+        ds_n = boltAction.stresses["all"]["Stress intensity range"]
+        # --- Nominal elastic strain range (IC 6131.2.1.1) ---
+        de_n = ds_n / material.E(T)
+
+        # --- Correction for stress concentration and plasticity ---
+        #                    (IC 6131.2.1.2)
+        try:
+            material.cyclic_stress_strain(T, ds_n)
+            # TODO Neuber's Rule is not implemented yet!
+            raise ValueError("Proper Neuber needs to be implemented")
+        except ValueError:
+            # Correction implemented in case true stress-strain curve is not
+            # available
+            ds = Kf * ds_n
+            de = "-"
+
+        # --- Correction for mean stress (IC 6131.2.1.3) ---
+        #             Goodman's correction
+        # minimum ultimate tensile strength
+        Su = material.Su_min(T_dpa)
+        # minimum yield strength
+        Sy = material.Sy_min(T_dpa)
+        # maximum average tensile stress in bolt during cycle
+        # Sigma m
+        s_m = min(Sy, Kf * s_pre * 1e6)  # sigma_pre needs to be brought in Pa
+        # equivalent stress range at zero mean stress
+        ds_bar = ds / (1 - s_m / Su)
+
+        if material.fatigue_curve == "strain":
+            # TODO not implemented yet!
+            raise ValueError("strain based curves need to be implemented")
+        elif material.fatigue_curve == "stress":
+            de_bar = "-"
+            if material.name == "Inconel 718 (non leak-tight)":
+                # For Inconel the curve is T independent but is dependent by
+                # the max mean stress
+                SA = ds_bar / 2
+                # Sigma pre is used as max mean stress
+                N = material._inconel_N(s_pre, SA)
+            else:
+                T_s = (T, ds_bar / 2)  # use the amplitude
+                N = material.N(T_s)
+
+        return {
+            "sigma bar": ds_bar,
+            "epsilon bar": de_bar,
+            "N": N,
+            "Rule ID": ruleID,
+            "epsilon plasticity": de,
+            "sigma plasticity": ds,
+            "sigma pre": s_pre,
+            "epsilon N": de_n,
+            "sigma N": ds_n,
+        }
+
+
+# ############# Cross Section ##############
+# --- Primary stress limit for bolts ---
+class IC6113(Rule):
+    def __init__(self):
+        self.damage_type = "M"
+        self.ref = "IC 6113"
+        self.description = ["Primary stress"]
+
+    def assess(self, boltaction, material, T, dpa):
+        """
+        Assess the rule
+
+        Parameters
+        ----------
+        boltaction : section_action.BoltSectionActions
+            internal actions acting on the bolt.
+        material : material.Material
+            Material data.
+        T : float
+            Temperature of the bolt.
+        dpa : float
+            Displacement per atom value in the bolt section.
+
+        Returns
+        -------
+        list
+            Each item in the list represents an equation result, each equation
+            is of the type (stress, allowable).
+        """
+
+        service_lvl = boltaction.service_lvl
+        T_dpa = (T, dpa)
+        # select allowable
+        if service_lvl == "A" or service_lvl == "C":
+            allowable1 = material.Sm_irr(T_dpa)
+        elif service_lvl == "D":
+            allowable1 = "No limit"
+        else:
+            raise KeyError(service_lvl + " is not an admissible service level")
+
+        stress1 = boltaction.stresses["primary"]["Primary stress"]
+
+        return [(stress1, allowable1)]
+
+
+# ############# Plastic collapse ##############
+# --- Stress limits for structural joints high strength bolts ---
+class IC6121_1_3_1(Rule):
+    def __init__(self):
+        self.damage_type = "M"
+        self.ref = "IC 6121.1.3.1"
+        self.description = ["Mean stress, primary loads", "Mean stress, all loads"]
+
+    def assess(self, boltaction, material, T, dpa):
+        """
+        Assess the rule
+
+        Parameters
+        ----------
+        boltaction : section_action.BoltSectionActions
+            internal actions acting on the bolt.
+        material : material.Material
+            Material data.
+        T : float
+            Temperature of the bolt.
+        dpa : float
+            Displacement per atom value in the bolt section.
+
+        Returns
+        -------
+        list
+            Each item in the list represents an equation result, each equation
+            is of the type (stress, allowable).
+        """
+
+        service_lvl = boltaction.service_lvl
+        T_dpa = (T, dpa)
+        # select allowable
+        if service_lvl == "A" or service_lvl == "C":
+            allowable1 = material.Sm_irr(T_dpa)
+            allowable2 = min(
+                0.9 * material.Sy_min(T_dpa), 0.67 * material.Su_min(T_dpa)
+            )
+        elif service_lvl == "D":
+            allowable1 = 2 * material.Sm_irr(T_dpa)
+            allowable2 = "No limit"
+        else:
+            raise KeyError(service_lvl + " is not an admissible service level")
+
+        stress1 = boltaction.stresses["primary"]["Mean stress"]
+        stress2 = boltaction.stresses["all"]["Mean stress"]
+
+        return [(stress1, allowable1), (stress2, allowable2)]
+
+
+class IC6121_1_3_2(Rule):
+    def __init__(self):
+        self.damage_type = "M"
+        self.ref = "IC 6121.1.3.2"
+        self.description = ["Max stress, primary loads", "Max stress, all loads"]
+
+    def assess(self, boltaction, material, T, dpa):
+        """
+        Assess the rule
+
+        Parameters
+        ----------
+        boltaction : section_action.BoltSectionActions
+            internal actions acting on the bolt.
+        material : material.Material
+            Material data.
+        T : float
+            Temperature of the bolt.
+        dpa : float
+            Displacement per atom value in the bolt section.
+
+        Returns
+        -------
+        list
+            Each item in the list represents an equation result, each equation
+            is of the type (stress, allowable).
+        """
+
+        service_lvl = boltaction.service_lvl
+        T_dpa = (T, dpa)
+        # select allowable
+        if service_lvl == "A" or service_lvl == "C":
+            allowable1 = 1.5 * material.Sm_irr(T_dpa)
+            allowable2 = min(1.2 * material.Sy_min(T_dpa), 0.9 * material.Su_min(T_dpa))
+        elif service_lvl == "D":
+            allowable1 = 3 * material.Sm_irr(T_dpa)
+            allowable2 = "No limit"
+        else:
+            raise KeyError(service_lvl + " is not an admissible service level")
+
+        stress1 = boltaction.stresses["primary"]["Max stress"]
+        stress2 = boltaction.stresses["all"]["Max stress"]
+
+        return [(stress1, allowable1), (stress2, allowable2)]
+
+
+class IC6121_1_3_3(Rule):
+    def __init__(self):
+        self.damage_type = "M"
+        self.ref = "IC 6121.1.3.3"
+        self.description = [
+            "Avg shear stress in threads, primary loads",
+            "Avg shear stress in head, primary loads",
+            "Avg shear stress in the threads, all loads",
+            "Avg shear stress in head, all loads",
+        ]
+
+    def assess(self, boltaction, material, T, dpa):
+        """
+        Assess the rule
+
+        Parameters
+        ----------
+        boltaction : section_action.BoltSectionActions
+            internal actions acting on the bolt.
+        material : material.Material
+            Material data.
+        T : float
+            Temperature of the bolt.
+        dpa : float
+            Displacement per atom value in the bolt section.
+
+        Returns
+        -------
+        list
+            Each item in the list represents an equation result, each equation
+            is of the type (stress, allowable).
+        """
+
+        service_lvl = boltaction.service_lvl
+        T_dpa = (T, dpa)
+        # select allowable
+        if service_lvl == "A" or service_lvl == "C":
+            allowable1 = allowable2 = 0.6 * material.Sm_irr(T_dpa)
+            allowable3 = allowable4 = 0.6 * material.Sy_min(T_dpa)
+        elif service_lvl == "D":
+            allowable1 = "No limit"
+            allowable2 = "No limit"
+            allowable3 = "No limit"
+            allowable4 = "No limit"
+        else:
+            raise KeyError(service_lvl + " is not an admissible service level")
+
+        primary = boltaction.stresses["primary"]
+        _all = boltaction.stresses["all"]
+        stress1 = primary["Avg shear stress in threads"]
+        stress2 = primary["Avg shear stress in head"]
+        stress3 = _all["Avg shear stress in threads"]
+        stress4 = _all["Avg shear stress in head"]
+
+        return [
+            (stress1, allowable1),
+            (stress2, allowable2),
+            (stress3, allowable3),
+            (stress4, allowable4),
+        ]
+
+
+class IC6121_1_3_3_insert(Rule):
+    def __init__(self):
+        self.damage_type = "M"
+        self.ref = "IC 6121.1.3.3 (base material)"
+        self.description = [
+            "Avg shear stress in threads, primary loads",
+            "Avg shear stress in the threads, all loads",
+        ]
+
+    def assess(self, boltaction, material, T, dpa):
+        """
+        Assess the rule
+
+        Parameters
+        ----------
+        boltaction : section_action.BoltSectionActions
+            internal actions acting on the bolt.
+        material : material.Material
+            Material data.
+        T : float
+            Temperature of the bolt.
+        dpa : float
+            Displacement per atom value in the bolt section.
+
+        Returns
+        -------
+        list
+            Each item in the list represents an equation result, each equation
+            is of the type (stress, allowable).
+        """
+
+        service_lvl = boltaction.service_lvl
+        T_dpa = (T, dpa)
+        # select allowable
+        if service_lvl == "A" or service_lvl == "C":
+            allowable1 = 0.6 * material.Sm_irr(T_dpa)
+            allowable2 = 0.6 * material.Sy_min(T_dpa)
+        elif service_lvl == "D":
+            allowable1 = "No limit"
+            allowable2 = "No limit"
+        else:
+            raise KeyError(service_lvl + " is not an admissible service level")
+
+        primary = boltaction.stresses["primary"]
+        _all = boltaction.stresses["all"]
+        stress1 = primary["Avg shear stress in threads"]
+        stress2 = _all["Avg shear stress in threads"]
+
+        return [(stress1, allowable1), (stress2, allowable2)]
+
+
+class IC6121_1_3_4(Rule):
+    def __init__(self):
+        self.damage_type = "M"
+        self.ref = "IC 6121.1.3.4"
+        dsc2 = "Avg contact pressure between head and assembly, all loads"
+        self.description = ["Avg contact pressure between threads, all loads", dsc2]
+
+    def assess(self, boltaction, material, T, dpa):
+        """
+        Assess the rule
+
+        Parameters
+        ----------
+        boltaction : section_action.BoltSectionActions
+            internal actions acting on the bolt.
+        material : material.Material
+            Material data.
+        T : float
+            Temperature of the bolt.
+        dpa : float
+            Displacement per atom value in the bolt section.
+
+        Returns
+        -------
+        list
+            Each item in the list represents an equation result, each equation
+            is of the type (stress, allowable).
+        """
+
+        service_lvl = boltaction.service_lvl
+        T_dpa = (T, dpa)
+        # select allowable
+        if service_lvl == "A" or service_lvl == "C":
+            allowable1 = allowable2 = 2.7 * material.Sy_min(T_dpa)
+        elif service_lvl == "D":
+            allowable1 = "No limit"
+            allowable2 = "No limit"
+
+        else:
+            raise KeyError(service_lvl + " is not an admissible service level")
+
+        sdesc = "Avg contact pressure betweeen threads"
+        stress1 = boltaction.stresses["all"][sdesc]
+        sdesc = "Avg contact pressure between head and assembly"
+        stress2 = boltaction.stresses["all"][sdesc]
+
+        return [(stress1, allowable1), (stress2, allowable2)]
+
+
+class IC6121_1_3_4_insert(Rule):
+    def __init__(self):
+        self.damage_type = "M"
+        self.ref = "IC 6121.1.3.4 (base material)"
+        self.description = ["Avg contact pressure between threads, all loads"]
+
+    def assess(self, boltaction, material, T, dpa):
+        """
+        Assess the rule
+
+        Parameters
+        ----------
+        boltaction : section_action.BoltSectionActions
+            internal actions acting on the bolt.
+        material : material.Material
+            Material data.
+        T : float
+            Temperature of the bolt.
+        dpa : float
+            Displacement per atom value in the bolt section.
+
+        Returns
+        -------
+        list
+            Each item in the list represents an equation result, each equation
+            is of the type (stress, allowable).
+        """
+
+        service_lvl = boltaction.service_lvl
+        T_dpa = (T, dpa)
+        # select allowable
+        if service_lvl == "A" or service_lvl == "C":
+            allowable1 = 2.7 * material.Sy_min(T_dpa)
+        elif service_lvl == "D":
+            allowable1 = "No limit"
+
+        else:
+            raise KeyError(service_lvl + " is not an admissible service level")
+
+        sdesc = "Avg contact pressure betweeen threads"
+        stress1 = boltaction.stresses["all"][sdesc]
+
+        return [(stress1, allowable1)]
+
+
+# ############# Flow localization ##############
+class IC6122_1_1(Rule):
+    def __init__(self):
+        self.damage_type = "M"
+        self.ref = "IC 6122.1.1"
+        self.description = ["Mean stress, all loads"]
+
+    def assess(self, boltaction, material, T, dpa):
+        """
+        Assess the rule
+
+        Parameters
+        ----------
+        boltaction : section_action.BoltSectionActions
+            internal actions acting on the bolt.
+        material : material.Material
+            Material data.
+        T : float
+            Temperature of the bolt.
+        dpa : float
+            Displacement per atom value in the bolt section.
+
+        Returns
+        -------
+        list
+            Each item in the list represents an equation result, each equation
+            is of the type (stress, allowable).
+        """
+
+        service_lvl = boltaction.service_lvl
+        T_dpa = (T, dpa)
+
+        # select allowable
+        if service_lvl == "A":
+            allowable1 = material.Se(T_dpa)
+        elif service_lvl == "C":
+            allowable1 = 1.2 * material.Se(T_dpa)
+        elif service_lvl == "D":
+            allowable1 = 2 * material.Se(T_dpa)
+        else:
+            raise KeyError(service_lvl + " is not an admissible service level")
+
+        stress1 = boltaction.stresses["all"]["Mean stress"]
+
+        return [(stress1, allowable1)]
+
+
+class IC6122_1_2(Rule):
+    def __init__(self):
+        self.damage_type = "M"
+        self.ref = "IC 6122.1.2"
+        self.description = [
+            "Max stress, neglecting concentrations, all loads",
+            "Max stress, including concentrations, all loads",
+        ]
+
+    def assess(self, boltaction, material, T, dpa, Kf=4):
+        """
+        Assess the rule
+
+        Parameters
+        ----------
+        boltaction : section_action.BoltSectionActions
+            internal actions acting on the bolt.
+        material : material.Material
+            Material data.
+        T : float
+            Temperature of the bolt.
+        dpa : float
+            Displacement per atom value in the bolt section.
+        Kf : float
+            this needs to be double-checked.
+
+        Returns
+        -------
+        list
+            Each item in the list represents an equation result, each equation
+            is of the type (stress, allowable).
+        """
+
+        service_lvl = boltaction.service_lvl
+        T_dpa = (T, dpa)
+        # select allowable
+        if service_lvl == "A":
+            allowable1 = allowable2 = material.Sd(T_dpa)
+        elif service_lvl == "C":
+            allowable1 = allowable2 = 1.2 * material.Sd(T_dpa)
+        elif service_lvl == "D":
+            allowable1 = allowable2 = 1.35 * material.Sd(T_dpa)
+        else:
+            raise KeyError(service_lvl + " is not an admissible service level")
+
+        stress1 = boltaction.stresses["all"]["Max stress"]
+        stress2 = stress1 * Kf  # THIS NEEDS TO BE DOUBLE-CHECKED
+
+        return [(stress1, allowable1), (stress2, allowable2)]
