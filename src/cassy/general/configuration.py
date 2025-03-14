@@ -5,9 +5,13 @@ Created on Thu Nov 26 15:15:07 2020
 @author: Davide Laghi
 """
 
-import pandas as pd
+from __future__ import annotations
+
 import os
-from typing import Dict
+
+import pandas as pd
+
+from cassy.auxiliary.types import PathLike
 
 
 class Configuration:
@@ -130,3 +134,25 @@ class Configuration:
 class AssessmentConfiguration:
     def __init__(self) -> None:
         pass
+
+
+def parse_cfg_files(cfg_root: PathLike) -> dict[str, Configuration]:
+    """Parse all configuration files in the given folder and divide them
+    by submodel.
+
+    Parameters
+    ----------
+    cfg_root : PathLike
+        Path to the folder containing the configuration files
+
+    Returns
+    -------
+    dict[str, Configuration]
+        Dictionary containing the configuration objects divided by submodel
+    """
+    config = {}
+    for conf_file in os.listdir(cfg_root):
+        submodel = conf_file.split(".")[0]
+        confpath = os.path.join(cfg_root, conf_file)
+        config[submodel] = Configuration(submodel, confpath)
+    return config

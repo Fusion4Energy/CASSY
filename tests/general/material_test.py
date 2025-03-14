@@ -1,7 +1,7 @@
 from importlib.resources import as_file, files
 
 from cassy.additional_data import materials
-from cassy.general.material import Material
+from cassy.general.material import Material, read_materials
 
 # Add path to material files
 RES = files(materials)
@@ -28,3 +28,7 @@ class TestMaterial:
 
         self._test_Sy(material, 295, 0, 429.3 * 1e6)
         self._test_Su(material, 295, 0, 545.9 * 1e6)
+
+
+def test_read_materials():
+    read_materials(RES)

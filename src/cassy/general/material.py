@@ -4,12 +4,12 @@ Created on Thu Mar  5 13:01:17 2020
 @author: Davide Laghi
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import warnings
-from cmath import isnan
 from functools import partial
-from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -465,7 +465,7 @@ def _cleanNA(df):
     return df
 
 
-def read_materials(mat_folder: os.PathLike) -> Dict[str, Material]:
+def read_materials(mat_folder: os.PathLike) -> dict[str, Material]:
     """Parse all materials listed in a folder as excel files.
 
     Parameters
@@ -475,15 +475,16 @@ def read_materials(mat_folder: os.PathLike) -> Dict[str, Material]:
 
     Returns
     -------
-    Dict[str, Material]
+    dict[str, Material]
         parsed material objects
     """
     materials = {}
     for file in os.listdir(mat_folder):
-        logging.info("Reading {}".format(file))
-        filepath = os.path.join(mat_folder, file)
-        matname = file.split(".")[0]
-        material = Material(filepath, name=matname)
-        materials[matname] = material
+        if file.endswith(".xlsx"):
+            logging.info("Reading {}".format(file))
+            filepath = os.path.join(mat_folder, file)
+            matname = file.split(".")[0]
+            material = Material(filepath, name=matname)
+            materials[matname] = material
 
     return materials
