@@ -26,8 +26,7 @@ dependencies = [
     "tqdm",
     "pyvista",
     "openpyxl",
-    "xlrd",
-    "pythoncom"
+    "xlrd"
 ]
 
 [project.optional-dependencies]
