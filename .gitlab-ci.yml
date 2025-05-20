@@ -43,7 +43,15 @@ test:
 #       - public
 #   rules:
 #     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-# deploy:
-#   stage: deploy
-#   script: echo "Define your deployment script!"
-#   environment: production
+deploy:
+  stage: deploy
+  script:
+    - pip install build
+    - python -m build
+  artifacts:
+    paths:
+      - dist/*.whl
+      - dist/*.tar.gz
+  environment: production
+  rules:  # Create the wheel only on tags on main
+    - if: '$CI_COMMIT_TAG && $CI_COMMIT_BRANCH == "main"'
