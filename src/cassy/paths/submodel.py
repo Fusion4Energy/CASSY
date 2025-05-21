@@ -12,11 +12,366 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from cassy.auxiliary.functions import is_excel_installed
+from cassy.auxiliary.types import PathLike
+from cassy.designcodes.codes import Code
+from cassy.general.configuration import Configuration
+from cassy.general.material import Material
 from cassy.office.excel_helper import ExcelOutput
+from cassy.paths.linstress import LinStress, ReferenceEvent
+
+if is_excel_installed():
+    import xlwings as xw
+
+
+class Path:
+    def __init__(
+        self,
+        pnum: int,
+        material: Material,
+        ptype: str = "normal",
+        Welding_n: float = 1,
+        Welding_f: float = 1,
+        REs_beg: list[ReferenceEvent] | None = None,
+        REs_end: list[ReferenceEvent] | None = None,
+        REs_fatigue_beg: list[ReferenceEvent] | None = None,
+        REs_fatigue_end: list[ReferenceEvent] | None = None,
+    ):
+        """
+        Object representing a path
+
+        Parameters
+        ----------
+        pnum : int
+            Number assigned to the path in the submodel.
+        material : material.Material
+            material of the path.
+        ptype : str, optional
+            either 'fillet' or 'normal'. The default is 'normal'.
+        REs_beg : list of linstress.ReferenceEvent, optional
+            reference events objects in the path begin. The default is [].
+        REs_end : list of linstress.ReferenceEven, optional
+            reference events objects in the path end. The default is [].
+        REs_fatigue_beg : list of linstress.ReferenceEvent, optional
+            reference events objects for fatigue in the path begin.
+            The default is [].
+        REs_fatigue_end : list of linstress.ReferenceEven, optional
+            reference events objects for fatigue in the path end.
+            The default is [].
+
+        Raises
+        ------
+        ValueError
+            if ptype is not admissible.
+
+        Returns
+        -------
+        None.
+
+        """
+        if REs_beg is None:
+            REs_beg = []
+        if REs_end is None:
+            REs_end = []
+        if REs_fatigue_beg is None:
+            REs_fatigue_beg = []
+        if REs_fatigue_end is None:
+            REs_fatigue_end = []
+        self.REs_beg = REs_beg
+        self.REs_end = REs_end
+        self.REs_fatigue_end = REs_fatigue_end
+        self.REs_fatigue_beg = REs_fatigue_beg
+        # Collect all loads acting on the path
+        # original loads stress matrices
+        self.basic_loads = self._update_loads()
+
+        self.material = material
+        if ptype in ["fillet", "normal"]:
+            self.ptype = ptype
+        else:
+            raise ValueError(str(ptype) + " is not a valid path type")
+        self.pnum = pnum
+        self.Welding_n = Welding_n
+        self.Welding_f = Welding_f
+
+        # Assessment must be computed first
+        self.ass_beg = None
+        self.ass_end = None
+
+    def add_RE(self, RE, pos, fatigue=False):
+        """
+        Add a ReferenceEvent to the path. Differentiate if it is a fatigue RE
+
+        Parameters
+        ----------
+        RE : linstress.ReferenceEvent
+            Event to add.
+        pos : str
+            either 'begin' or 'end'.
+        fatigue : bool
+            if true the reference event should be considered for fatigue
+            assessment. The default is False
+
+        Raises
+        ------
+        ValueError
+            raised if pos is not admissible.
+
+        Returns
+        -------
+        None.
+
+        """
+        if pos == "begin":
+            if fatigue:
+                self.REs_fatigue_beg.append(RE)
+            else:
+                self.REs_beg.append(RE)
+        elif pos == "end":
+            if fatigue:
+                self.REs_fatigue_end.append(RE)
+            else:
+                self.REs_end.append(RE)
+        else:
+            raise ValueError(str(pos) + ' must be either "begin" or "end"')
+
+        self._update_loads()
+
+    def assess(self, code):
+        """
+        Assess all reference events in path
+
+        Parameters
+        ----------
+        code : code.Code
+            Design code to use.
+
+        Returns
+        -------
+        self.ass_beg, self.ass_end
+            pd.DataFrames containing the assessments of the begin and end
+            position of the path
+
+        """
+        dfs_beg = []
+        dfs_end = []
+        # Standard REs
+        for RE_beg, RE_end in zip(self.REs_beg, self.REs_end):
+            df_beg = RE_beg.assess(code, self.material)
+            dfs_beg.append(df_beg)
+
+            df_end = RE_end.assess(code, self.material)
+            dfs_end.append(df_end)
+
+        self.ass_beg = pd.concat(dfs_beg)
+        self.ass_end = pd.concat(dfs_end)
+
+        return self.ass_beg, self.ass_end
+
+    def assess_fatigue(self, code: Code):
+        """
+        Assess all fatigue reference events in path
+
+        Parameters
+        ----------
+        code : code.Code
+            Design code to use.
+
+        Returns
+        -------
+        self.ass_beg, self.ass_end
+            pd.DataFrames containing the assessments of the begin and end
+            position of the path
+
+        """
+        rows_beg = []
+        rows_end = []
+        # Fatigue REs
+        for RE_beg, RE_end in zip(self.REs_fatigue_beg, self.REs_fatigue_end):
+            row_beg = RE_beg.computeVj(code, self.material)
+            rows_beg.append(row_beg)
+
+            row_end = RE_end.computeVj(code, self.material)
+            rows_end.append(row_end)
+
+        self.ass_fatigue_beg = pd.DataFrame(rows_beg)
+        self.ass_fatigue_end = pd.DataFrame(rows_end)
+
+        return self.ass_fatigue_beg, self.ass_fatigue_end
+
+    def assess_Se(self, code: Code):
+        """
+        Assess fatigue according to ASME B31.3
+
+        Parameters
+        ----------
+        code : code.Code
+            Design code to use
+
+        Returns
+        -------
+        self.ass_fatigue_beg, self.ass_fatigue_end
+
+        pd.DataFrames containing the assessments of the begin and end
+
+        """
+
+        # List of Fatigue REs for ASME B31.3, usually Thernal NO and Baking
+        refEvent_list_beg = self.REs_fatigue_beg
+        refEvent_list_end = self.REs_fatigue_end
+
+        # get the assessment dictionary of compute Se
+        assessment_beg = code.compute_Se(refEvent_list_beg, self.material)
+        assessment_end = code.compute_Se(refEvent_list_end, self.material)
+        # begin
+        try:
+            applied_beg = round(assessment_beg["Se [MPa]"] * 1e-6)
+            try:
+                allowable_beg = round(assessment_beg["Sa [MPa]"] * 1e-6)
+            except ValueError:
+                # it means is NaN
+                allowable_beg = assessment_beg["Sa [MPa]"] * 1e-6
+        except TypeError:
+            return None
+            # The assessment is None, hence the assessment was not
+            # valid, return None
+
+        if applied_beg < allowable_beg:
+            res_beg = "OK"
+            try:
+                sm_beg = round(allowable_beg / applied_beg, 2)
+                if sm_beg > 10:
+                    sm_beg = "> 10"
+            except ZeroDivisionError:
+                sm_beg = "> 10"
+        elif np.isnan(allowable_beg):
+            # This happens also for interpolations out of range!
+            allowable_beg = "No Limit"
+            res_beg = "Assessment not required"
+            sm_beg = None
+        else:
+            res_beg = "FAILED"
+            sm_beg = None
+
+        assessment_beg["Sa [MPa]"] = allowable_beg
+        assessment_beg["Se [MPa]"] = applied_beg
+        assessment_beg["Result"] = res_beg
+        assessment_beg["Safety Margin"] = sm_beg
+
+        # end
+        try:
+            applied_end = round(assessment_end["Se [MPa]"] * 1e-6)
+            try:
+                allowable_end = round(assessment_end["Sa [MPa]"] * 1e-6)
+            except ValueError:
+                # it means is NaN
+                allowable_end = assessment_end["Sa [MPa]"] * 1e-6
+        except TypeError:
+            return None
+            # The assessment is None, hence the assessment was not
+            # valid, return None
+
+        if applied_end < allowable_end:
+            res_end = "OK"
+            try:
+                sm_end = round(allowable_end / applied_end, 2)
+                if sm_end > 10:
+                    sm_end = "> 10"
+            except ZeroDivisionError:
+                sm_end = "> 10"
+        elif np.isnan(allowable_end):
+            # This happens also for interpolations out of range!
+            allowable_end = "No Limit"
+            res_end = "Assessment not required"
+            sm_end = None
+        else:
+            res_end = "FAILED"
+            sm_end = None
+
+        assessment_end["Sa [MPa]"] = allowable_end
+        assessment_end["Se [MPa]"] = applied_end
+        assessment_end["Result"] = res_end
+        assessment_end["Safety Margin"] = sm_end
+
+        row_beg = []
+        row_end = []
+
+        row_beg.append(assessment_beg)
+        row_end.append(assessment_end)
+
+        df_beg = pd.DataFrame(row_beg)
+        df_end = pd.DataFrame(row_end)
+        self.ass_fatigue_beg = df_beg
+        self.ass_fatigue_end = df_end
+
+        return self.ass_fatigue_beg, self.ass_fatigue_end
+
+    def _get_basic_loads_df(self, pos):
+        """
+        build a DF from all the stress matrix of the single loads acting
+        on the path
+
+        Parameters
+        ----------
+        pos : str
+         either begin or end.
+
+        Returns
+        -------
+        df : pd.DataFrame
+            dataframe collecting the input of the assessment.
+
+        """
+        dfs = []
+        stress_names = ["Membrane stress", "Bending stress", "Peak stress"]
+        for linstress in self.basic_loads[pos]:
+            # get it in MPa
+            mtrx = linstress.original_mtrx.copy() * 1e-6
+            stress_mtrx = mtrx.reset_index()
+            stress_mtrx["Load Condition"] = linstress.name
+            stress_mtrx["Stress breakdown"] = stress_names
+            dfs.append(stress_mtrx)
+
+        df = pd.concat(dfs)
+        df.set_index(["Load Condition", "Stress breakdown"], inplace=True)
+
+        return df
+
+    def _update_loads(self):
+        """
+        Adjourn the loads conditions for instance when a RE is added.
+        If the reference events of the fatigue are changed this does not
+        produce any effect. It is expected that no basic loads should be added
+        from fatigue reference events.
+
+        Returns
+        -------
+        basic_loads : dic
+            load conditions.
+
+        """
+        basic_loads = {"begin": [], "end": []}
+        basic_loads_names = []
+        for RE_beg, RE_end in zip(self.REs_beg, self.REs_end):
+            for beg_stress, end_stress in zip(
+                RE_beg.lin_stress_list, RE_end.lin_stress_list
+            ):
+                if beg_stress.name not in basic_loads_names:
+                    basic_loads_names.append(beg_stress.name)
+                    basic_loads["begin"].append(beg_stress)
+                    basic_loads["end"].append(end_stress)
+        self.basic_loads = basic_loads
+        return basic_loads
+
+
+def _round_ass_df(df):
+    dic = {"Applied [MPa]": 0, "Allowable [MPa]": 0, "Safety Margin": 2}
+    df = df.round(dic)
+    return df
 
 
 class Submodel:
-    def __init__(self, name, paths):
+    def __init__(self, name: str, config: Configuration, mat_dict: dict[str, Material]):
         """
         Object representing a submodel where paths have to be assessed
 
@@ -24,8 +379,11 @@ class Submodel:
         ----------
         name : str
             Submodel name.
-        paths : list of Path
-            paths in the submodel.
+        config : Configuration
+            Contains information on the paths stress tensors and load combinations
+            to assess.
+        mat_dict : dict[str, Material]
+            Material library available for the assessment
 
         Returns
         -------
@@ -33,42 +391,29 @@ class Submodel:
 
         """
         self.name = name
+        self.config = config
+        self.mat_dict = mat_dict
+
+        # Initialize all paths
+        paths = {}
+        for idx, row in config["Paths"].iterrows():
+            pnum = int(idx)
+            ptype = row["Type"]
+            welding_n = float(row["Welding-n"])
+            welding_f = float(row["Welding-f"])
+            material = mat_dict[row["Material"]]
+
+            path = Path(
+                pnum, material, ptype=ptype, Welding_n=welding_n, Welding_f=welding_f
+            )
+            paths[pnum] = path
         self.paths = paths
 
         self.assessments = None
-        self.code = None
         self.recap_rows = {}
         self.images = {}
 
-    @classmethod
-    def from_df(cls, name, conf_df, mat_dic):
-        """
-        Generate a submodel with an auxiliary df
-
-        Parameters
-        ----------
-        cls : TYPE
-            DESCRIPTION.
-        name : str
-            Name of the submodel.
-        conf_df : pandas.DataFrame
-            auxiliary dataframe.
-        mat_dic : dic
-            contains the materials to use
-
-        Returns
-        -------
-        TYPE
-            DESCRIPTION.
-
-        """
-        paths = {}
-        for idx, row in conf_df.iterrows():
-            path = Path.from_series(idx, row, [], [], [], [], mat_dic)
-            paths[idx] = path
-        return cls(name, paths)
-
-    def assess(self, code, fatigue=True):
+    def assess(self, code: Code, fatigue: bool = True):
         """
         Assess all paths in the submodel
 
@@ -102,7 +447,12 @@ class Submodel:
         self.code = code
 
     def print_assessment(
-        self, mainfolder, app, template_path, img_folder="Images", fatigue=True
+        self,
+        mainfolder: PathLike,
+        app: xw.App,
+        template_path: PathLike,
+        img_folder: PathLike = "Images",
+        fatigue: bool = True,
     ):
         """
         Prints the excel assessment for each path (both begin and end) and at
@@ -371,389 +721,149 @@ class Submodel:
 
         return recap_rows
 
-
-class Path:
-    def __init__(
-        self,
-        pnum,
-        material,
-        ptype="normal",
-        Welding_n=1,
-        Welding_f=1,
-        REs_beg=[],
-        REs_end=[],
-        REs_fatigue_beg=[],
-        REs_fatigue_end=[],
-    ):
-        """
-        Object representing a path
+    def build_REs(self, fatigue: bool = False):
+        """Build all the reference events for all paths in the submodel.
 
         Parameters
         ----------
-        pnum : str/float
-            Number assigned to the path in the submodel.
-        material : material.Material
-            material of the path.
-        ptype : str, optional
-            either 'fillet' or 'normal'. The default is 'normal'.
-        REs_beg : list of linstress.ReferenceEvent, optional
-            reference events objects in the path begin. The default is [].
-        REs_end : list of linstress.ReferenceEven, optional
-            reference events objects in the path end. The default is [].
-        REs_fatigue_beg : list of linstress.ReferenceEvent, optional
-            reference events objects for fatigue in the path begin.
-            The default is [].
-        REs_fatigue_end : list of linstress.ReferenceEven, optional
-            reference events objects for fatigue in the path end.
-            The default is [].
+        fatigue : bool, optional
+            if True also fatigue events are built, by default False
+        """
+        for pathnum in self.config.paths:
+            # identify all reference events of the path
+            re_list = self.config.get_REid_path(pathnum)
+            for re in re_list:
+                self._build_RE(pathnum, re)
 
-        Raises
-        ------
-        ValueError
-            if ptype is not admissible.
+            if fatigue:
+                re_list_fatigue = self.config.get_REid_path(pathnum, fatigue=True)
+                for re in re_list_fatigue:
+                    self._build_RE(pathnum, re, fatigue=True)
+
+    def _build_RE(self, pathnum: int, re_ID: str, fatigue: bool = False):
+        """
+        build a reference event to assign to a specific path and submodel
+
+        Parameters
+        ----------
+        pathnum : int
+            number of the path onto which operate
+        conf : configuration.Configuration
+            Configuration object of the submodel
+        re_ID : str
+            ID of the reference event to add.
+        fatigue : bool, optional
+            If true, the RE is a fatigue one. The default is False.
 
         Returns
         -------
         None.
 
         """
-        self.REs_beg = REs_beg
-        self.REs_end = REs_end
-        self.REs_fatigue_end = REs_fatigue_end
-        self.REs_fatigue_beg = REs_fatigue_beg
-        # Collect all loads acting on the path
-        # original loads stress matrices
-        self.basic_loads = self._update_loads()
-
-        self.material = material
-        if ptype in ["fillet", "normal"]:
-            self.ptype = ptype
+        if fatigue:
+            des = " Fatigue"
         else:
-            raise ValueError(str(ptype) + " is not a valid path type")
-        self.pnum = pnum
-        self.Welding_n = Welding_n
-        self.Welding_f = Welding_f
+            des = ""
 
-        # Assessment must be computed first
-        self.ass_beg = None
-        self.ass_end = None
+        idx = (pathnum, re_ID)
 
-    @classmethod
-    def from_series(
-        cls, pnum, row, REs_beg, REs_end, REs_fatigue_beg, REs_fatigue_end, mat_dic
-    ):
+        load_names = self.config.get_REloads(pathnum, re_ID, fatigue=fatigue)
+        try:
+            oc = (
+                self.config["Reference Event" + des]
+                .loc[idx, "Operating Conditions"]
+                .iloc[0]
+            )
+            ie = (
+                self.config["Reference Event" + des]
+                .loc[idx, "Initiating Event"]
+                .iloc[0]
+            )
+            ce = (
+                self.config["Reference Event" + des]
+                .loc[idx, "Concatenated Event"]
+                .iloc[0]
+            )
+            service_lvl = (
+                self.config["Reference Event" + des].loc[idx, "Service Level"].iloc[0]
+            )
+            load_ctg = (
+                self.config["Reference Event" + des].loc[idx, "Loading ctg."].iloc[0]
+            )
+            T = self.config["Reference Event" + des].loc[idx, "T [°C]"].iloc[0]
+            dpa = self.config["Reference Event" + des].loc[idx, "DPA"].iloc[0]
+
+            # Additional data for fatigue event
+            if fatigue:
+                ncycles = (
+                    self.config["Reference Event" + des].loc[idx, "N of cycles"].iloc[0]
+                )
+            else:
+                ncycles = None
+        except AttributeError:
+            oc = self.config["Reference Event" + des].loc[idx, "Operating Conditions"]
+            ie = self.config["Reference Event" + des].loc[idx, "Initiating Event"]
+            ce = self.config["Reference Event" + des].loc[idx, "Concatenated Event"]
+            service_lvl = self.config["Reference Event" + des].loc[idx, "Service Level"]
+            load_ctg = self.config["Reference Event" + des].loc[idx, "Loading ctg."]
+            T = self.config["Reference Event" + des].loc[idx, "T [°C]"]
+            dpa = self.config["Reference Event" + des].loc[idx, "DPA"]
+
+            # Additional data for fatigue event
+            if fatigue:
+                ncycles = self.config["Reference Event" + des].loc[idx, "N of cycles"]
+            else:
+                ncycles = None
+
+        # Recover the corresponding LinStress
+        for pos in ["begin", "end"]:
+            stresses = []
+            for load in load_names:
+                linstress = self._build_linearized_stress(load, pathnum, pos)
+                stresses.append(linstress)
+            RE = ReferenceEvent.from_recombination(
+                stresses,
+                service_lvl,
+                re_ID,
+                T,
+                dpa,
+                oc=oc,
+                ie=ie,
+                ce=ce,
+                load_ctg=load_ctg,
+                ncycles=ncycles,
+            )
+            # Add the reference event to the correct path
+            self.paths[pathnum].add_RE(RE, pos, fatigue=fatigue)
+
+    def _build_linearized_stress(self, load: str, pathnum: int, pos: str) -> LinStress:
         """
-        Create a path with the help of a Series
+        Build a LinStress object using the data contained in the submodel configuration
 
         Parameters
         ----------
-        cls : TYPE
-            DESCRIPTION.
-        pnum : str/float
-            number assigned to the path.
-        row : pd.Series
-            contains the useful data.
-        REs_beg : list of linstress.ReferenceEvent, optional
-            reference events objects in the path begin.
-        REs_end : list of linstress.ReferenceEven, optional
-            reference events objects in the path end.
-        REs_fatigue_beg : list of linstress.ReferenceEvent, optional
-            reference events objects in the path begin.
-        REs_fatigue_end : list of linstress.ReferenceEven, optional
-            reference events objects in the path end.
-        mat_dic : dic
-            contains the Material objects to use.
-
-        Returns
-        -------
-        Path
-            Creates a Path object.
-
-        """
-        ptype = row["Type"]
-        Welding_n = float(row["Welding-n"])
-        Welding_f = float(row["Welding-f"])
-        material = mat_dic[row["Material"]]
-
-        return cls(
-            pnum,
-            material,
-            ptype=ptype,
-            Welding_n=Welding_n,
-            Welding_f=Welding_f,
-            REs_beg=REs_beg,
-            REs_end=REs_end,
-            REs_fatigue_beg=REs_fatigue_beg,
-            REs_fatigue_end=REs_fatigue_end,
-        )
-
-    def add_RE(self, RE, pos, fatigue=False):
-        """
-        Add a ReferenceEvent to the path. Differentiate if it is a fatigue RE
-
-        Parameters
-        ----------
-        RE : linstress.ReferenceEvent
-            Event to add.
+        load : str
+            name of the single load
+        pathnum : int
+            number of the path
         pos : str
             either 'begin' or 'end'.
-        fatigue : bool
-            if true the reference event should be considered for fatigue
-            assessment. The default is False
-
-        Raises
-        ------
-        ValueError
-            raised if pos is not admissible.
 
         Returns
         -------
-        None.
-
+        LinStress
+            Linearized Stress object.
         """
-        if pos == "begin":
-            if fatigue:
-                self.REs_fatigue_beg.append(RE)
-            else:
-                self.REs_beg.append(RE)
-        elif pos == "end":
-            if fatigue:
-                self.REs_fatigue_end.append(RE)
-            else:
-                self.REs_end.append(RE)
-        else:
-            raise ValueError(str(pos) + ' must be either "begin" or "end"')
-
-        self._update_loads()
-
-    def assess(self, code):
-        """
-        Assess all reference events in path
-
-        Parameters
-        ----------
-        code : code.Code
-            Design code to use.
-
-        Returns
-        -------
-        self.ass_beg, self.ass_end
-            pd.DataFrames containing the assessments of the begin and end
-            position of the path
-
-        """
-        dfs_beg = []
-        dfs_end = []
-        # Standard REs
-        for RE_beg, RE_end in zip(self.REs_beg, self.REs_end):
-            df_beg = RE_beg.assess(code, self.material)
-            dfs_beg.append(df_beg)
-
-            df_end = RE_end.assess(code, self.material)
-            dfs_end.append(df_end)
-
-        self.ass_beg = pd.concat(dfs_beg)
-        self.ass_end = pd.concat(dfs_end)
-
-        return self.ass_beg, self.ass_end
-
-    def assess_fatigue(self, code):
-        """
-        Assess all fatigue reference events in path
-
-        Parameters
-        ----------
-        code : code.Code
-            Design code to use.
-
-        Returns
-        -------
-        self.ass_beg, self.ass_end
-            pd.DataFrames containing the assessments of the begin and end
-            position of the path
-
-        """
-        rows_beg = []
-        rows_end = []
-        # Fatigue REs
-        for RE_beg, RE_end in zip(self.REs_fatigue_beg, self.REs_fatigue_end):
-            row_beg = RE_beg.computeVj(code, self.material)
-            rows_beg.append(row_beg)
-
-            row_end = RE_end.computeVj(code, self.material)
-            rows_end.append(row_end)
-
-        self.ass_fatigue_beg = pd.DataFrame(rows_beg)
-        self.ass_fatigue_end = pd.DataFrame(rows_end)
-
-        return self.ass_fatigue_beg, self.ass_fatigue_end
-
-    def assess_Se(self, code):
-        """
-        Assess fatigue according to ASME B31.3
-
-        Parameters
-        ----------
-        code : code.Code
-            Design code to use
-
-        Returns
-        -------
-        self.ass_fatigue_beg, self.ass_fatigue_end
-
-        pd.DataFrames containing the assessments of the begin and end
-
-        """
-
-        # List of Fatigue REs for ASME B31.3, usually Thernal NO and Baking
-        refEvent_list_beg = self.REs_fatigue_beg
-        refEvent_list_end = self.REs_fatigue_end
-
-        # get the assessment dictionary of compute Se
-        assessment_beg = code.compute_Se(refEvent_list_beg, self.material)
-        assessment_end = code.compute_Se(refEvent_list_end, self.material)
-        # begin
-        try:
-            applied_beg = round(assessment_beg["Se [MPa]"] * 1e-6)
-            try:
-                allowable_beg = round(assessment_beg["Sa [MPa]"] * 1e-6)
-            except ValueError:
-                # it means is NaN
-                allowable_beg = assessment_beg["Sa [MPa]"] * 1e-6
-        except TypeError:
-            return None
-            # The assessment is None, hence the assessment was not
-            # valid, return None
-
-        if applied_beg < allowable_beg:
-            res_beg = "OK"
-            try:
-                sm_beg = round(allowable_beg / applied_beg, 2)
-                if sm_beg > 10:
-                    sm_beg = "> 10"
-            except ZeroDivisionError:
-                sm_beg = "> 10"
-        elif np.isnan(allowable_beg):
-            # This happens also for interpolations out of range!
-            allowable_beg = "No Limit"
-            res_beg = "Assessment not required"
-            sm_beg = None
-        else:
-            res_beg = "FAILED"
-            sm_beg = None
-
-        assessment_beg["Sa [MPa]"] = allowable_beg
-        assessment_beg["Se [MPa]"] = applied_beg
-        assessment_beg["Result"] = res_beg
-        assessment_beg["Safety Margin"] = sm_beg
-
-        # end
-        try:
-            applied_end = round(assessment_end["Se [MPa]"] * 1e-6)
-            try:
-                allowable_end = round(assessment_end["Sa [MPa]"] * 1e-6)
-            except ValueError:
-                # it means is NaN
-                allowable_end = assessment_end["Sa [MPa]"] * 1e-6
-        except TypeError:
-            return None
-            # The assessment is None, hence the assessment was not
-            # valid, return None
-
-        if applied_end < allowable_end:
-            res_end = "OK"
-            try:
-                sm_end = round(allowable_end / applied_end, 2)
-                if sm_end > 10:
-                    sm_end = "> 10"
-            except ZeroDivisionError:
-                sm_end = "> 10"
-        elif np.isnan(allowable_end):
-            # This happens also for interpolations out of range!
-            allowable_end = "No Limit"
-            res_end = "Assessment not required"
-            sm_end = None
-        else:
-            res_end = "FAILED"
-            sm_end = None
-
-        assessment_end["Sa [MPa]"] = allowable_end
-        assessment_end["Se [MPa]"] = applied_end
-        assessment_end["Result"] = res_end
-        assessment_end["Safety Margin"] = sm_end
-
-        row_beg = []
-        row_end = []
-
-        row_beg.append(assessment_beg)
-        row_end.append(assessment_end)
-
-        df_beg = pd.DataFrame(row_beg)
-        df_end = pd.DataFrame(row_end)
-        self.ass_fatigue_beg = df_beg
-        self.ass_fatigue_end = df_end
-
-        return self.ass_fatigue_beg, self.ass_fatigue_end
-
-    def _get_basic_loads_df(self, pos):
-        """
-        build a DF from all the stress matrix of the single loads acting
-        on the path
-
-        Parameters
-        ----------
-        pos : str
-         either begin or end.
-
-        Returns
-        -------
-        df : pd.DataFrame
-            dataframe collecting the input of the assessment.
-
-        """
-        dfs = []
-        stress_names = ["Membrane stress", "Bending stress", "Peak stress"]
-        for linstress in self.basic_loads[pos]:
-            # get it in MPa
-            mtrx = linstress.original_mtrx.copy() * 1e-6
-            stress_mtrx = mtrx.reset_index()
-            stress_mtrx["Load Condition"] = linstress.name
-            stress_mtrx["Stress breakdown"] = stress_names
-            dfs.append(stress_mtrx)
-
-        df = pd.concat(dfs)
-        df.set_index(["Load Condition", "Stress breakdown"], inplace=True)
-
-        return df
-
-    def _update_loads(self):
-        """
-        Adjourn the loads conditions for instance when a RE is added.
-        If the reference events of the fatigue are changed this does not
-        produce any effect. It is expected that no basic loads should be added
-        from fatigue reference events.
-
-        Returns
-        -------
-        basic_loads : dic
-            load conditions.
-
-        """
-        basic_loads = {"begin": [], "end": []}
-        basic_loads_names = []
-        for RE_beg, RE_end in zip(self.REs_beg, self.REs_end):
-            for beg_stress, end_stress in zip(
-                RE_beg.lin_stress_list, RE_end.lin_stress_list
-            ):
-                if beg_stress.name not in basic_loads_names:
-                    basic_loads_names.append(beg_stress.name)
-                    basic_loads["begin"].append(beg_stress)
-                    basic_loads["end"].append(end_stress)
-        self.basic_loads = basic_loads
-        return basic_loads
-
-
-def _round_ass_df(df):
-    dic = {"Applied [MPa]": 0, "Allowable [MPa]": 0, "Safety Margin": 2}
-    df = df.round(dic)
-    return df
+        tensor = self.config.get_stress_tensor(load, pathnum, pos)
+        ptype = self.config["Paths"].loc[pathnum, "Type"]
+        welding_n = self.config["Paths"].loc[pathnum, "Welding-n"]
+        welding_f = self.config["Paths"].loc[pathnum, "Welding-f"]
+        stress = LinStress.from_config(
+            load,
+            tensor,
+            self.config["Stresses"].loc[load],
+            ptype,
+            welding_n,
+            welding_f,
+        )
+        return stress
