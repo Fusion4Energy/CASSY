@@ -959,13 +959,18 @@ class ReferenceEvent:
                     # The assessment is None, hence the assessment was not
                     # valid. Go the next one
                     continue
+
+                allowable = assessed[i][1]
+                if isinstance(allowable, np.ndarray) and len(allowable) == 1:
+                    allowable = allowable[0]
+
                 try:
-                    allowable = round(assessed[i][1] * 1e-6)
+                    allowable = round(allowable * 1e-6)
                 except ValueError:
                     # it means is NaN
-                    allowable = assessed[i][1].item()
+                    allowable = allowable.item()
                 except TypeError:
-                    allowable = assessed[i][1].item()
+                    allowable = allowable.item()
 
                 if applied < allowable:
                     res = "OK"
