@@ -1,3 +1,5 @@
+import logging
+
 import xlwings as xw
 
 
@@ -18,5 +20,8 @@ def is_excel_installed() -> bool:
         xw.App(visible=False).quit()
         return True
     except xw.XlwingsError:
-        print("Excel is not installed on this system.")
+        logging.warning("Excel is not installed on this system.")
+        return False
+    except AttributeError:
+        logging.warning("No active engine of excel.")
         return False

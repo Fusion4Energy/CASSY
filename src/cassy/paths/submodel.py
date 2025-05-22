@@ -7,12 +7,13 @@ Created on Tue Dec  1 09:24:31 2020
 
 import os
 import shutil
+from typing import Union
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from cassy.auxiliary.functions import is_excel_installed
+from cassy.auxiliary.constants import EXCEL_AVAILABLE
 from cassy.auxiliary.types import PathLike
 from cassy.designcodes.codes import Code
 from cassy.general.configuration import Configuration
@@ -20,7 +21,7 @@ from cassy.general.material import Material
 from cassy.office.excel_helper import ExcelOutput
 from cassy.paths.linstress import LinStress, ReferenceEvent
 
-if is_excel_installed():
+if EXCEL_AVAILABLE:
     import xlwings as xw
 
 
@@ -32,10 +33,10 @@ class Path:
         ptype: str = "normal",
         Welding_n: float = 1,
         Welding_f: float = 1,
-        REs_beg: list[ReferenceEvent] | None = None,
-        REs_end: list[ReferenceEvent] | None = None,
-        REs_fatigue_beg: list[ReferenceEvent] | None = None,
-        REs_fatigue_end: list[ReferenceEvent] | None = None,
+        REs_beg: Union[list[ReferenceEvent], None] = None,
+        REs_end: Union[list[ReferenceEvent], None] = None,
+        REs_fatigue_beg: Union[list[ReferenceEvent], None] = None,
+        REs_fatigue_end: Union[list[ReferenceEvent], None] = None,
     ):
         """
         Object representing a path
@@ -446,280 +447,297 @@ class Submodel:
         self.assessments = assessments
         self.code = code
 
-    def print_assessment(
-        self,
-        mainfolder: PathLike,
-        app: xw.App,
-        template_path: PathLike,
-        img_folder: PathLike = "Images",
-        fatigue: bool = True,
-    ):
-        """
-        Prints the excel assessment for each path (both begin and end) and at
-        the same time grabs and saves the images of the assessment in the
-        img_folder. Additionally it returns the rows for the final recap table
-        of the assessment.
+    if EXCEL_AVAILABLE:
 
-        Parameters
-        ----------
-        mainfolder : str or path
-            path to the submodel assessment (i.e. where to put excels).
-        app : xw.App
-            Excel app from xlwings.
-        template_path : str or path
-            path to the excel template.
-        img_folder : str or path, optional
-            path to the folder where to store the images.
-            The default is 'Images'.
-        fatigue: bool, optional
-            if False the fatigue assessment is skipped. The default is True
+        def print_assessment(
+            self,
+            mainfolder: PathLike,
+            app: xw.App,
+            template_path: PathLike,
+            img_folder: PathLike = "Images",
+            fatigue: bool = True,
+        ):
+            """
+            Prints the excel assessment for each path (both begin and end) and at
+            the same time grabs and saves the images of the assessment in the
+            img_folder. Additionally it returns the rows for the final recap table
+            of the assessment.
 
-        Raises
-        ------
-        ValueError
-            If the assessment has not been run yet.
+            Parameters
+            ----------
+            mainfolder : str or path
+                path to the submodel assessment (i.e. where to put excels).
+            app : xw.App
+                Excel app from xlwings.
+            template_path : str or path
+                path to the excel template.
+            img_folder : str or path, optional
+                path to the folder where to store the images.
+                The default is 'Images'.
+            fatigue: bool, optional
+                if False the fatigue assessment is skipped. The default is True
 
-        Returns
-        -------
-        recap_rows : dic
-            the keys are the damage type and the items are dictionaries
-            containing the rows for the final recap table.
+            Raises
+            ------
+            ValueError
+                If the assessment has not been run yet.
 
-        """
+            Returns
+            -------
+            recap_rows : dic
+                the keys are the damage type and the items are dictionaries
+                containing the rows for the final recap table.
 
-        if self.assessments is None:
-            raise ValueError("Please assess the submodel first")
+            """
 
-        print("Assessing " + self.name + " with " + self.code.name)
+            if self.assessments is None:
+                raise ValueError("Please assess the submodel first")
 
-        # Safe creation of folder for images
-        imgs = os.path.join(img_folder, self.name)
-        if not os.path.exists(img_folder):
-            os.mkdir(img_folder)
-        if os.path.exists(imgs):
-            shutil.rmtree(imgs)
-        os.mkdir(imgs)
+            print("Assessing " + self.name + " with " + self.code.name)
 
-        # Cycling on all paths
-        # recap_rows = {'Immediate': [], 'Ratcheting': [], 'Fatigue': []}
-        recap_rows = {}
-        for pnum, dfs in tqdm(self.assessments.items(), desc="Path"):
-            self.images[pnum] = {}
-            # Cycling on begin and end
-            for pos in ["begin", "end"]:
-                self.images[pnum][pos] = {}
-                # Get all needed data for compilation
-                poa = "Path " + str(pnum) + " " + pos
-                material = self.paths[pnum].material.name
-                idx = [
-                    "ID",
-                    "Operating Conditions",
-                    "Initiating Event",
-                    "Concatenated Event",
-                    "Loading Category",
-                    "Service Level",
-                    "Rule Extended Description",
-                    "Rule ID",
-                    "Sub-Rule",
-                    "T [°C]",
-                    "dpa",
-                ]
-                df = dfs[pos].set_index(idx)
+            # Safe creation of folder for images
+            imgs = os.path.join(img_folder, self.name)
+            if not os.path.exists(img_folder):
+                os.mkdir(img_folder)
+            if os.path.exists(imgs):
+                shutil.rmtree(imgs)
+            os.mkdir(imgs)
 
-                col = "Damage Type"
-                # get the damage type names
-                df_types = {}
-                damage_types = self.code.damage_types
-                for key in damage_types:
-                    df_type = df[df[col] == key]
-                    df_type = _round_ass_df(df_type)
-                    df_type = df_type.drop(col, axis=1)
-                    df_types[key] = df_type
+            # Cycling on all paths
+            # recap_rows = {'Immediate': [], 'Ratcheting': [], 'Fatigue': []}
+            recap_rows = {}
+            for pnum, dfs in tqdm(self.assessments.items(), desc="Path"):
+                self.images[pnum] = {}
+                # Cycling on begin and end
+                for pos in ["begin", "end"]:
+                    self.images[pnum][pos] = {}
+                    # Get all needed data for compilation
+                    poa = "Path " + str(pnum) + " " + pos
+                    material = self.paths[pnum].material.name
+                    idx = [
+                        "ID",
+                        "Operating Conditions",
+                        "Initiating Event",
+                        "Concatenated Event",
+                        "Loading Category",
+                        "Service Level",
+                        "Rule Extended Description",
+                        "Rule ID",
+                        "Sub-Rule",
+                        "T [°C]",
+                        "dpa",
+                    ]
+                    df = dfs[pos].set_index(idx)
 
-                # Get the input df
-                input_df = self.paths[pnum]._get_basic_loads_df(pos)
-                df_types["Input"] = input_df
+                    col = "Damage Type"
+                    # get the damage type names
+                    df_types = {}
+                    damage_types = self.code.damage_types
+                    for key in damage_types:
+                        df_type = df[df[col] == key]
+                        df_type = _round_ass_df(df_type)
+                        df_type = df_type.drop(col, axis=1)
+                        df_types[key] = df_type
 
-                # Write the excel file
-                file = self.name + "_" + str(pnum) + "_" + pos + ".xlsx"
-                out_path = os.path.join(mainfolder, file)
-                if os.path.isfile(out_path):
-                    os.remove(out_path)
-                shutil.copyfile(template_path, out_path)
+                    # Get the input df
+                    input_df = self.paths[pnum]._get_basic_loads_df(pos)
+                    df_types["Input"] = input_df
 
-                out = ExcelOutput(app, out_path)
+                    # Write the excel file
+                    file = self.name + "_" + str(pnum) + "_" + pos + ".xlsx"
+                    out_path = os.path.join(mainfolder, file)
+                    if os.path.isfile(out_path):
+                        os.remove(out_path)
+                    shutil.copyfile(template_path, out_path)
 
-                # Fill the banners
-                out.fill_banner("SA_template", self.name, poa, material, self.code)
-                out.fill_banner(
-                    "Input_template",
-                    self.name,
-                    poa,
-                    material,
-                    None,
-                    template="Input_template",
-                )
+                    out = ExcelOutput(app, out_path)
 
-                if fatigue:
-                    # no further actions needed on the df
-                    fatigue_df = dfs[pos + " fatigue"]
-                    if self.code.name == "ASME B31.3":
-                        idx = ["Rule ID", "loads"]
-                        fatigue_df.set_index(idx, inplace=True)
-                        # Fill the banner
-                        out.fill_banner("Fatigue", self.name, poa, material, self.code)
-
-                    else:
-                        # Fill banner
-                        out.fill_banner(
-                            "Fatigue_template",
-                            self.name,
-                            poa,
-                            material,
-                            self.code,
-                            template="fatigue",
-                        )
-
-                    df_types["Fatigue"] = fatigue_df
-
-                for sheet, df in df_types.items():
-                    if sheet == "Input":
-                        out.insert_SA_df(
-                            df,
-                            sheet,
-                            divide_blocks="Load Condition",
-                            print_header=False,
-                            word=True,
-                            start_row=10,
-                        )
-                    elif sheet == "Fatigue":
-                        if self.code.name == "ASME B31.3":
-                            out.insert_SA_df(df, sheet)
-                        else:
-                            out.insert_fatigue_df(df, sheet)
-
-                    else:
-                        out.insert_SA_df(df, sheet, divide_blocks="ID")
-
-                    # lastcell = tab .anchor_end
-                    file = (
-                        self.name + "_" + str(pnum) + "_" + pos + "_" + sheet + ".png"
+                    # Fill the banners
+                    out.fill_banner("SA_template", self.name, poa, material, self.code)
+                    out.fill_banner(
+                        "Input_template",
+                        self.name,
+                        poa,
+                        material,
+                        None,
+                        template="Input_template",
                     )
-                    outpath = os.path.join(imgs, file)
-                    self.images[pnum][pos][sheet] = outpath
-                    out.grab_img("all", "all", sheet, outpath)
 
-                # file = self.name+'_'+str(pnum)+'_'+pos+'.xlsx'
-                out.save(out_path)
+                    if fatigue:
+                        # no further actions needed on the df
+                        fatigue_df = dfs[pos + " fatigue"]
+                        if self.code.name == "ASME B31.3":
+                            idx = ["Rule ID", "loads"]
+                            fatigue_df.set_index(idx, inplace=True)
+                            # Fill the banner
+                            out.fill_banner(
+                                "Fatigue", self.name, poa, material, self.code
+                            )
 
-                for sheet, df in df_types.items():
-                    if sheet in ["Fatigue", "Input"]:
-                        continue
-                    else:
-                        if sheet not in recap_rows.keys():
-                            recap_rows[sheet] = []
+                        else:
+                            # Fill banner
+                            out.fill_banner(
+                                "Fatigue_template",
+                                self.name,
+                                poa,
+                                material,
+                                self.code,
+                                template="fatigue",
+                            )
 
-                    if len(df[df["Result"] == "FAILED"]) > 0:
-                        ass = "NOK"
-                        sm = "-"
-                        re = "-"
-                        slvl = "-"
-                        rule = "-"
-                    else:
-                        ass = "OK"
-                        # Individuate design driver
-                        try:
-                            # take out the > 10
-                            df = df[df["Safety Margin"] != "> 10"]
-                            df["Safety Margin"] = df["Safety Margin"].astype(float)
-                            idx = df["Safety Margin"].idxmin()
+                        df_types["Fatigue"] = fatigue_df
 
-                            # Get the idxs of indices
-                            names = df.index.names
-                            try:
-                                try:
-                                    # If the DF is too long we can have siries
-                                    sm = df.loc[idx, "Safety Margin"].iloc[0]
-                                except AttributeError:
-                                    # If the DF is shorter
-                                    sm = df.loc[idx, "Safety Margin"]
-                                re = idx[names.index("ID")]
-                                slvl = idx[names.index("Service Level")]
-                                rule = idx[names.index("Sub-Rule")]
-                            except KeyError:
-                                # should be key error nan hence sm > 10
-                                re = "No driver"
-                                sm = ""
-                                slvl = ""
-                                rule = ""
-                        except TypeError:  # most likely nan
-                            sm = ""
-                            re = "No driver"
-                            slvl = ""
-                            rule = ""
-                        except ValueError:  # they are all >10
-                            sm = ""
-                            re = "No driver"
-                            slvl = ""
-                            rule = ""
+                    for sheet, df in df_types.items():
+                        if sheet == "Input":
+                            out.insert_SA_df(
+                                df,
+                                sheet,
+                                divide_blocks="Load Condition",
+                                print_header=False,
+                                word=True,
+                                start_row=10,
+                            )
+                        elif sheet == "Fatigue":
+                            if self.code.name == "ASME B31.3":
+                                out.insert_SA_df(df, sheet)
+                            else:
+                                out.insert_fatigue_df(df, sheet)
 
-                    row = {
-                        "Submodel": self.name,
-                        "Path": "Path " + str(pnum) + " " + pos,
-                        "Path Type": self.paths[pnum].ptype,
-                        "Assessment": ass,
-                        "Reference Event": re,
-                        "Service lvl": slvl,
-                        "Rule": rule,
-                        "Safety Margin": sm,
-                    }
+                        else:
+                            out.insert_SA_df(df, sheet, divide_blocks="ID")
 
-                    recap_rows[sheet].append(row)
+                        # lastcell = tab .anchor_end
+                        file = (
+                            self.name
+                            + "_"
+                            + str(pnum)
+                            + "_"
+                            + pos
+                            + "_"
+                            + sheet
+                            + ".png"
+                        )
+                        outpath = os.path.join(imgs, file)
+                        self.images[pnum][pos][sheet] = outpath
+                        out.grab_img("all", "all", sheet, outpath)
 
-                if fatigue:
-                    if "Fatigue" not in recap_rows.keys():
-                        recap_rows["Fatigue"] = []
-                    if self.code.name == "ASME B31.3":
-                        df = fatigue_df
+                    # file = self.name+'_'+str(pnum)+'_'+pos+'.xlsx'
+                    out.save(out_path)
+
+                    for sheet, df in df_types.items():
+                        if sheet in ["Fatigue", "Input"]:
+                            continue
+                        else:
+                            if sheet not in recap_rows.keys():
+                                recap_rows[sheet] = []
+
                         if len(df[df["Result"] == "FAILED"]) > 0:
                             ass = "NOK"
                             sm = "-"
+                            re = "-"
+                            slvl = "-"
+                            rule = "-"
                         else:
                             ass = "OK"
+                            # Individuate design driver
                             try:
-                                sm = float(df.loc["302.3.5 d", "Safety Margin"])
-                            except ValueError:  # sm > 10
-                                sm = "-"
+                                # take out the > 10
+                                df = df[df["Safety Margin"] != "> 10"]
+                                df["Safety Margin"] = df["Safety Margin"].astype(float)
+                                idx = df["Safety Margin"].idxmin()
+
+                                # Get the idxs of indices
+                                names = df.index.names
+                                try:
+                                    try:
+                                        # If the DF is too long we can have siries
+                                        sm = df.loc[idx, "Safety Margin"].iloc[0]
+                                    except AttributeError:
+                                        # If the DF is shorter
+                                        sm = df.loc[idx, "Safety Margin"]
+                                    re = idx[names.index("ID")]
+                                    slvl = idx[names.index("Service Level")]
+                                    rule = idx[names.index("Sub-Rule")]
+                                except KeyError:
+                                    # should be key error nan hence sm > 10
+                                    re = "No driver"
+                                    sm = ""
+                                    slvl = ""
+                                    rule = ""
+                            except TypeError:  # most likely nan
+                                sm = ""
+                                re = "No driver"
+                                slvl = ""
+                                rule = ""
+                            except ValueError:  # they are all >10
+                                sm = ""
+                                re = "No driver"
+                                slvl = ""
+                                rule = ""
+
                         row = {
                             "Submodel": self.name,
                             "Path": "Path " + str(pnum) + " " + pos,
                             "Path Type": self.paths[pnum].ptype,
                             "Assessment": ass,
+                            "Reference Event": re,
+                            "Service lvl": slvl,
+                            "Rule": rule,
                             "Safety Margin": sm,
                         }
 
-                        recap_rows["Fatigue"].append(row)
+                        recap_rows[sheet].append(row)
 
-                    else:
-                        Vtot = fatigue_df["Vj"].sum()
-                        if Vtot < 1:
-                            ass = "OK"
+                    if fatigue:
+                        if "Fatigue" not in recap_rows.keys():
+                            recap_rows["Fatigue"] = []
+                        if self.code.name == "ASME B31.3":
+                            df = fatigue_df
+                            if len(df[df["Result"] == "FAILED"]) > 0:
+                                ass = "NOK"
+                                sm = "-"
+                            else:
+                                ass = "OK"
+                                try:
+                                    sm = float(df.loc["302.3.5 d", "Safety Margin"])
+                                except ValueError:  # sm > 10
+                                    sm = "-"
+                            row = {
+                                "Submodel": self.name,
+                                "Path": "Path " + str(pnum) + " " + pos,
+                                "Path Type": self.paths[pnum].ptype,
+                                "Assessment": ass,
+                                "Safety Margin": sm,
+                            }
+
+                            recap_rows["Fatigue"].append(row)
+
                         else:
-                            ass = "NOK"
+                            Vtot = fatigue_df["Vj"].sum()
+                            if Vtot < 1:
+                                ass = "OK"
+                            else:
+                                ass = "NOK"
 
-                        tuf = round(Vtot * 100, 2)
-                        row = {
-                            "Submodel": self.name,
-                            "Path": "Path " + str(pnum) + " " + pos,
-                            "Assessment": ass,
-                            "Total Usage Fraction [%]": tuf,
-                        }
+                            tuf = round(Vtot * 100, 2)
+                            row = {
+                                "Submodel": self.name,
+                                "Path": "Path " + str(pnum) + " " + pos,
+                                "Assessment": ass,
+                                "Total Usage Fraction [%]": tuf,
+                            }
 
-                        recap_rows["Fatigue"].append(row)
+                            recap_rows["Fatigue"].append(row)
 
-            self.recap_rows = recap_rows
+                self.recap_rows = recap_rows
 
-        return recap_rows
+            return recap_rows
+    else:
+
+        def print_assessment(self, *args, **kwargs):
+            raise ImportError(
+                "xlwings is required for print_assessment, but it is not installed."
+            )
 
     def build_REs(self, fatigue: bool = False):
         """Build all the reference events for all paths in the submodel.
