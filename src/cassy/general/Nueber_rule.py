@@ -9,11 +9,12 @@ import numpy as np
 import pandas as pd
 
 # import matplotlib.pyplot as plt
-from shapely.geometry import LineString
-from shapely.geometry import Point
+from shapely.geometry import LineString, Point
 
 
 def compute_Nueber(df1, df2, T, s, E):
+    if s == 0:
+        return {"stress": 0, "Young": 0, "epsilon": 0}
     Ts = [20, 100, 200, 250, 300]
     result = intersect(Ts, df1, s, E)
     if result["epsilon"] > 1.5:

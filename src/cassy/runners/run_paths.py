@@ -1,11 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Nov 26 14:11:14 2020
-
-@author: Davide Laghi
-
-"""
-
 from __future__ import annotations
 
 import os
@@ -14,7 +6,6 @@ import shutil
 from importlib.resources import files
 
 import pandas as pd
-from tqdm import tqdm
 
 from cassy.additional_data import materials, templates
 from cassy.auxiliary.functions import is_excel_installed
@@ -27,7 +18,6 @@ from cassy.general.configuration import parse_cfg_files
 from cassy.general.folder_tree import PathsFolderTree
 from cassy.general.material import read_materials
 from cassy.office.word_helper import WordOutput
-from cassy.paths.linstress import LinStress
 from cassy.paths.submodel import Submodel
 
 if is_excel_installed():
