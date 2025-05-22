@@ -6,6 +6,7 @@ Created on Tue Nov 17 09:20:26 2020
 """
 
 from copy import deepcopy
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,7 @@ class LinStress:
     def __init__(
         self,
         stress_matrice: pd.DataFrame,
-        name: str | None = None,
+        name: Union[str, None] = None,
         unit: str = "Pa",
         stress_type: str = "P",
         load_type: str = "Volumetric",
@@ -120,7 +121,7 @@ class LinStress:
         cls,
         name: str,
         df: pd.DataFrame,
-        config: dict | pd.Series,
+        config: Union[dict, pd.Series],
         ptype: str,
         Welding_n: float,
         Welding_f: float,
