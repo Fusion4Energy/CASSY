@@ -1,5 +1,6 @@
 import shutil
 from importlib.resources import files
+from pathlib import Path
 
 import pytest
 
@@ -15,4 +16,4 @@ def test_run_paths(tmpdir):
     to_copy = files(runners).joinpath("paths")
     dest = tmpdir.join("paths")
     shutil.copytree(to_copy, dest)
-    run_paths(dest)
+    run_paths(dest, fatigue=True)
