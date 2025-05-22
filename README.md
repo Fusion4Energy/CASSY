@@ -118,7 +118,21 @@ be performed
 The `<root>` will need to be populated with all necessary inputs for the code to run. Outputs will be dumped in the same  `<root>` folder.
 Inside `<root>`, 2 folders need to be created by the user:
 * `Configurations`, that contains all the configuration file for each model to be assessed excel configuration files examples can be found in the example folder;
-* `Paths`, that contains a subfolder for each model (named as the configuration file). Each model subfolder must contain a subfolder for each analysis run in ANSYS that will contain two excel files for each timestep of the ANSYS analysis. The first excel file will contain the linearized stress tensors for all paths at the start nodes, while the second file will contain the linearized stress tensors for all paths at the end nodes. Excel load files examples can be found in the example folder.
+* `Stresses`, that contains 1 CSV file for each submodel (named as the correspondent configuration file).
+The columns of the file are:
+    * *path*: number (ID) of the path
+    * *analysis*: name of the analysis to which the stress are extracted from
+    * *loadstep*: loadstep of the analysis from which the stresses are extracted from
+    * *pathpoint*: either "begin" or "end", indicate the position of the stresses in the path.
+    * *stress_type*: Either "Pm" (primary), "Pb" (bending) or "F" (peak)
+    * *Sx*: Sx component of the stress
+    * *Sy*: Sy component of the stress
+    * *Sz*: Sz component of the stress
+    * *Sxy*: Sxy component of the stress
+    * *Sxz*: Sxz component of the stress
+    * *Syz*: Syz component of the stress
+
+
 
 The final input tree should look like this:
 ```
@@ -129,24 +143,9 @@ The final input tree should look like this:
     |         |------ <model2>.xlsx
     |         |------ ...
     |
-    |------ Paths
-    |         |------ <model1>
-    |         |          |------ <single_load1>
-    |         |          |              |------ <Loadstep1_begin>.xlsx
-    |         |          |              |------ <Loadstep1_end>.xlsx
-    |         |          |              |------ <Loadstep2_begin>.xlsx
-    |         |          |              |------ <Loadstep2_end>.xlsx
-    |         |          |              |------ ...
-    |         |          |
-    |         |          |------ <single_load2>
-    |         |          |              |------ <Loadstep1_begin>.xlsx
-    |         |          |              |------ <Loadstep1_end>.xlsx
-    |         |          |              |------ <Loadstep2_begin>.xlsx
-    |         |          |              |------ <Loadstep2_end>.xlsx
-    |         |          |              |------ ...
-    |         |          |
-    |         |          |------ ...
-    |         |
+    |------ Stresses
+    |         |------ <model1>.csv
+    |         |------ <model2>.csv
     |         |------ ...
 
 ```
