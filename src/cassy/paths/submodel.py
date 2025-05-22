@@ -7,6 +7,7 @@ Created on Tue Dec  1 09:24:31 2020
 
 import os
 import shutil
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -32,10 +33,10 @@ class Path:
         ptype: str = "normal",
         Welding_n: float = 1,
         Welding_f: float = 1,
-        REs_beg: list[ReferenceEvent] | None = None,
-        REs_end: list[ReferenceEvent] | None = None,
-        REs_fatigue_beg: list[ReferenceEvent] | None = None,
-        REs_fatigue_end: list[ReferenceEvent] | None = None,
+        REs_beg: Union[list[ReferenceEvent], None] = None,
+        REs_end: Union[list[ReferenceEvent], None] = None,
+        REs_fatigue_beg: Union[list[ReferenceEvent], None] = None,
+        REs_fatigue_end: Union[list[ReferenceEvent], None] = None,
     ):
         """
         Object representing a path
