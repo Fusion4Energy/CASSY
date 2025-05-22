@@ -41,15 +41,11 @@ The procedure to install cassy is the following:
     conda activate cassy
     ```
 
-2) Install the cassy package. To do that, move into the (un-zipped) root folder
-   and type:
+2) Install the cassy package. To do that, download the python wheels from the latest cassy release (GitLab website) and use:
 
     ```
-    pip install .
+    pip install <name_of_the_wheel>.whl
     ```
-
-    With this local installation, pip will use the information found in the
-    ``pyproject.toml`` file to handle all required dependencies.
   
 ### Developer installation
 
