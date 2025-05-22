@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from cassy.auxiliary.functions import is_excel_installed
+from cassy.auxiliary.constants import EXCEL_AVAILABLE
 from cassy.auxiliary.types import PathLike
 from cassy.designcodes.codes import Code
 from cassy.general.configuration import Configuration
@@ -20,7 +20,7 @@ from cassy.general.material import Material
 from cassy.office.excel_helper import ExcelOutput
 from cassy.paths.linstress import LinStress, ReferenceEvent
 
-if is_excel_installed():
+if EXCEL_AVAILABLE:
     import xlwings as xw
 
 

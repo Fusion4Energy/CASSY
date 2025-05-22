@@ -8,7 +8,7 @@ from importlib.resources import files
 import pandas as pd
 
 from cassy.additional_data import materials, templates
-from cassy.auxiliary.functions import is_excel_installed
+from cassy.auxiliary.constants import EXCEL_AVAILABLE
 from cassy.auxiliary.types import PathLike
 from cassy.designcodes.rccmr import RCC_MR
 from cassy.designcodes.rccmrx import RCC_MRx
@@ -20,7 +20,7 @@ from cassy.general.material import read_materials
 from cassy.office.word_helper import WordOutput
 from cassy.paths.submodel import Submodel
 
-if is_excel_installed():
+if EXCEL_AVAILABLE:
     import xlwings as xw
 
 # #################### User Inputs ############################################

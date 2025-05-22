@@ -13,9 +13,9 @@ import xlwings as xw
 from PIL import ImageGrab
 
 # from pythoncom import com_error
-from cassy.auxiliary.functions import is_excel_installed
+from cassy.auxiliary.constants import EXCEL_AVAILABLE
 
-if is_excel_installed():
+if EXCEL_AVAILABLE:
     import pythoncom
     from xlwings.constants import InsertShiftDirection
 

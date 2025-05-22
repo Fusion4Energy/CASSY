@@ -3,14 +3,14 @@ from importlib.resources import as_file, files
 import pytest
 
 from cassy.additional_data import materials, templates
-from cassy.auxiliary.functions import is_excel_installed
+from cassy.auxiliary.constants import EXCEL_AVAILABLE
 from cassy.designcodes.rccmrx import RCC_MRx
 from cassy.general.configuration import Configuration
 from cassy.general.material import Material
 from cassy.paths.submodel import Submodel
 from tests.paths import res
 
-if is_excel_installed():
+if EXCEL_AVAILABLE:
     import xlwings as xw
 
 # Add path to material files
@@ -40,7 +40,7 @@ class TestSubmodel:
         submodel.assess(code, fatigue=True)
 
     @pytest.mark.skipif(
-        not is_excel_installed(),
+        not EXCEL_AVAILABLE,
         reason="Excel is not installed, skipping test.",
     )
     def test_print_assessment(self, submodel: Submodel, tmpdir):
