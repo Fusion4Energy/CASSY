@@ -68,6 +68,7 @@ release:
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   stage: release
   needs: [deploy]
+  before_script: []  # <--- This disables the global before_script for this job
   script: echo "Creating GitLab Release and attaching artifacts"
   rules:
     - if: '$CI_COMMIT_TAG'
