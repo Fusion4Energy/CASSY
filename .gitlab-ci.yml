@@ -18,6 +18,13 @@ before_script:
   - python -m pip install virtualenv
   - python -m virtualenv venv
   - source venv/bin/activate
+
+stages:
+  - test
+  - deploy
+  - release
+
+
 test:
   script:
     # - pip install ruff tox  # you can also use tox
