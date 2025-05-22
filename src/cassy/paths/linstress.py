@@ -5,30 +5,31 @@ Created on Tue Nov 17 09:20:26 2020
 @author: Davide Laghi
 """
 
+from copy import deepcopy
+from typing import Union
+
 import numpy as np
 import pandas as pd
-
-from copy import deepcopy
 
 
 class LinStress:
     def __init__(
         self,
-        stress_matrice,
-        name=None,
-        unit="Pa",
-        stress_type="P",
-        load_type="Volumetric",
-        isPD=False,
-        isCyclic=True,
-        scale=1,
-        spatial_rec_method="srss",
-        ptype="normal",
-        isPressure=False,
-        correctPb=False,
-        Welding_n=1,
-        Welding_f=1,
-        isOccasional=False,
+        stress_matrice: pd.DataFrame,
+        name: Union[str, None] = None,
+        unit: str = "Pa",
+        stress_type: str = "P",
+        load_type: str = "Volumetric",
+        isPD: bool = False,
+        isCyclic: bool = True,
+        scale: float = 1,
+        spatial_rec_method: str = "srss",
+        ptype: str = "normal",
+        isPressure: bool = False,
+        correctPb: bool = False,
+        Welding_n: float = 1,
+        Welding_f: float = 1,
+        isOccasional: float = False,
     ):
         """
         represent a linearized stress
@@ -116,7 +117,15 @@ class LinStress:
         self.load_type = load_type
 
     @classmethod
-    def from_config(cls, name, df, config_df, ptype, Welding_n, Welding_f):
+    def from_config(
+        cls,
+        name: str,
+        df: pd.DataFrame,
+        config: Union[dict, pd.Series],
+        ptype: str,
+        Welding_n: float,
+        Welding_f: float,
+    ):
         """
         Generate a LinStress with the help of an Excel config file
 
@@ -128,8 +137,8 @@ class LinStress:
             name of the load.
         df : pd.DataFrame
             linearized stress matrix (see __init__).
-        config_df : pd.DataFrame
-            DataFrame to use for configuration.
+        config_df : dict | pd.Series
+            information on the load type
         ptype : str
             type of the path where the linstress is computed
         Welding_n: float
@@ -145,7 +154,7 @@ class LinStress:
             Linear stress created.
 
         """
-        row = config_df.loc[name]
+        row = config
         return cls(
             df,
             name=name,
@@ -205,24 +214,24 @@ class LinStress:
         # If it is only one return himself
         elif len(linstresses) == 1:
             new_matrice = linstresses[0]
+
+        elif combination_type == "algebraic":  # Algebraic sum
+            new_matrice = linstresses[0]
+            for linstress in linstresses[1:]:
+                new_matrice = new_matrice + linstress
+
+        elif combination_type == "srss":  # Square Root of Sum of Squares
+            new_matrice = linstresses[0] ** 2
+            for linstress in linstresses[1:]:
+                new_matrice = new_matrice + linstress**2
+            new_matrice = new_matrice**0.5
+
+        elif combination_type == "abs":  # Sum in absolute value
+            new_matrice = linstresses[0].abs()
+            for linstress in linstresses[1:]:
+                new_matrice = new_matrice + linstress.abs()
         else:
-            if combination_type == "algebraic":  # Algebraic sum
-                new_matrice = linstresses[0]
-                for linstress in linstresses[1:]:
-                    new_matrice = new_matrice + linstress
-
-            elif combination_type == "srss":  # Square Root of Sum of Squares
-                new_matrice = linstresses[0] ** 2
-                for linstress in linstresses[1:]:
-                    new_matrice = new_matrice + linstress**2
-                new_matrice = new_matrice**0.5
-
-            elif combination_type == "abs":  # Sum in absolute value
-                new_matrice = linstresses[0].abs()
-                for linstress in linstresses[1:]:
-                    new_matrice = new_matrice + linstress.abs()
-            else:
-                raise KeyError(combination_type + " is not a valid combination type")
+            raise KeyError(combination_type + " is not a valid combination type")
 
         return new_matrice
 
@@ -951,13 +960,18 @@ class ReferenceEvent:
                     # The assessment is None, hence the assessment was not
                     # valid. Go the next one
                     continue
+
+                allowable = assessed[i][1]
+                if isinstance(allowable, np.ndarray) and len(allowable) == 1:
+                    allowable = allowable[0]
+
                 try:
-                    allowable = round(assessed[i][1] * 1e-6)
+                    allowable = round(allowable * 1e-6)
                 except ValueError:
                     # it means is NaN
-                    allowable = assessed[i][1].item()
+                    allowable = allowable.item()
                 except TypeError:
-                    allowable = assessed[i][1].item()
+                    allowable = allowable.item()
 
                 if applied < allowable:
                     res = "OK"
@@ -1035,16 +1049,14 @@ class ReferenceEvent:
         return assessment
 
 
-def _safePascal(df, unit):
-    if df is None:
-        return None
+def _safePascal(df: pd.DataFrame, unit: str) -> pd.DataFrame:
     # Convert Unit to Pa
     if unit == "MPa":
         df = df * 1e6
     elif unit == "KPa":
         df = df * 1e3
     elif unit == "Pa":
-        df = df
+        pass
     else:
         raise KeyError(unit + " is not an admissible unit")
 

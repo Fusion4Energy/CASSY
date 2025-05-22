@@ -11,6 +11,7 @@ import os
 
 import pandas as pd
 
+from cassy.auxiliary.custom_errors import TensorInputError
 from cassy.auxiliary.types import PathLike
 
 
@@ -24,17 +25,23 @@ class Configuration:
         "General",
     ]
 
-    def __init__(self, submodel, file):
-        """
-        Initialize MatList
+    def __init__(self, submodel: str, config_file: PathLike, tensors_file: PathLike):
+        """Object storing the configuration of a submodel.
 
-        materials: (list)(Material) materials of the list
+        Parameters
+        ----------
+        submodel : str
+            name of the submodel
+        config_file : PathLike
+            path to the configuration file
+        tensors_file : PathLike
+            path to the stress tensors file
         """
         self.submodel = submodel
 
         sheets = {}
         for sheet in self._config_sheets:
-            df = pd.read_excel(file, sheet_name=sheet)
+            df = pd.read_excel(config_file, sheet_name=sheet)
             if sheet in ["Reference Event", "Reference Event Fatigue"]:
                 df.set_index(["Path N", "ID"], inplace=True)
             else:
@@ -50,6 +57,51 @@ class Configuration:
         gp = gp[["Value"]]
         self.code = str(gp.loc["Design Code", "Value"])
 
+        # Load the stress tensors
+        self.stress_tensors = (
+            pd.read_csv(tensors_file)
+            .set_index(["path", "analysis", "loadstep", "pathpoint", "stress_type"])
+            .sort_index()
+        )
+
+    def get_stress_tensor(
+        self, load: str, pathnum: int, pathpoint: str
+    ) -> pd.DataFrame:
+        """Locate the correct stress tensor for a specified load
+
+        Parameters
+        ----------
+        load : str
+            Name of the load
+        pathnum : int
+            path number
+        pathpoint : str
+            Name of the pathpoint, either 'begin' or 'end'
+        Returns
+        -------
+        pd.DataFrame
+            Stress tensor for the specified load step, path number and pathpoint
+        """
+        if pathpoint not in ["begin", "end"]:
+            raise ValueError(
+                "Pathpoint must be either 'begin' or 'end'. "
+                + f"Got {pathpoint} instead."
+            )
+        # Get the analysis and loadstep
+        analysis = self.sheets["Load Steps"].loc[load]["Analysis Name"]
+        timestep = self.sheets["Load Steps"].loc[load]["Time Step"]
+        tensor = self.stress_tensors.loc[pathnum, analysis, timestep, pathpoint]
+
+        # perform some consistency checks
+        try:
+            assert tensor.shape == (3, 6)
+        except AssertionError:
+            raise TensorInputError(
+                f"Stress tensor must be a 3x6 matrix. {load} {pathnum} {pathpoint}"
+            )
+
+        return tensor
+
     def __len__(self):
         return len(self.sheets)
 
@@ -59,7 +111,7 @@ class Configuration:
     def __getitem__(self, sheet):
         return self.sheets[sheet]
 
-    def get_REid_path(self, pathnum, fatigue=False):
+    def get_REid_path(self, pathnum: int, fatigue: bool = False) -> list[str]:
         """
         Given the path number, returns the list of reference events ID
         associated with the path
@@ -136,7 +188,9 @@ class AssessmentConfiguration:
         pass
 
 
-def parse_cfg_files(cfg_root: PathLike) -> dict[str, Configuration]:
+def parse_cfg_files(
+    cfg_root: PathLike, tensors_files: PathLike
+) -> dict[str, Configuration]:
     """Parse all configuration files in the given folder and divide them
     by submodel.
 
@@ -144,6 +198,8 @@ def parse_cfg_files(cfg_root: PathLike) -> dict[str, Configuration]:
     ----------
     cfg_root : PathLike
         Path to the folder containing the configuration files
+    tensors_file : PathLike
+        Path to the folder containing the stress tensors files
 
     Returns
     -------
@@ -154,5 +210,6 @@ def parse_cfg_files(cfg_root: PathLike) -> dict[str, Configuration]:
     for conf_file in os.listdir(cfg_root):
         submodel = conf_file.split(".")[0]
         confpath = os.path.join(cfg_root, conf_file)
-        config[submodel] = Configuration(submodel, confpath)
+        tensors_file = os.path.join(tensors_files, submodel + ".csv")
+        config[submodel] = Configuration(submodel, confpath, tensors_file)
     return config

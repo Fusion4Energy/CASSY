@@ -29,3 +29,7 @@ def main():
         raise ValueError(
             "Assessment type not recognized, please choose between bolts and paths"
         )
+
+
+if __name__ == "__main__":
+    main()

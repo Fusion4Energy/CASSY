@@ -41,7 +41,7 @@ class Material:
         # Poisson ratio
         nu = pd.read_excel(excel_data, sheet_name="Nu")
         nu = _cleanNA(nu)
-        self.nu = float(nu.values[0])
+        self.nu = float(nu.values[0][0])
 
         # Young modulus
         E_table = pd.read_excel(excel_data, sheet_name="Young Modulus")
@@ -179,7 +179,10 @@ class Material:
         Se_table = pd.read_excel(excel_data, sheet_name="Se", skiprows=2)
         Se_table = _cleanNA(Se_table)
         Se_table.set_index("T [°C]", inplace=True)
-        Se_table.replace(to_replace="No limit", value=np.nan, inplace=True)
+        with pd.option_context("future.no_silent_downcasting", True):
+            Se_table = Se_table.replace(
+                to_replace="No limit", value=np.nan
+            ).infer_objects()
         self.Se_table = Se_table * 1e6
         self.Se = _interpolate_df(self.Se_table)  # (T, dpa)
 
@@ -187,7 +190,10 @@ class Material:
         Sd_table = pd.read_excel(excel_data, sheet_name="Sd", skiprows=2)
         Sd_table = _cleanNA(Sd_table)
         Sd_table.set_index("T [°C]", inplace=True)
-        Sd_table.replace(to_replace="No limit", value=np.nan, inplace=True)
+        with pd.option_context("future.no_silent_downcasting", True):
+            Sd_table = Sd_table.replace(
+                to_replace="No limit", value=np.nan
+            ).infer_objects()
         self.Sd_table = Sd_table * 1e6
         self.Sd = _interpolate_df(self.Sd_table)  # (T, dpa)
 
@@ -195,7 +201,10 @@ class Material:
         Sd_nopeak_table = pd.read_excel(excel_data, sheet_name="Sd_nopeak", skiprows=2)
         Sd_nopeak_table = _cleanNA(Sd_nopeak_table)
         Sd_nopeak_table.set_index("T [°C]", inplace=True)
-        Sd_nopeak_table.replace(to_replace="No limit", value=np.nan, inplace=True)
+        with pd.option_context("future.no_silent_downcasting", True):
+            Sd_nopeak_table = Sd_nopeak_table.replace(
+                to_replace="No limit", value=np.nan
+            ).infer_objects()
         self.Sd_nopeak_table = Sd_nopeak_table * 1e6
         self.Sd_nopeak = _interpolate_df(self.Sd_nopeak_table)  # (T, dpa)
 

@@ -6,6 +6,7 @@ Created on Tue Dec 22 14:05:28 2020
 """
 
 from math import pi
+
 import numpy as np
 import pandas as pd
 
@@ -299,10 +300,10 @@ class BoltSectionActions(SectionActions):
                         # Rounded at the MPa (compute on mm so already MPa)
                         applied = int(assessed[i][0])
                         try:
-                            allowable = int(assessed[i][1] * 1e-6)
+                            allowable = int(assessed[i][1][0] * 1e-6)
                         except ValueError:
                             # it means is NaN
-                            allowable = assessed[i][1] * 1e-6
+                            allowable = assessed[i][1][0] * 1e-6
                     except TypeError:
                         # The assessment is None, hence the assessment was not
                         # valid. Go the next one

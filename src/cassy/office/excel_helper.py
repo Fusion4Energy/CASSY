@@ -5,17 +5,19 @@ Created on Fri Dec  4 17:29:42 2020
 @author: Davide Laghi
 """
 
-import shutil
-import math
 import os
-import xlwings as xw
-import pythoncom
-import pandas as pd
 from copy import deepcopy
+
+import pandas as pd
+import xlwings as xw
 from PIL import ImageGrab
 
 # from pythoncom import com_error
-from xlwings.constants import InsertShiftDirection
+from cassy.auxiliary.constants import EXCEL_AVAILABLE
+
+if EXCEL_AVAILABLE:
+    import pythoncom
+    from xlwings.constants import InsertShiftDirection
 
 pd.options.mode.chained_assignment = None  # default='warn'
 

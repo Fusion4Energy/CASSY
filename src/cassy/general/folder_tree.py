@@ -23,7 +23,7 @@ class FolderTree:
 class PathsFolderTree(FolderTree):
     def __init__(self, root: PathLike) -> None:
         super().__init__(root)
-        self.paths_folder = os.path.join(root, "Paths")
+        self.stress_tensors = os.path.join(root, "Stresses")
 
 
 class BoltsFolderTree(FolderTree):

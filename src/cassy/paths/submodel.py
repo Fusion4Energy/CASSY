@@ -7,390 +7,43 @@ Created on Tue Dec  1 09:24:31 2020
 
 import os
 import shutil
+from typing import Union
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from cassy.auxiliary.constants import EXCEL_AVAILABLE
+from cassy.auxiliary.types import PathLike
+from cassy.designcodes.codes import Code
+from cassy.general.configuration import Configuration
+from cassy.general.material import Material
 from cassy.office.excel_helper import ExcelOutput
+from cassy.paths.linstress import LinStress, ReferenceEvent
 
-
-class Submodel:
-    def __init__(self, name, paths):
-        """
-        Object representing a submodel where paths have to be assessed
-
-        Parameters
-        ----------
-        name : str
-            Submodel name.
-        paths : list of Path
-            paths in the submodel.
-
-        Returns
-        -------
-        None.
-
-        """
-        self.name = name
-        self.paths = paths
-
-        self.assessments = None
-        self.code = None
-        self.recap_rows = {}
-        self.images = {}
-
-    @classmethod
-    def from_df(cls, name, conf_df, mat_dic):
-        """
-        Generate a submodel with an auxiliary df
-
-        Parameters
-        ----------
-        cls : TYPE
-            DESCRIPTION.
-        name : str
-            Name of the submodel.
-        conf_df : pandas.DataFrame
-            auxiliary dataframe.
-        mat_dic : dic
-            contains the materials to use
-
-        Returns
-        -------
-        TYPE
-            DESCRIPTION.
-
-        """
-        paths = {}
-        for idx, row in conf_df.iterrows():
-            path = Path.from_series(idx, row, [], [], [], [], mat_dic)
-            paths[idx] = path
-        return cls(name, paths)
-
-    def assess(self, code, fatigue=True):
-        """
-        Assess all paths in the submodel
-
-        Parameters
-        ----------
-        code : code.Code
-            Design code to use for the assessment.
-        fatigue: bool, optional
-            if False the fatigue assessment is skipped. The default is True
-
-        Returns
-        -------
-        None.
-
-        """
-        assessments = {}
-        for idx, path in self.paths.items():
-            beg, end = path.assess(code)
-            assessments[path.pnum] = {"begin": beg, "end": end}
-
-            if fatigue:
-                if code.name == "ASME B31.3":
-                    beg_f, end_f = path.assess_Se(code)
-
-                else:
-                    beg_f, end_f = path.assess_fatigue(code)
-                assessments[path.pnum]["begin fatigue"] = beg_f
-                assessments[path.pnum]["end fatigue"] = end_f
-
-        self.assessments = assessments
-        self.code = code
-
-    def print_assessment(
-        self, mainfolder, app, template_path, img_folder="Images", fatigue=True
-    ):
-        """
-        Prints the excel assessment for each path (both begin and end) and at
-        the same time grabs and saves the images of the assessment in the
-        img_folder. Additionally it returns the rows for the final recap table
-        of the assessment.
-
-        Parameters
-        ----------
-        mainfolder : str or path
-            path to the submodel assessment (i.e. where to put excels).
-        app : xw.App
-            Excel app from xlwings.
-        template_path : str or path
-            path to the excel template.
-        img_folder : str or path, optional
-            path to the folder where to store the images.
-            The default is 'Images'.
-        fatigue: bool, optional
-            if False the fatigue assessment is skipped. The default is True
-
-        Raises
-        ------
-        ValueError
-            If the assessment has not been run yet.
-
-        Returns
-        -------
-        recap_rows : dic
-            the keys are the damage type and the items are dictionaries
-            containing the rows for the final recap table.
-
-        """
-
-        if self.assessments is None:
-            raise ValueError("Please assess the submodel first")
-
-        print("Assessing " + self.name + " with " + self.code.name)
-
-        # Safe creation of folder for images
-        imgs = os.path.join(img_folder, self.name)
-        if not os.path.exists(img_folder):
-            os.mkdir(img_folder)
-        if os.path.exists(imgs):
-            shutil.rmtree(imgs)
-        os.mkdir(imgs)
-
-        # Cycling on all paths
-        # recap_rows = {'Immediate': [], 'Ratcheting': [], 'Fatigue': []}
-        recap_rows = {}
-        for pnum, dfs in tqdm(self.assessments.items(), desc="Path"):
-            self.images[pnum] = {}
-            # Cycling on begin and end
-            for pos in ["begin", "end"]:
-                self.images[pnum][pos] = {}
-                # Get all needed data for compilation
-                poa = "Path " + str(pnum) + " " + pos
-                material = self.paths[pnum].material.name
-                idx = [
-                    "ID",
-                    "Operating Conditions",
-                    "Initiating Event",
-                    "Concatenated Event",
-                    "Loading Category",
-                    "Service Level",
-                    "Rule Extended Description",
-                    "Rule ID",
-                    "Sub-Rule",
-                    "T [°C]",
-                    "dpa",
-                ]
-                df = dfs[pos].set_index(idx)
-
-                col = "Damage Type"
-                # get the damage type names
-                df_types = {}
-                damage_types = self.code.damage_types
-                for key in damage_types:
-                    df_type = df[df[col] == key]
-                    df_type = _round_ass_df(df_type)
-                    df_type = df_type.drop(col, axis=1)
-                    df_types[key] = df_type
-
-                # Get the input df
-                input_df = self.paths[pnum]._get_basic_loads_df(pos)
-                df_types["Input"] = input_df
-
-                # Write the excel file
-                file = self.name + "_" + str(pnum) + "_" + pos + ".xlsx"
-                out_path = os.path.join(mainfolder, file)
-                if os.path.isfile(out_path):
-                    os.remove(out_path)
-                shutil.copyfile(template_path, out_path)
-
-                out = ExcelOutput(app, out_path)
-
-                # Fill the banners
-                out.fill_banner("SA_template", self.name, poa, material, self.code)
-                out.fill_banner(
-                    "Input_template",
-                    self.name,
-                    poa,
-                    material,
-                    None,
-                    template="Input_template",
-                )
-
-                if fatigue:
-                    # no further actions needed on the df
-                    fatigue_df = dfs[pos + " fatigue"]
-                    if self.code.name == "ASME B31.3":
-                        idx = ["Rule ID", "loads"]
-                        fatigue_df.set_index(idx, inplace=True)
-                        # Fill the banner
-                        out.fill_banner("Fatigue", self.name, poa, material, self.code)
-
-                    else:
-                        # Fill banner
-                        out.fill_banner(
-                            "Fatigue_template",
-                            self.name,
-                            poa,
-                            material,
-                            self.code,
-                            template="fatigue",
-                        )
-
-                    df_types["Fatigue"] = fatigue_df
-
-                for sheet, df in df_types.items():
-                    if sheet == "Input":
-                        out.insert_SA_df(
-                            df,
-                            sheet,
-                            divide_blocks="Load Condition",
-                            print_header=False,
-                            word=True,
-                            start_row=10,
-                        )
-                    elif sheet == "Fatigue":
-                        if self.code.name == "ASME B31.3":
-                            out.insert_SA_df(df, sheet)
-                        else:
-                            out.insert_fatigue_df(df, sheet)
-
-                    else:
-                        out.insert_SA_df(df, sheet, divide_blocks="ID")
-
-                    # lastcell = tab .anchor_end
-                    file = (
-                        self.name + "_" + str(pnum) + "_" + pos + "_" + sheet + ".png"
-                    )
-                    outpath = os.path.join(imgs, file)
-                    self.images[pnum][pos][sheet] = outpath
-                    out.grab_img("all", "all", sheet, outpath)
-
-                # file = self.name+'_'+str(pnum)+'_'+pos+'.xlsx'
-                out.save(out_path)
-
-                for sheet, df in df_types.items():
-                    if sheet in ["Fatigue", "Input"]:
-                        continue
-                    else:
-                        if sheet not in recap_rows.keys():
-                            recap_rows[sheet] = []
-
-                    if len(df[df["Result"] == "FAILED"]) > 0:
-                        ass = "NOK"
-                        sm = "-"
-                        re = "-"
-                        slvl = "-"
-                        rule = "-"
-                    else:
-                        ass = "OK"
-                        # Individuate design driver
-                        try:
-                            # take out the > 10
-                            df = df[df["Safety Margin"] != "> 10"]
-                            df["Safety Margin"] = df["Safety Margin"].astype(float)
-                            idx = df["Safety Margin"].idxmin()
-
-                            # Get the idxs of indices
-                            names = df.index.names
-                            try:
-                                try:
-                                    # If the DF is too long we can have siries
-                                    sm = df.loc[idx, "Safety Margin"].iloc[0]
-                                except AttributeError:
-                                    # If the DF is shorter
-                                    sm = df.loc[idx, "Safety Margin"]
-                                re = idx[names.index("ID")]
-                                slvl = idx[names.index("Service Level")]
-                                rule = idx[names.index("Sub-Rule")]
-                            except KeyError:
-                                # should be key error nan hence sm > 10
-                                re = "No driver"
-                                sm = ""
-                                slvl = ""
-                                rule = ""
-                        except TypeError:  # most likely nan
-                            sm = ""
-                            re = "No driver"
-                            slvl = ""
-                            rule = ""
-                        except ValueError:  # they are all >10
-                            sm = ""
-                            re = "No driver"
-                            slvl = ""
-                            rule = ""
-
-                    row = {
-                        "Submodel": self.name,
-                        "Path": "Path " + str(pnum) + " " + pos,
-                        "Path Type": self.paths[pnum].ptype,
-                        "Assessment": ass,
-                        "Reference Event": re,
-                        "Service lvl": slvl,
-                        "Rule": rule,
-                        "Safety Margin": sm,
-                    }
-
-                    recap_rows[sheet].append(row)
-
-                if fatigue:
-                    if "Fatigue" not in recap_rows.keys():
-                        recap_rows["Fatigue"] = []
-                    if self.code.name == "ASME B31.3":
-                        df = fatigue_df
-                        if len(df[df["Result"] == "FAILED"]) > 0:
-                            ass = "NOK"
-                            sm = "-"
-                        else:
-                            ass = "OK"
-                            try:
-                                sm = float(df.loc["302.3.5 d", "Safety Margin"])
-                            except ValueError:  # sm > 10
-                                sm = "-"
-                        row = {
-                            "Submodel": self.name,
-                            "Path": "Path " + str(pnum) + " " + pos,
-                            "Path Type": self.paths[pnum].ptype,
-                            "Assessment": ass,
-                            "Safety Margin": sm,
-                        }
-
-                        recap_rows["Fatigue"].append(row)
-
-                    else:
-                        Vtot = fatigue_df["Vj"].sum()
-                        if Vtot < 1:
-                            ass = "OK"
-                        else:
-                            ass = "NOK"
-
-                        tuf = round(Vtot * 100, 2)
-                        row = {
-                            "Submodel": self.name,
-                            "Path": "Path " + str(pnum) + " " + pos,
-                            "Assessment": ass,
-                            "Total Usage Fraction [%]": tuf,
-                        }
-
-                        recap_rows["Fatigue"].append(row)
-
-            self.recap_rows = recap_rows
-
-        return recap_rows
+if EXCEL_AVAILABLE:
+    import xlwings as xw
 
 
 class Path:
     def __init__(
         self,
-        pnum,
-        material,
-        ptype="normal",
-        Welding_n=1,
-        Welding_f=1,
-        REs_beg=[],
-        REs_end=[],
-        REs_fatigue_beg=[],
-        REs_fatigue_end=[],
+        pnum: int,
+        material: Material,
+        ptype: str = "normal",
+        Welding_n: float = 1,
+        Welding_f: float = 1,
+        REs_beg: Union[list[ReferenceEvent], None] = None,
+        REs_end: Union[list[ReferenceEvent], None] = None,
+        REs_fatigue_beg: Union[list[ReferenceEvent], None] = None,
+        REs_fatigue_end: Union[list[ReferenceEvent], None] = None,
     ):
         """
         Object representing a path
 
         Parameters
         ----------
-        pnum : str/float
+        pnum : int
             Number assigned to the path in the submodel.
         material : material.Material
             material of the path.
@@ -417,6 +70,14 @@ class Path:
         None.
 
         """
+        if REs_beg is None:
+            REs_beg = []
+        if REs_end is None:
+            REs_end = []
+        if REs_fatigue_beg is None:
+            REs_fatigue_beg = []
+        if REs_fatigue_end is None:
+            REs_fatigue_end = []
         self.REs_beg = REs_beg
         self.REs_end = REs_end
         self.REs_fatigue_end = REs_fatigue_end
@@ -437,55 +98,6 @@ class Path:
         # Assessment must be computed first
         self.ass_beg = None
         self.ass_end = None
-
-    @classmethod
-    def from_series(
-        cls, pnum, row, REs_beg, REs_end, REs_fatigue_beg, REs_fatigue_end, mat_dic
-    ):
-        """
-        Create a path with the help of a Series
-
-        Parameters
-        ----------
-        cls : TYPE
-            DESCRIPTION.
-        pnum : str/float
-            number assigned to the path.
-        row : pd.Series
-            contains the useful data.
-        REs_beg : list of linstress.ReferenceEvent, optional
-            reference events objects in the path begin.
-        REs_end : list of linstress.ReferenceEven, optional
-            reference events objects in the path end.
-        REs_fatigue_beg : list of linstress.ReferenceEvent, optional
-            reference events objects in the path begin.
-        REs_fatigue_end : list of linstress.ReferenceEven, optional
-            reference events objects in the path end.
-        mat_dic : dic
-            contains the Material objects to use.
-
-        Returns
-        -------
-        Path
-            Creates a Path object.
-
-        """
-        ptype = row["Type"]
-        Welding_n = float(row["Welding-n"])
-        Welding_f = float(row["Welding-f"])
-        material = mat_dic[row["Material"]]
-
-        return cls(
-            pnum,
-            material,
-            ptype=ptype,
-            Welding_n=Welding_n,
-            Welding_f=Welding_f,
-            REs_beg=REs_beg,
-            REs_end=REs_end,
-            REs_fatigue_beg=REs_fatigue_beg,
-            REs_fatigue_end=REs_fatigue_end,
-        )
 
     def add_RE(self, RE, pos, fatigue=False):
         """
@@ -557,7 +169,7 @@ class Path:
 
         return self.ass_beg, self.ass_end
 
-    def assess_fatigue(self, code):
+    def assess_fatigue(self, code: Code):
         """
         Assess all fatigue reference events in path
 
@@ -588,7 +200,7 @@ class Path:
 
         return self.ass_fatigue_beg, self.ass_fatigue_end
 
-    def assess_Se(self, code):
+    def assess_Se(self, code: Code):
         """
         Assess fatigue according to ASME B31.3
 
@@ -757,3 +369,519 @@ def _round_ass_df(df):
     dic = {"Applied [MPa]": 0, "Allowable [MPa]": 0, "Safety Margin": 2}
     df = df.round(dic)
     return df
+
+
+class Submodel:
+    def __init__(self, name: str, config: Configuration, mat_dict: dict[str, Material]):
+        """
+        Object representing a submodel where paths have to be assessed
+
+        Parameters
+        ----------
+        name : str
+            Submodel name.
+        config : Configuration
+            Contains information on the paths stress tensors and load combinations
+            to assess.
+        mat_dict : dict[str, Material]
+            Material library available for the assessment
+
+        Returns
+        -------
+        None.
+
+        """
+        self.name = name
+        self.config = config
+        self.mat_dict = mat_dict
+
+        # Initialize all paths
+        paths = {}
+        for idx, row in config["Paths"].iterrows():
+            pnum = int(idx)
+            ptype = row["Type"]
+            welding_n = float(row["Welding-n"])
+            welding_f = float(row["Welding-f"])
+            material = mat_dict[row["Material"]]
+
+            path = Path(
+                pnum, material, ptype=ptype, Welding_n=welding_n, Welding_f=welding_f
+            )
+            paths[pnum] = path
+        self.paths = paths
+
+        self.assessments = None
+        self.recap_rows = {}
+        self.images = {}
+
+    def assess(self, code: Code, fatigue: bool = True):
+        """
+        Assess all paths in the submodel
+
+        Parameters
+        ----------
+        code : code.Code
+            Design code to use for the assessment.
+        fatigue: bool, optional
+            if False the fatigue assessment is skipped. The default is True
+
+        Returns
+        -------
+        None.
+
+        """
+        assessments = {}
+        for idx, path in self.paths.items():
+            beg, end = path.assess(code)
+            assessments[path.pnum] = {"begin": beg, "end": end}
+
+            if fatigue:
+                if code.name == "ASME B31.3":
+                    beg_f, end_f = path.assess_Se(code)
+
+                else:
+                    beg_f, end_f = path.assess_fatigue(code)
+                assessments[path.pnum]["begin fatigue"] = beg_f
+                assessments[path.pnum]["end fatigue"] = end_f
+
+        self.assessments = assessments
+        self.code = code
+
+    if EXCEL_AVAILABLE:
+
+        def print_assessment(
+            self,
+            mainfolder: PathLike,
+            app: xw.App,
+            template_path: PathLike,
+            img_folder: PathLike = "Images",
+            fatigue: bool = True,
+        ):
+            """
+            Prints the excel assessment for each path (both begin and end) and at
+            the same time grabs and saves the images of the assessment in the
+            img_folder. Additionally it returns the rows for the final recap table
+            of the assessment.
+
+            Parameters
+            ----------
+            mainfolder : str or path
+                path to the submodel assessment (i.e. where to put excels).
+            app : xw.App
+                Excel app from xlwings.
+            template_path : str or path
+                path to the excel template.
+            img_folder : str or path, optional
+                path to the folder where to store the images.
+                The default is 'Images'.
+            fatigue: bool, optional
+                if False the fatigue assessment is skipped. The default is True
+
+            Raises
+            ------
+            ValueError
+                If the assessment has not been run yet.
+
+            Returns
+            -------
+            recap_rows : dic
+                the keys are the damage type and the items are dictionaries
+                containing the rows for the final recap table.
+
+            """
+
+            if self.assessments is None:
+                raise ValueError("Please assess the submodel first")
+
+            print("Assessing " + self.name + " with " + self.code.name)
+
+            # Safe creation of folder for images
+            imgs = os.path.join(img_folder, self.name)
+            if not os.path.exists(img_folder):
+                os.mkdir(img_folder)
+            if os.path.exists(imgs):
+                shutil.rmtree(imgs)
+            os.mkdir(imgs)
+
+            # Cycling on all paths
+            # recap_rows = {'Immediate': [], 'Ratcheting': [], 'Fatigue': []}
+            recap_rows = {}
+            for pnum, dfs in tqdm(self.assessments.items(), desc="Path"):
+                self.images[pnum] = {}
+                # Cycling on begin and end
+                for pos in ["begin", "end"]:
+                    self.images[pnum][pos] = {}
+                    # Get all needed data for compilation
+                    poa = "Path " + str(pnum) + " " + pos
+                    material = self.paths[pnum].material.name
+                    idx = [
+                        "ID",
+                        "Operating Conditions",
+                        "Initiating Event",
+                        "Concatenated Event",
+                        "Loading Category",
+                        "Service Level",
+                        "Rule Extended Description",
+                        "Rule ID",
+                        "Sub-Rule",
+                        "T [°C]",
+                        "dpa",
+                    ]
+                    df = dfs[pos].set_index(idx)
+
+                    col = "Damage Type"
+                    # get the damage type names
+                    df_types = {}
+                    damage_types = self.code.damage_types
+                    for key in damage_types:
+                        df_type = df[df[col] == key]
+                        df_type = _round_ass_df(df_type)
+                        df_type = df_type.drop(col, axis=1)
+                        df_types[key] = df_type
+
+                    # Get the input df
+                    input_df = self.paths[pnum]._get_basic_loads_df(pos)
+                    df_types["Input"] = input_df
+
+                    # Write the excel file
+                    file = self.name + "_" + str(pnum) + "_" + pos + ".xlsx"
+                    out_path = os.path.join(mainfolder, file)
+                    if os.path.isfile(out_path):
+                        os.remove(out_path)
+                    shutil.copyfile(template_path, out_path)
+
+                    out = ExcelOutput(app, out_path)
+
+                    # Fill the banners
+                    out.fill_banner("SA_template", self.name, poa, material, self.code)
+                    out.fill_banner(
+                        "Input_template",
+                        self.name,
+                        poa,
+                        material,
+                        None,
+                        template="Input_template",
+                    )
+
+                    if fatigue:
+                        # no further actions needed on the df
+                        fatigue_df = dfs[pos + " fatigue"]
+                        if self.code.name == "ASME B31.3":
+                            idx = ["Rule ID", "loads"]
+                            fatigue_df.set_index(idx, inplace=True)
+                            # Fill the banner
+                            out.fill_banner(
+                                "Fatigue", self.name, poa, material, self.code
+                            )
+
+                        else:
+                            # Fill banner
+                            out.fill_banner(
+                                "Fatigue_template",
+                                self.name,
+                                poa,
+                                material,
+                                self.code,
+                                template="fatigue",
+                            )
+
+                        df_types["Fatigue"] = fatigue_df
+
+                    for sheet, df in df_types.items():
+                        if sheet == "Input":
+                            out.insert_SA_df(
+                                df,
+                                sheet,
+                                divide_blocks="Load Condition",
+                                print_header=False,
+                                word=True,
+                                start_row=10,
+                            )
+                        elif sheet == "Fatigue":
+                            if self.code.name == "ASME B31.3":
+                                out.insert_SA_df(df, sheet)
+                            else:
+                                out.insert_fatigue_df(df, sheet)
+
+                        else:
+                            out.insert_SA_df(df, sheet, divide_blocks="ID")
+
+                        # lastcell = tab .anchor_end
+                        file = (
+                            self.name
+                            + "_"
+                            + str(pnum)
+                            + "_"
+                            + pos
+                            + "_"
+                            + sheet
+                            + ".png"
+                        )
+                        outpath = os.path.join(imgs, file)
+                        self.images[pnum][pos][sheet] = outpath
+                        out.grab_img("all", "all", sheet, outpath)
+
+                    # file = self.name+'_'+str(pnum)+'_'+pos+'.xlsx'
+                    out.save(out_path)
+
+                    for sheet, df in df_types.items():
+                        if sheet in ["Fatigue", "Input"]:
+                            continue
+                        else:
+                            if sheet not in recap_rows.keys():
+                                recap_rows[sheet] = []
+
+                        if len(df[df["Result"] == "FAILED"]) > 0:
+                            ass = "NOK"
+                            sm = "-"
+                            re = "-"
+                            slvl = "-"
+                            rule = "-"
+                        else:
+                            ass = "OK"
+                            # Individuate design driver
+                            try:
+                                # take out the > 10
+                                df = df[df["Safety Margin"] != "> 10"]
+                                df["Safety Margin"] = df["Safety Margin"].astype(float)
+                                idx = df["Safety Margin"].idxmin()
+
+                                # Get the idxs of indices
+                                names = df.index.names
+                                try:
+                                    try:
+                                        # If the DF is too long we can have siries
+                                        sm = df.loc[idx, "Safety Margin"].iloc[0]
+                                    except AttributeError:
+                                        # If the DF is shorter
+                                        sm = df.loc[idx, "Safety Margin"]
+                                    re = idx[names.index("ID")]
+                                    slvl = idx[names.index("Service Level")]
+                                    rule = idx[names.index("Sub-Rule")]
+                                except KeyError:
+                                    # should be key error nan hence sm > 10
+                                    re = "No driver"
+                                    sm = ""
+                                    slvl = ""
+                                    rule = ""
+                            except TypeError:  # most likely nan
+                                sm = ""
+                                re = "No driver"
+                                slvl = ""
+                                rule = ""
+                            except ValueError:  # they are all >10
+                                sm = ""
+                                re = "No driver"
+                                slvl = ""
+                                rule = ""
+
+                        row = {
+                            "Submodel": self.name,
+                            "Path": "Path " + str(pnum) + " " + pos,
+                            "Path Type": self.paths[pnum].ptype,
+                            "Assessment": ass,
+                            "Reference Event": re,
+                            "Service lvl": slvl,
+                            "Rule": rule,
+                            "Safety Margin": sm,
+                        }
+
+                        recap_rows[sheet].append(row)
+
+                    if fatigue:
+                        if "Fatigue" not in recap_rows.keys():
+                            recap_rows["Fatigue"] = []
+                        if self.code.name == "ASME B31.3":
+                            df = fatigue_df
+                            if len(df[df["Result"] == "FAILED"]) > 0:
+                                ass = "NOK"
+                                sm = "-"
+                            else:
+                                ass = "OK"
+                                try:
+                                    sm = float(df.loc["302.3.5 d", "Safety Margin"])
+                                except ValueError:  # sm > 10
+                                    sm = "-"
+                            row = {
+                                "Submodel": self.name,
+                                "Path": "Path " + str(pnum) + " " + pos,
+                                "Path Type": self.paths[pnum].ptype,
+                                "Assessment": ass,
+                                "Safety Margin": sm,
+                            }
+
+                            recap_rows["Fatigue"].append(row)
+
+                        else:
+                            Vtot = fatigue_df["Vj"].sum()
+                            if Vtot < 1:
+                                ass = "OK"
+                            else:
+                                ass = "NOK"
+
+                            tuf = round(Vtot * 100, 2)
+                            row = {
+                                "Submodel": self.name,
+                                "Path": "Path " + str(pnum) + " " + pos,
+                                "Assessment": ass,
+                                "Total Usage Fraction [%]": tuf,
+                            }
+
+                            recap_rows["Fatigue"].append(row)
+
+                self.recap_rows = recap_rows
+
+            return recap_rows
+    else:
+
+        def print_assessment(self, *args, **kwargs):
+            raise ImportError(
+                "xlwings is required for print_assessment, but it is not installed."
+            )
+
+    def build_REs(self, fatigue: bool = False):
+        """Build all the reference events for all paths in the submodel.
+
+        Parameters
+        ----------
+        fatigue : bool, optional
+            if True also fatigue events are built, by default False
+        """
+        for pathnum in self.config.paths:
+            # identify all reference events of the path
+            re_list = self.config.get_REid_path(pathnum)
+            for re in re_list:
+                self._build_RE(pathnum, re)
+
+            if fatigue:
+                re_list_fatigue = self.config.get_REid_path(pathnum, fatigue=True)
+                for re in re_list_fatigue:
+                    self._build_RE(pathnum, re, fatigue=True)
+
+    def _build_RE(self, pathnum: int, re_ID: str, fatigue: bool = False):
+        """
+        build a reference event to assign to a specific path and submodel
+
+        Parameters
+        ----------
+        pathnum : int
+            number of the path onto which operate
+        conf : configuration.Configuration
+            Configuration object of the submodel
+        re_ID : str
+            ID of the reference event to add.
+        fatigue : bool, optional
+            If true, the RE is a fatigue one. The default is False.
+
+        Returns
+        -------
+        None.
+
+        """
+        if fatigue:
+            des = " Fatigue"
+        else:
+            des = ""
+
+        idx = (pathnum, re_ID)
+
+        load_names = self.config.get_REloads(pathnum, re_ID, fatigue=fatigue)
+        try:
+            oc = (
+                self.config["Reference Event" + des]
+                .loc[idx, "Operating Conditions"]
+                .iloc[0]
+            )
+            ie = (
+                self.config["Reference Event" + des]
+                .loc[idx, "Initiating Event"]
+                .iloc[0]
+            )
+            ce = (
+                self.config["Reference Event" + des]
+                .loc[idx, "Concatenated Event"]
+                .iloc[0]
+            )
+            service_lvl = (
+                self.config["Reference Event" + des].loc[idx, "Service Level"].iloc[0]
+            )
+            load_ctg = (
+                self.config["Reference Event" + des].loc[idx, "Loading ctg."].iloc[0]
+            )
+            T = self.config["Reference Event" + des].loc[idx, "T [°C]"].iloc[0]
+            dpa = self.config["Reference Event" + des].loc[idx, "DPA"].iloc[0]
+
+            # Additional data for fatigue event
+            if fatigue:
+                ncycles = (
+                    self.config["Reference Event" + des].loc[idx, "N of cycles"].iloc[0]
+                )
+            else:
+                ncycles = None
+        except AttributeError:
+            oc = self.config["Reference Event" + des].loc[idx, "Operating Conditions"]
+            ie = self.config["Reference Event" + des].loc[idx, "Initiating Event"]
+            ce = self.config["Reference Event" + des].loc[idx, "Concatenated Event"]
+            service_lvl = self.config["Reference Event" + des].loc[idx, "Service Level"]
+            load_ctg = self.config["Reference Event" + des].loc[idx, "Loading ctg."]
+            T = self.config["Reference Event" + des].loc[idx, "T [°C]"]
+            dpa = self.config["Reference Event" + des].loc[idx, "DPA"]
+
+            # Additional data for fatigue event
+            if fatigue:
+                ncycles = self.config["Reference Event" + des].loc[idx, "N of cycles"]
+            else:
+                ncycles = None
+
+        # Recover the corresponding LinStress
+        for pos in ["begin", "end"]:
+            stresses = []
+            for load in load_names:
+                linstress = self._build_linearized_stress(load, pathnum, pos)
+                stresses.append(linstress)
+            RE = ReferenceEvent.from_recombination(
+                stresses,
+                service_lvl,
+                re_ID,
+                T,
+                dpa,
+                oc=oc,
+                ie=ie,
+                ce=ce,
+                load_ctg=load_ctg,
+                ncycles=ncycles,
+            )
+            # Add the reference event to the correct path
+            self.paths[pathnum].add_RE(RE, pos, fatigue=fatigue)
+
+    def _build_linearized_stress(self, load: str, pathnum: int, pos: str) -> LinStress:
+        """
+        Build a LinStress object using the data contained in the submodel configuration
+
+        Parameters
+        ----------
+        load : str
+            name of the single load
+        pathnum : int
+            number of the path
+        pos : str
+            either 'begin' or 'end'.
+
+        Returns
+        -------
+        LinStress
+            Linearized Stress object.
+        """
+        tensor = self.config.get_stress_tensor(load, pathnum, pos)
+        ptype = self.config["Paths"].loc[pathnum, "Type"]
+        welding_n = self.config["Paths"].loc[pathnum, "Welding-n"]
+        welding_f = self.config["Paths"].loc[pathnum, "Welding-f"]
+        stress = LinStress.from_config(
+            load,
+            tensor,
+            self.config["Stresses"].loc[load],
+            ptype,
+            welding_n,
+            welding_f,
+        )
+        return stress
