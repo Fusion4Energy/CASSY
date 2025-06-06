@@ -323,7 +323,7 @@ class Material:
 
     @staticmethod
     def _build_grid_interpolator(
-        points: np.array, values: np.array
+        points: np.ndarray, values: np.ndarray
     ) -> interpolate.LinearNDInterpolator:
         # let's be sure that inputs are indeed arrays
         points = np.array(points)

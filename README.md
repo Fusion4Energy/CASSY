@@ -3,27 +3,6 @@ CASSY is an automated tool for stress assessment following design codes.
 
 Authors: F4E engineering analyses unit
 
-## Requirements
-
-**IGNORE FOR THE MOMENT THIS SECTION**
-
-- Windows operative system (Linux or MacOS compatibility has not been tested);
-- Up-to-date Anaconda distribution (Python 3, the recommended version is python 3.9.12);
-- Microsoft Office suite (Excel and Word);
-- Python packages:
-  - numpy (recommended version is 1.22.3)
-  - pandas (recommended version is 1.4.2)
-  - scipy (recommended version is 1.8.0)
-  - shapely(recommended version is 1.8.0)
-  - python-docx (recommended version is 0.8.11)
-  - xlrd (recommended version is 2.0.1)
-  - seaborn (recommended version is 0.11.2)
-  - xlwings (recommended version is 0.27.15)
-  - tqdm
-  - pyvista (recommended version is 0.34.2)
-  - openpyxl (recommended version is 3.0.9)
-  
-
 ## Installation
 
 ### User Installation
@@ -86,9 +65,9 @@ useful for development purposes such as ``pytest`` or ``ruff`.
 Once the package has been installed, the user should create a folder
 where a specific assessment will be performed. From now on, such folder is referred as ``<root>``
 
-1. create a folder of Input/Output (from now on ``<root>``). Architectures are provided in an example folder       together with cassy;
-2. set the excel configuration files depending on the assessment to perform in ``<root>\Configuration``;
-4. open an anaconda prompt shell and change directory to ``<root>`` Then type:
+1. Setup the correct folder structure in ``<root>`` depending on the type of assessment.
+   Jump to [Path config](#Paths) or [Bolts config](#Bolts) for additional details.
+2. open an anaconda prompt shell and change directory to ``<root>`` Then type:
     ```
     python -m cassy
     ```
@@ -113,8 +92,8 @@ be performed
 ### Paths
 The `<root>` will need to be populated with all necessary inputs for the code to run. Outputs will be dumped in the same  `<root>` folder.
 Inside `<root>`, 2 folders need to be created by the user:
-* `Configurations`, that contains all the configuration file for each model to be assessed excel configuration files examples can be found in the example folder;
-* `Stresses`, that contains 1 CSV file for each submodel (named as the correspondent configuration file).
+* `config`, that contains all the configuration file for each model to be assessed excel configuration files examples can be found in the example folder;
+* `stresses`, that contains 1 CSV file for each submodel (named as the correspondent configuration file).
 The columns of the file are:
     * *path*: number (ID) of the path
     * *analysis*: name of the analysis to which the stress are extracted from
@@ -134,12 +113,12 @@ The final input tree should look like this:
 ```
 <root>
     |
-    |------ Configurations
+    |------ config
     |         |------ <model1>.xlsx
     |         |------ <model2>.xlsx
     |         |------ ...
     |
-    |------ Stresses
+    |------ stresses
     |         |------ <model1>.csv
     |         |------ <model2>.csv
     |         |------ ...
@@ -147,7 +126,7 @@ The final input tree should look like this:
 ```
 #### The configuration file
 As specified in the previous section, for each model to be assessed, a
-configuration file needs to be generated and stored inside the `<root>/Configuration`
+configuration file needs to be generated and stored inside the `<root>/config`
 folder. The excel is composed by 6 sheets which are described hereafter.
 
 ###### General
@@ -165,11 +144,10 @@ This sheet is related to the configuration of the single loads. For each load,
 the following data is specified:
 * **Load**, this is the name of the single loads that identify it and that needs
     to be recalled in loads recombination;
-* **Analysis Name**, this is the name of the folder that contains the linearized 
-    stresses related to this load in the correspondent `<root>/Paths/model` 
-    subfolder;
+* **Analysis Name**, this is the name of the analysis that is found in the
+    the *analysis* column of the .csv inputs
 * **Timestep**, this specifies the timestep of the ANSYS analysis related to this 
-    specific single load.
+    specific single load (*loadstep* column).
 
 ###### Stresses
 This sheet is related to the configuration of the single loads. For each load,
@@ -236,70 +214,75 @@ once the input folders have been correctly populated, the code can be run.
 Different outputs will be provided in the `<root>` folder. All subfolders
 are automatically generated.
 
-* `Assessment`, a folder containing assessment excel files for each path;
-* `Images`, a folder containing summary picturestaken from the assessment excel files;
+* `assessment`, a folder containing assessment excel files for each path;
+* `images`, a folder containing summary picturestaken from the assessment excel files;
 * `Recap.docx`, a word file containing summary tables of the results and the pictures
-  from the `Images` folder.
+  from the `images` folder.
 
 ### Bolts
-The `<root>` will need to be populated with all necessary inputs for the code to run. Outputs will be dumped in the same  `<root>` folder.
-Inside `<root>`, 2 folders need to be created by the user:
-* `Configuration`, that contains a subfolder for each model. Each model subfolder must contain an excel configuration file for each bolt. Excel configuration files examples can be found in the example folder;
-* `Actions`, that contains a subfolder for each model (named as the configuration folders). Each model subfolder must contain a subfolder for each analysis run in ANSYS that will contain a text files for each timestep of the ANSYS analysis. The text files will contain the actions on for all bolts at the start nodes. Excel load files examples can be found in the example folder.
+Inside `<root>`, 3 folders need to be created by the user:
+* `config`, that contains all the configuration file for each model to be assessed excel configuration files examples can be found in the example folder;
+* `actions`, that contains 1 CSV file for each submodel (named as the correspondent configuration file).
+The columns of the file are:
+    * *boltID*: ID of the bolt
+    * *analysis*: name of the analysis to which the stress are extracted from
+    * *loadstep*: loadstep of the analysis from which the stresses are extracted from
+    * *Fx*: Fx shear force acting on the bolt section
+    * *Fy*: Fy shear force acting on the bolt section
+    * *Fz*: Fz normal force acting on the bolt section
+    * *Mz*: Mz moment action on the bolt section
+    * *Mx*: Mx moment action on the bolt section
+    * *My*: My moment action on the bolt section
+* `geometries`, this folder will contain the library of bolt geometries to be considered during the
+assessment. They contain only one sheet listing the specification of the geometrical and material data 
+for the bolt/insert. The naming convention for this files should be `<GeomID>_<bolt/insert>.xlsx`.
+`GeomID` will be used in the config file to assign a specific geometry to a bolt while the tag `insert`
+or `bolt` specifies to which kind of geometry the data is related to.
 
 The final input tree should look like this:
 ```
 <root>
     |
-    |------ Configurations
-    |         |------ <model1>
-    |         |           |------ <bolt1>.xlsx
-    |         |           |------ <bolt2>.xlsx
-    |         |           |------ ...
-    |         |
-    |         |------ <model2>
-    |         |           |------ <bolt1>.xlsx
-    |         |           |------ <bolt2>.xlsx
-    |         |           |------ ...
+    |------ config
+    |         |------ <flange1>.xlsx
+    |         |------ <flange2>.xlsx
+    |         |------ ...
     |
-    |------ Actions
-    |         |------ <model1>
-    |         |          |------ <single_load1>
-    |         |          |              |------ <Loadstep1>.txt
-    |         |          |              |------ <Loadstep2>.txt
-    |         |          |              |------ ...
-    |         |          |
-    |         |          |------ <single_load2>
-    |         |          |              |------ <Loadstep1>.txt
-    |         |          |              |------ <Loadstep2>.txt
-    |         |          |              |------ ...
-    |         |          |
-    |         |          |------ ...
-    |         |
+    |------ actions
+    |         |------ <flange1>.csv
+    |         |------ <flange2>.csv
+    |         |------ ...
+    |
+    |------ geometries
+    |         |------ <GeomID>_bolt.xlsx
+    |         |------ <GeomID>_insert.xlsx
     |         |------ ...
 
 ```
+
 #### The configuration file
-As specified in the previous section, for each model to be assessed, a
-configuration file needs to be generated and stored inside the `<root>/Configurations`
-folder. The excel is composed by 5 sheets which are described hereafter.
+As specified in the previous section, for each flanged connection to be assessed, a
+configuration file needs to be generated and stored inside the `<root>/configurations`
+folder. The excel is composed by 4 sheets which are described hereafter.
 
 ###### Additional Data
 This sheet contains the general parameters for the assesment:
-* `Code`, name of the design code, either RCC-MRx, RCC-MR or SDC-IC
-* `Preload`, the value of the preload for the bolt in Newton
+* **Code**, name of the design code, either RCC-MRx, or SDC-IC
 
-###### Bolt Data
-This sheet is related to the specification of the geometrical and material data 
-for the bolt.
-
-###### Insert Data
-This sheet is related to the specification of the geometrical and material data 
-for the base material where the bolt is screwed.
+##### Bolts
+This sheet lists all the bolts that need to be assessed and are part of the flanged
+connection. The following data needs to be specified:
+* **Bolt ID**, identifier of the bolt (use the same ID for insert)
+* **Geom Data**, geometry ID (`GeomID`) as per `<root>/geometries` files.
+* **Geom type**, either "bolt" or "insert".
+* **Preload [N]** Preload in Newton.
 
 ##### REs
 This sheet is related to the configuration of the reference events (i.e. load
-combination). For each reference event, the following data is specified:
+combination). For each bolt a set of reference events need to be specified.
+For each reference event, the following data is specified:
+
+* **Bolt ID**, must match the same ID of the "Bolts" sheet;
 * **ID**, identified for the reference event;
 * **Operating Conditions**, description of the event, it is not mandatory for 
     the assessment;
@@ -311,19 +294,20 @@ combination). For each reference event, the following data is specified:
     event;
 * **DPA**, maximum displacements per atom for the specific bolt during the
     specific reference event.
-* **Primary**, combined primary loads that compose the event, the name of 
-    the single load shall be same as the name of the .txt action file without the
-    file extension;
-* **All**, combined single loads that compose the event the name of 
-    the single load shall be same as the name of the .txt action file without the
-    file extension;
+* **Primary**, pointer to the combined primary loads actions. It is of the type
+`<analysis_name>_<loadstep>`. These must be consistent with the columns *analysis*
+and *loadstep* of the actions .csv files;
+* **All**, pointer to the combined all loads actions. It is of the type
+`<analysis_name>_<loadstep>`. These must be consistent with the columns *analysis*
+and *loadstep* of the actions .csv files;
 * **Loading category**, either I, II, III or IV;
 * **Service Level**, either "A", "C" or "D".
 
 ##### REs fatigue
 This sheet is related to the configuration of the reference events (i.e. load
-combination) for fatigue. For each reference event, the following data is
+combination) for fatigue. For each reference event (and bolt), the following data is
 specified:
+* **Bolt ID**, must match the same ID of the "Bolts" sheet;
 * **ID**, identified for the reference event;
 * **Operating Conditions**, description of the event, it is not mandatory for 
     the assessment;
@@ -337,10 +321,13 @@ specified:
     specific reference event;
 * **Total number of cycles**, number of cycles to be considered for the specific
     load combination;
-* **Sigma sustained**, combined primary loads that compose the event;
-* **Delta sigma**, combined cyclic loads that compose impose the delta of the
-    actions. It can be specified either as a difference of loads (loads divided
-    by '-') or as a single load;
+* **Sigma sustained**, pointer to the combined primary loads actions. It is of the type
+`<analysis_name>_<loadstep>`. These must be consistent with the columns *analysis*
+and *loadstep* of the actions .csv files;
+* **Delta sigma+**, **Delta sigma-**, pointer to the combined cyclic loads that compose impose the delta of the actions. It is of the type `<analysis_name>_<loadstep>`.
+These must be consistent with the columns *analysis*
+and *loadstep* of the actions .csv files. The result cyclic actions will be computed as
+`sigma+` - `sigma-`;
 * **Loading category**, either I, II, III or IV;
 * **Service Level**, either "A", "C" or "D".
 
@@ -349,11 +336,10 @@ once the input folders have been correctly populated, the code can be run.
 Different outputs will be provided in the `<root>` folder. All subfolders
 are automatically generated.
 
-* `Assessment`, a folder containing assessment 2 excel files for each bolt (one
-   for the bolt and one for the base material);
-* `Images`, a folder containing summary pictures taken from the assessment excel files;
-* `Recap.docx`, a word file containing summary tables of the results and the pictures
-  from the `Images` folder.
+* `assessment`, a folder containing assessment one excel file for each bolt;
+* `images`, a folder containing summary pictures taken from the assessment excel files;
+* `recap.docx`, a word file containing summary tables of the results and the pictures
+  from the `images` folder.
 
 ## Usage
 ### Implemented design codes
@@ -365,7 +351,7 @@ Hereinafter are listed the design codes that have been implemented in the tool.
 
 #### On Bolts
 - RCC-MRx
-- RCC-MR/SDC-IC
+- SDC-IC
 
 ## Known Limitations
 Hereinafter are listed the known limitation for the tool.
