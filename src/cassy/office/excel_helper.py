@@ -279,7 +279,7 @@ class ExcelOutput:
             try:
                 # Newer xlwings version
                 rng_to_copy.copy()
-                ws.range(anchor).insert()
+                ws.range(anchor).insert("down")
 
             except AttributeError:
                 try:
@@ -594,14 +594,9 @@ class ExcelOutput:
 
         return outpath
 
-    def save(self, path):
+    def save(self):
         """
         Operations to do when saving and closing the file
-
-        Parameters
-        ----------
-        path : str or path
-            path to the output file.
 
         Returns
         -------

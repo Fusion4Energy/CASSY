@@ -622,7 +622,7 @@ class Submodel:
                         out.grab_img("all", "all", sheet, outpath)
 
                     # file = self.name+'_'+str(pnum)+'_'+pos+'.xlsx'
-                    out.save(out_path)
+                    out.save()
 
                     for sheet, df in df_types.items():
                         if sheet in ["Fatigue", "Input"]:

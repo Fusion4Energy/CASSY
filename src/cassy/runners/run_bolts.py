@@ -1,25 +1,18 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Jan  4 10:43:44 2021
-
-@author: davide laghi
-"""
-
 from __future__ import annotations
 
 import os
+import shutil
 from importlib.resources import files
+from pathlib import Path
 
 import pandas as pd
 import xlwings as xw
 
 from cassy.additional_data import materials, templates
-from cassy.auxiliary.functions import helper_func_sort
 from cassy.auxiliary.types import PathLike
-from cassy.bolts.bolt import Bolt
-from cassy.designcodes.rccmr_bolts import RCCMR_Bolts
-from cassy.designcodes.rccmrx_bolts_nl import RCCMRx_Bolts
-from cassy.designcodes.sdcic_bolts import SDC_IC_Bolts
+from cassy.bolts.bolt_assess import FlangeAssessment
+from cassy.bolts.bolt_config import FlangeAssessmentConfig
+from cassy.bolts.geometry import read_geometries
 from cassy.general.folder_tree import BoltsFolderTree
 from cassy.general.material import read_materials
 from cassy.office.word_helper import WordOutput
@@ -48,91 +41,63 @@ INPUT_TITLE = "Internal Bolt Action Used During the Assessment"
 # #################### Code ###################################################
 # --- Initializations ---
 def run_bolts(root: PathLike, fatigue: bool = False) -> None:
-    try:
-        # Open excel
-        app = xw.App(visible=False)
+    with xw.App(visible=False) as app:
         app.display_alerts = False  # Suppress merge warnings
 
-        # Code
-        codes = {
-            "SDC-IC": SDC_IC_Bolts(),
-            "RCC-MR": RCCMR_Bolts(),
-            "RCC-MRx": RCCMRx_Bolts(),
-        }
         folder_tree = BoltsFolderTree(root)
 
         # Generate the materials library
         materials = read_materials(MATERIALS_PATH)
 
+        # Read the available geometries
+        geometries = read_geometries(folder_tree.geom_folder, materials)
+
         recaps = {"Immediate": [], "Fatigue": []}
         connections = {}
         for connection in os.listdir(folder_tree.configurations):
-            connection_config = os.path.join(folder_tree.configurations, connection)
-            connections[connection] = []
-            ass_folder = os.path.join(folder_tree.assessment_folder, connection)
-            if not os.path.exists(ass_folder):
-                os.mkdir(ass_folder)
+            connection_name = connection.split(".")[0]
+            config_path = os.path.join(folder_tree.configurations, connection)
 
-            # Reorganize following the number order
-            conf_files = list(os.listdir(connection_config))
-            conf_files.sort(key=helper_func_sort)
+            # intialize the config of the flange
+            actions_path = Path(folder_tree.actions_folder, f"{connection_name}.csv")
+            flange_config = FlangeAssessmentConfig.from_excel(
+                config_path, actions_path, fatigue=fatigue
+            )
 
-            for conf_file in conf_files:
-                flag_insert = True
-                # print('Assessing '+conf_file.split('.')[0])
-                bolt_file = os.path.join(connection_config, conf_file)
+            # perform the assessment
+            flange_assessment = FlangeAssessment(
+                geometries, flange_config, fatigue=fatigue
+            )
+            flange_assessment.assess()
+            flange_assessment.assess(insert=True)
 
-                bolt = Bolt.from_excel(
-                    bolt_file, materials, folder_tree.actions_folder, codes
-                )
-                insert = Bolt.from_excel(
-                    bolt_file, materials, folder_tree.actions_folder, codes, insert=True
-                )
+            # print the assessment
+            assessment_folder = Path(folder_tree.assessment_folder, connection_name)
+            # override eventual old results
+            if os.path.exists(assessment_folder):
+                shutil.rmtree(assessment_folder)
+            os.mkdir(assessment_folder)
 
-                if bolt.code.name == "RCC-MR (Bolts)":
-                    flag_insert = False
-                    print(
-                        "RCC-MR rules for assessment of the base material"
-                        + " /insert threads are not implemented. Insert assessment for bolt "
-                        + bolt.name
-                        + " will not be performed"
-                    )
-
-                # Assess and print bolt
-                bolt.assess(fatigue=fatigue)
-                recap_imm, recap_fat = bolt.print_assessment(
-                    ass_folder, app, TEMPLATE_BOLT, img_folder=folder_tree.img_folder
-                )
-
-                recaps["Fatigue"].append(recap_fat)
-
-                recaps["Immediate"].append(recap_imm)
-                connections[connection].append(bolt)
-
-                # Assess and print insert
-                if flag_insert:
-                    insert.assess(fatigue=fatigue, insert=True)
-                    recap_imm, recap_fat = insert.print_assessment(
-                        ass_folder,
-                        app,
-                        TEMPLATE_BOLT,
-                        img_folder=folder_tree.img_folder,
-                    )
-                    recaps["Immediate"].append(recap_imm)
-                    connections[connection].append(insert)
-
-        # app.kill()  # kill the excel app we do not need it anymore
+            recap_immediate, recap_fatigue = flange_assessment.print_assessment(
+                assessment_folder,
+                app,
+                TEMPLATE_BOLT,
+                img_folder=folder_tree.img_folder,
+                fatigue=fatigue,
+                insert=True,
+            )
+            recaps["Immediate"].append(recap_immediate)
+            if fatigue:
+                recaps["Fatigue"].append(recap_fatigue)
+            connections[connection_name] = flange_assessment
         print("Assessing Completed")
-    finally:
-        # need to kill the app if something goes wrong
-        app.kill()
 
     print("Generating Word Recap")
     # Create Recaps from the collected infos during printing
     wordrecaps = {}
-    wordrecaps["Immediate"] = pd.DataFrame(recaps["Immediate"])
+    wordrecaps["Immediate"] = pd.concat(recaps["Immediate"])
     if fatigue:
-        wordrecaps["Fatigue"] = pd.DataFrame(recaps["Fatigue"])
+        wordrecaps["Fatigue"] = pd.concat(recaps["Fatigue"])
 
     # --- Generate the word output ---
     outp = WordOutput(template=TEMPLATE_WORD)
@@ -151,14 +116,15 @@ def run_bolts(root: PathLike, fatigue: bool = False) -> None:
 
             # Insert the excels
             outp.doc.add_heading(EXCELS_TITLE, level=2)
-            for connection, bolts in connections.items():
-                outp.doc.add_heading(connection, level=3)
-                for bolt in bolts:
-                    tit = "Bolt " + bolt.name
-                    # Override insert with base material
-                    tit = tit.replace("_insert", " (base material)")
-                    imgs = bolt.images[damage]
-                    if damage == "Fatigue" and "insert" not in bolt.name:
+            for name, flange_assessment in connections.items():
+                if damage == "Fatigue":
+                    imgs_dict = flange_assessment.fatigue_imgs
+                elif damage == "Immediate":
+                    imgs_dict = flange_assessment.immediate_imgs
+                outp.doc.add_heading(name, level=3)
+                for boltID, imgs in imgs_dict.items():
+                    tit = f"Bolt {boltID}"
+                    if damage == "Fatigue":
                         outp.doc.add_heading(tit, level=4)
                         caption = tit + " " + EXCELS_CAPTION + damage + " damage"
                         outp.add_figure(imgs, caption=caption)
@@ -177,13 +143,10 @@ def run_bolts(root: PathLike, fatigue: bool = False) -> None:
 
         # Add input
         outp.doc.add_heading(INPUT_TITLE, level=1)
-        for connection, bolts in connections.items():
-            outp.doc.add_heading(connection, level=2)
-            for bolt in bolts:
-                tit = "Bolt " + bolt.name
-                # Override insert with base material
-                tit = tit.replace("_insert", " (base material)")
-                img = bolt.images["Input"]
+        for connection_name, flange_assessment in connections.items():
+            outp.doc.add_heading(connection_name, level=2)
+            for boltID, img in flange_assessment.input_imgs.items():
+                tit = f"Bolt {boltID}"
                 outp.doc.add_heading(tit, level=3)
                 caption = INPUT_CAPTION + tit
                 outp.add_figure(img, caption=caption)

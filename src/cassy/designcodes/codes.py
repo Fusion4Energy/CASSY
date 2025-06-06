@@ -6,6 +6,11 @@ Created on Tue Nov  3 12:06:35 2020
 """
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from cassy.bolts.code_assessor import BoltActionAssessor
+from cassy.general.material import Material
 
 
 class Code:
@@ -29,7 +34,7 @@ class Code:
         self.name = name
         self.custom_rules = {}  # No custom rules by default
 
-    def assess(self, combined_stress, material, T, dpa, selection="All"):
+    def assess(self, combined_stress, material, T=None, dpa=None, selection="All"):
         """
         Assess a reference event according to code
 
@@ -80,10 +85,16 @@ class Code:
                 # This means that this is still not a rule
                 assessments[rule_name] = {}
                 for rule_name2, rule2 in rule.items():
-                    assessed = rule2.assess(combined_stress, material, T, dpa)
+                    if T is None:
+                        assessed = rule2.assess(combined_stress, material)
+                    else:
+                        assessed = rule2.assess(combined_stress, material, T, dpa)
                     assessments[rule_name][rule_name2] = (assessed, rule2)
             else:
-                assessed = rule.assess(combined_stress, material, T, dpa)
+                if T is None:
+                    assessed = rule.assess(combined_stress, material)
+                else:
+                    assessed = rule.assess(combined_stress, material, T, dpa)
                 assessments[rule_name] = (assessed, rule)
 
         return assessments
@@ -103,6 +114,23 @@ class Rule(ABC):
         pass
 
 
-class Assessment:
-    def __init__(self, ref_events, code):
+class BoltCode(Code):
+    @abstractmethod
+    def computeVj(
+        self, bolt_assessor: "BoltActionAssessor", material: Material
+    ) -> dict:
+        """Compute the Vj value for the bolt assessment.
+
+        Parameters
+        ----------
+        bolt_assessor : BoltActionAssessor
+            Assessor for the bolt actions, geometry, ref event etc.
+        material : Material
+            Material to be used during the assessment.
+
+        Returns
+        -------
+        dict
+            Dictionary containing the results of the Vj computation.
+        """
         pass
