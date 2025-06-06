@@ -5,7 +5,12 @@ Created on Mon Dec 28 17:07:10 2020
 @author: davide laghi
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from cassy.bolts.code_assessor import BoltActionAssessor
 from cassy.designcodes.codes import Code, Rule
+from cassy.general.material import Material
 
 
 class RCCMR_Bolts(Code):
@@ -27,22 +32,16 @@ class S1_RB3284_121(Rule):
         d2 = "Limitation of the shear stress"
         self.description = [d1, d2]
 
-    def assess(self, boltaction, material, T, dpa, bolt_type="stud"):
+    def assess(self, boltaction: "BoltActionAssessor", material: Material) -> list:
         """
         Assess the rule
 
         Parameters
         ----------
-        boltaction : section_action.BoltSectionActions
+        boltaction : BoltActionAssessor
             internal actions acting on the bolt.
-        material : material.Material
+        material : Material
             Material data.
-        T : float
-            Temperature of the bolt.
-        dpa : float
-            Displacement per atom value in the bolt section.
-        bolt_type : str
-            the assessment is different depending on the joint type
 
         Returns
         -------
@@ -51,7 +50,9 @@ class S1_RB3284_121(Rule):
             is of the type (stress, allowable).
         """
 
-        service_lvl = boltaction.service_lvl
+        service_lvl = boltaction.ref_event.service_lvl
+        T = boltaction.ref_event.temp
+        dpa = boltaction.ref_event.dpa
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
@@ -63,8 +64,8 @@ class S1_RB3284_121(Rule):
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
 
-        primary = boltaction.stresses["primary"]
-        _all = boltaction.stresses["all"]
+        primary = boltaction.applicable_stresses["primary"]
+        _all = boltaction.applicable_stresses["all"]
         stress1 = primary["Avg shear stress in threads"]
         stress2 = _all["Avg shear stress in threads"]
 

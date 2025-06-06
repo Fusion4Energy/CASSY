@@ -1,5 +1,6 @@
 import logging
 
+import pandas as pd
 import xlwings as xw
 
 
@@ -25,3 +26,10 @@ def is_excel_installed() -> bool:
     except AttributeError:
         logging.warning("No active engine of excel.")
         return False
+
+
+def cleanNA(df: pd.DataFrame, column_id: str = "ID") -> pd.DataFrame:
+    # Drop all rows containing only NaN
+    df.dropna(axis=0, subset=[column_id])
+
+    return df
