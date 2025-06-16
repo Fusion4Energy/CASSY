@@ -8,3 +8,5 @@ __pycache__/
 .ruff_cache/
 cassy.egg-info/
 _version.py
+.coverage
+coverage.xml
