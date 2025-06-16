@@ -1,3 +1,7 @@
+![Coverage](https://eng-gitlab.f4e.europa.eu/f4e-projects/cassy/badges/main/coverage.svg)
+![Tests](https://eng-gitlab.f4e.europa.eu/f4e-projects/cassy/badges/main/pipeline.svg)
+![Latest release](https://eng-gitlab.f4e.europa.eu/f4e-projects/cassy/-/badges/release.svg)
+
 # CASSY
 CASSY is an automated tool for stress assessment following design codes.
 
