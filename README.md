@@ -86,11 +86,12 @@ Here is an example to run a paths assessment including fatigue assessment:
 ### Mandatory arguments
 
 - `--assess` this accepts either "paths" or "bolts" and it is used to specify which kind of assessment should
-be performed
+be performed.
 
 ### Optional arguments
-- `--fatigue` if the argument is passed, the fatigue assessment will also be performed
-- `--root` by default is the current working directory, but with this command it can be changed to any other folder
+- `--fatigue` if the argument is passed, the fatigue assessment will also be performed.
+- `--root` by default is the current working directory, but with this command it can be changed to any other folder.
+- `--matlib` this argument allows users to provide a path where additional material files are stored (for advanced users).
 
 ## Input-output folder structure
 ### Paths
