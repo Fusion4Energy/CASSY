@@ -38,6 +38,8 @@ class BoltLikeGeom(ABC):
         mean diameter under head
     Le : float
         insertion length.
+    d_vh : float
+        diameter of the venting hole.
     f : float, optional
         friction coefficient between engaged threads.
     f_prime : float, optional
@@ -58,15 +60,16 @@ class BoltLikeGeom(ABC):
     Le: float
     f: float
     f_prime: float
+    d_vh: float
 
     def __post_init__(self):
         # --- Additional geometrical feature ---
         # length for shear calculation
         self.Le_shear = min(0.8 * self.d, self.Le)
         # Minimum cross-sectional area at the root of thread
-        self.An = self.dn**2 * math.pi / 4
+        self.An = self.dn**2 * math.pi / 4 - self.d_vh**2 * math.pi / 4
         # Section Module
-        self.Z = self.dn**3 * math.pi / 32
+        self.Z = (self.dn**4 - self.d_vh**4) * math.pi / 32 / self.dn
 
     @classmethod
     def from_excel(
