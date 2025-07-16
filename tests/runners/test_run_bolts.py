@@ -1,6 +1,7 @@
 import os
 import shutil
 from importlib.resources import files
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -17,7 +18,7 @@ def test_run_bolts(tmpdir):
     to_copy = files(runners).joinpath("bolts")
     dest = tmpdir.join("bolts")
     shutil.copytree(to_copy, dest)
-    run_bolts(dest, fatigue=True)
+    run_bolts(dest, fatigue=True, matlib=Path(dest, "additional_materials"))
     assert len(os.listdir(os.path.join(dest, "assessment"))) == 1
     assert len(os.listdir(os.path.join(dest, "assessment", "Flange1"))) == 2
     excel_file = os.path.join(dest, "assessment", "Flange1", "Flange1_1.xlsx")

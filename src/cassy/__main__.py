@@ -19,12 +19,15 @@ def main():
     parser.add_argument(
         "--root", help="Root folder, by default CWD", default=os.getcwd()
     )
+    parser.add_argument(
+        "--matlib", help="Path to material library", default=None
+    )  # Replace with actual version
     args = parser.parse_args()
 
     if args.assess == "bolts":
-        run_bolts(args.root, args.fatigue)
+        run_bolts(args.root, args.fatigue, matlib=args.matlib)
     elif args.assess == "paths":
-        run_paths(args.root, args.fatigue)
+        run_paths(args.root, args.fatigue, matlib=args.matlib)
     else:
         raise ValueError(
             "Assessment type not recognized, please choose between bolts and paths"

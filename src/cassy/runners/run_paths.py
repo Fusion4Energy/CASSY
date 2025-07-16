@@ -55,12 +55,17 @@ PATNUM = re.compile(r"\d+")
 
 
 # #################### Code ###################################################
-def run_paths(root: PathLike, fatigue: bool = False):
+def run_paths(
+    root: PathLike, fatigue: bool = False, matlib: PathLike | None = None
+) -> None:
     folder_tree = PathsFolderTree(root)
     # --- Initializations ---
     with xw.App(visible=False) as app:
         app.display_alerts = False  # Suppress merge warnings
         materials = read_materials(MATERIALS_PATH)
+        if matlib is not None:
+            additional_materials = read_materials(matlib)
+            materials.update(additional_materials)
 
         # --- Load Configuration files ---
         configs = parse_cfg_files(

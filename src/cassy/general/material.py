@@ -17,6 +17,7 @@ from scipy import interpolate
 from scipy.spatial import Delaunay
 from xlrd import XLRDError
 
+from cassy.auxiliary.types import PathLike
 from cassy.general.Nueber_rule import compute_Nueber
 
 
@@ -474,7 +475,7 @@ def _cleanNA(df):
     return df
 
 
-def read_materials(mat_folder: os.PathLike) -> dict[str, Material]:
+def read_materials(mat_folder: PathLike) -> dict[str, Material]:
     """Parse all materials listed in a folder as excel files.
 
     Parameters
