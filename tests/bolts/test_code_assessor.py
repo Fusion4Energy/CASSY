@@ -71,10 +71,12 @@ class TestBoltActionAssessor:
 
     def test_convert_actions(self, bolt_assessor: BoltActionAssessor):
         # Test the convert_actions method
-        for key, val in zip(["N", "T", "M"], [1.05e4, 0, 4.76e1]):
+        for key, val in zip(["N", "T", "M"], [1.0456e4, 0, 4.76e1]):
             assert math.isclose(bolt_assessor.primary[key], val, rel_tol=1e-2)
         # TODO: test something where secondary actions are different from primary
-        for key, val in zip(["N", "T", "M"], [1.05e4, 0, 4.76e1]):
+        for key, val in zip(
+            ["N", "T", "M"], [1.0456e4 - bolt_assessor.preload, 0, 4.76e1]
+        ):
             assert math.isclose(bolt_assessor.all_loads[key], val, rel_tol=1e-2)
 
     def test_assess_RCCMRX(self, bolt_assessor: BoltActionAssessor):
@@ -83,7 +85,7 @@ class TestBoltActionAssessor:
         df = assessment.set_index(["Rule Extended Description", "Sub-Rule"])
         assert np.isclose(
             df["Applied [MPa]"].values,
-            np.array([96, 228, 97, 250, 57, 46, 136, 63, 202]),
+            np.array([96, 166, 97, 195, 57, 46, 99, 46, 147]),
         ).all()
         assert np.isclose(
             np.round(df["Allowable [MPa]"].values),

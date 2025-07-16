@@ -46,11 +46,11 @@ class BoltActionAssessor:
         """
         self.name = name
         self.poa = poa
+        self.preload = abs(preload)
         self.primary, self.all_loads = self._convert_actions(
             primary_actions, all_loads_actions
         )
         self.ref_event = ref_event
-        self.preload = abs(preload)
 
         self.loads_type = ["Preload", "primary", "all"]
 
@@ -68,8 +68,8 @@ class BoltActionAssessor:
         #     ncycles = int(ncycles.replace(" ", ""))
         # self.ncycles = ncycles
 
-    @staticmethod
     def _convert_actions(
+        self,
         primary: pd.Series,
         all_loads: pd.Series,
         axs=["z", "x", "y"],
@@ -84,7 +84,9 @@ class BoltActionAssessor:
         primary_dic = {"N": N, "M": M, "T": T}
 
         # All Loads
-        N = all_loads["F" + axs[0]]
+        N = (
+            abs(all_loads["F" + axs[0]]) - self.preload
+        )  # subtract preload from all loads actions
         M = (all_loads["M" + axs[1]] ** 2 + all_loads["M" + axs[2]] ** 2) ** 0.5
         T = (all_loads["F" + axs[1]] ** 2 + all_loads["F" + axs[2]] ** 2) ** 0.5
         all_loads_dic = {"N": N, "M": M, "T": T}

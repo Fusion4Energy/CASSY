@@ -178,6 +178,7 @@ class FlangeAssessment:
             all_actions = self.config.get_actions(
                 boltID, ref_event.all_loads[0], ref_event.all_loads[1]
             )
+
             assessor = BoltActionAssessor(
                 f"{boltID}",
                 primary_actions,

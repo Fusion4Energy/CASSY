@@ -22,14 +22,18 @@ class TestFlangeAssessmentConfig:
         assert config.REs_fatigue is not None and len(config.REs_fatigue) == 1
         assert len(config.bolts_spec) == 2
         assert config.REs["1"][0].primary == ("loads", "1")
+        assert config.REs["1"][-1].all_loads == ("loads", "5-2")
         assert config.REs_fatigue["1"][0].delta_sigma == (
             ("loads", "2"),
             ("loads", "1"),
         )
 
     def test_get_actions(self, config: FlangeAssessmentConfig):
-        actions = config.get_actions("1", "loads", 2)
+        actions = config.get_actions("1", "loads", "2")
         assert actions["My"] == 2
+
+        actions = config.get_actions("1", "loads", "2- 1+3 ")
+        assert actions["Fx"] == 13
 
         with pytest.raises(ConfigError):
             actions = config.get_actions("1", "loads", "6")

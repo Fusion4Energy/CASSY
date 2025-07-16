@@ -286,25 +286,25 @@ This sheet is related to the configuration of the reference events (i.e. load
 combination). For each bolt a set of reference events need to be specified.
 For each reference event, the following data is specified:
 
-* **Bolt ID**, must match the same ID of the "Bolts" sheet;
-* **ID**, identified for the reference event;
+* **Bolt ID**, must match the same ID of the "Bolts" sheet.
+* **ID**, identified for the reference event.
 * **Operating Conditions**, description of the event, it is not mandatory for 
-    the assessment;
+    the assessment.
 * **Initiating Event**, description of the event, it is not mandatory for 
-    the assessment;
+    the assessment.
 * **Concatenated Event**, description of the event, it is not mandatory for 
-    the assessment;
+    the assessment.
 * **T**, maximum temperature for the bolt during the specific reference
-    event;
+    event.
 * **DPA**, maximum displacements per atom for the specific bolt during the
     specific reference event.
 * **Primary**, pointer to the combined primary loads actions. It is of the type
-`<analysis_name>_<loadstep>`. These must be consistent with the columns *analysis*
-and *loadstep* of the actions .csv files;
+`<analysis_name>, <loadstep>` or `(<analysis_name>, <loadstep>)`. These must be consistent with the columns *analysis* and *loadstep* of the actions .csv files. `<loadstep>` can be
+a single loadstep or a linear combination (e.g. '4-3+2').
 * **All**, pointer to the combined all loads actions. It is of the type
-`<analysis_name>_<loadstep>`. These must be consistent with the columns *analysis*
-and *loadstep* of the actions .csv files;
-* **Loading category**, either I, II, III or IV;
+`<analysis_name>, <loadstep>` or `(<analysis_name>, <loadstep>)`. These must be consistent with the columns *analysis* and *loadstep* of the actions .csv files. `<loadstep>` can be
+a single loadstep or a linear combination (e.g. '4-3+2').
+* **Loading category**, either I, II, III or IV.
 * **Service Level**, either "A", "C" or "D".
 
 ##### REs fatigue
@@ -312,27 +312,27 @@ This sheet is related to the configuration of the reference events (i.e. load
 combination) for fatigue. For each reference event (and bolt), the following data is
 specified:
 * **Bolt ID**, must match the same ID of the "Bolts" sheet;
-* **ID**, identified for the reference event;
+* **ID**, identified for the reference event.
 * **Operating Conditions**, description of the event, it is not mandatory for 
-    the assessment;
+    the assessment.
 * **Initiating Event**, description of the event, it is not mandatory for 
-    the assessment;
+    the assessment.
 * **Concatenated Event**, description of the event, it is not mandatory for 
-    the assessment;
+    the assessment.
 * **T**, maximum temperature for the bolt during the specific reference
-    event;
+    event.
 * **DPA**, maximum displacements per atom for the specific bolt during the
-    specific reference event;
+    specific reference event.
 * **Total number of cycles**, number of cycles to be considered for the specific
-    load combination;
+    load combination.
 * **Sigma sustained**, pointer to the combined primary loads actions. It is of the type
 `<analysis_name>_<loadstep>`. These must be consistent with the columns *analysis*
 and *loadstep* of the actions .csv files;
 * **Delta sigma+**, **Delta sigma-**, pointer to the combined cyclic loads that compose impose the delta of the actions. It is of the type `<analysis_name>_<loadstep>`.
 These must be consistent with the columns *analysis*
 and *loadstep* of the actions .csv files. The result cyclic actions will be computed as
-`sigma+` - `sigma-`;
-* **Loading category**, either I, II, III or IV;
+`sigma+` - `sigma-`.
+* **Loading category**, either I, II, III or IV.
 * **Service Level**, either "A", "C" or "D".
 
 #### Outputs
