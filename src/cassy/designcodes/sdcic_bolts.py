@@ -121,7 +121,10 @@ class SDC_IC_Bolts(BoltCode):
             if material.name == "Inconel 718 (non leak-tight)":
                 # For Inconel the curve is T independent but is dependent by
                 # the max mean stress
-                SA = ds_bar / 2
+                # Since the stress-cycles curves of Inconel 718 are already dependent on
+                # the mean stress, goodman correction is not applied as is already
+                # implemented in the curves, and ds should be used to compute the stress amplitude
+                SA = ds / 2
                 # Sigma pre is used as max mean stress
                 N = material._inconel_N(s_pre, SA)
             else:
