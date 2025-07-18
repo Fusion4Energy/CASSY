@@ -14,11 +14,11 @@ from functools import partial
 import numpy as np
 import pandas as pd
 from scipy import interpolate
+from scipy.optimize import root_scalar
 from scipy.spatial import Delaunay
 from xlrd import XLRDError
 
 from cassy.auxiliary.types import PathLike
-from cassy.general.Nueber_rule import compute_Nueber
 
 
 class Material:
@@ -423,6 +423,46 @@ class Material:
             raise NotImplementedError(msg.format(self.name))
 
         return eps, eps_MP
+
+    def compute_delta_sigma_Neuber(
+        self, T: float, delta_sigma_N: float, Kf: float
+    ) -> float:
+        """Compute the Neuber's rule for the given material.
+
+        Parameters
+        ----------
+        T : float
+            temperature in celsius
+        delta_sigma_N : float
+            nominal stress range
+        Kf : float
+            intensification factor
+
+        Returns
+        -------
+        float
+            resulting equivalent stress range after Neuber
+        """
+
+        def _hyperbole(x, x1, y1, Kf=4):
+            return Kf**2 * x1 * y1 / x
+
+        def _intersection(sigma, epsN, sigmaN, T, Kf=4):
+            return (
+                _hyperbole(sigma, sigmaN, epsN, Kf)
+                - self.cyclic_stress_strain(T, sigma) / 100
+            )
+
+        delta_eps_N = delta_sigma_N / self.E(T)
+
+        sol = root_scalar(
+            _intersection,
+            args=(delta_eps_N, delta_sigma_N, T, Kf),
+            bracket=[0, 2000 * 1e6],  # should be enough for all application ranges
+            method="bisect",
+        )
+
+        return sol.root
 
 
 def linear_interp(points, values, point):

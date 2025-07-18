@@ -90,9 +90,9 @@ class SDC_IC_Bolts(BoltCode):
         # --- Correction for stress concentration and plasticity ---
         #                    (IC 6131.2.1.2)
         try:
-            material.cyclic_stress_strain(ref_event.temp, ds_n)
-            # TODO Neuber's Rule is not implemented yet!
-            raise ValueError("Proper Neuber needs to be implemented")
+            ds = material.compute_delta_sigma_Neuber(
+                ref_event.temp, ds_n, boltAction.poa.KF
+            )
         except ValueError:
             # Correction implemented in case true stress-strain curve is not
             # available
@@ -114,7 +114,8 @@ class SDC_IC_Bolts(BoltCode):
         ds_bar = ds / (1 - s_m / Su)
 
         if material.fatigue_curve == "strain":
-            # TODO not implemented yet!
+            de_bar = material.cyclic_stress_strain(ref_event.temp, ds_bar) / 100
+            N = material.N((ref_event.temp, de_bar))
             raise ValueError("strain based curves need to be implemented")
         elif material.fatigue_curve == "stress":
             de_bar = "-"
