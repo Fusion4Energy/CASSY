@@ -8,10 +8,12 @@ Created on Tue Nov  3 12:16:20 2020
 import math
 
 from cassy.designcodes.codes import Code, Rule
+from cassy.general.material import Material
+from cassy.paths.linstress import ReferenceEvent
 
 
 class SDC_IC(Code):
-    def __init__(self, failure_modes=None):
+    def __init__(self, failure_modes: list = None):
         super().__init__(failure_modes=failure_modes, name="SDC-IC")
         # --- Initiate all elastic rules, negligible creep ---
         # M-Type
@@ -25,7 +27,9 @@ class SDC_IC(Code):
         self.damage_types = ("Immediate", "Ratcheting")
         self.fatigue = True
 
-    def computeVj(self, refEvent, material, T, dpa):
+    def computeVj(
+        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
+    ) -> dict:
         """
         Asses the Rule
         Parameters
@@ -93,13 +97,20 @@ class SDC_IC(Code):
 
 
 class IC3121_1_1_2a(Rule):
-    def __init__(self):
+    def __init__(self) -> None:
         self.damage_type = "Immediate"
         self.ref = "IC 3121.1.1.2a"
         self.description = ["Primary membrane", "Primary Membrane plus Bending"]
         # self.equation = '$$A_{b}$$ (P_L+ P_b ) ̅≤〖K_eff S〗_m (〖T_m,Φt〗_m)'
 
-    def assess(self, refEvent, material, T, dpa, K=1.5):
+    def assess(
+        self,
+        refEvent: ReferenceEvent,
+        material: Material,
+        T: float,
+        dpa: float,
+        K: float = 1.5,
+    ) -> list:
         """
         Assess the rule
 
@@ -146,13 +157,15 @@ class IC3121_1_1_2a(Rule):
 
 
 class IC3121_2_1(Rule):
-    def __init__(self):
+    def __init__(self) -> None:
         self.damage_type = "Immediate"
         self.ref = "IC 3121.2.1"
         self.description = ["Primary plus secondary membrane stress"]
         # self.equation = '$$A_{b}$$ (P_L+ P_b ) ̅≤〖K_eff S〗_m (〖T_m,Φt〗_m)'
 
-    def assess(self, refEvent, material, T, dpa):
+    def assess(
+        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
+    ) -> list:
         """
         Assess the rule
 
@@ -193,7 +206,7 @@ class IC3121_2_1(Rule):
 
 
 class IC3121_3_1(Rule):
-    def __init__(self):
+    def __init__(self) -> None:
         self.damage_type = "Immediate"
         self.ref = "IC 3121.3.1"
         self.description = [
@@ -202,7 +215,9 @@ class IC3121_3_1(Rule):
         ]
         # self.equation = '$$A_{b}$$ (P_L+ P_b ) ̅≤〖K_eff S〗_m (〖T_m,Φt〗_m)'
 
-    def assess(self, refEvent, material, T, dpa):
+    def assess(
+        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
+    ) -> list:
         """
         Assess the rule
 
@@ -247,13 +262,20 @@ class IC3121_3_1(Rule):
 
 
 class IC3131_1_2(Rule):
-    def __init__(self):
+    def __init__(self) -> None:
         self.damage_type = "Ratcheting"
         self.ref = "IC 3131.1"
         self.description = ["3Sm rule", "Efficiency Index", "Efficiency Index"]
         # self.equation = '$$A_{b}$$ (P_L+ P_b ) ̅≤〖K_eff S〗_m (〖T_m,Φt〗_m)'
 
-    def assess(self, refEvent, material, T, dpa, K=1.5):
+    def assess(
+        self,
+        refEvent: ReferenceEvent,
+        material: Material,
+        T: float,
+        dpa: float,
+        K: float = 1.5,
+    ) -> list:
         """
         Assess the rule
 
@@ -294,10 +316,14 @@ class IC3131_1_2(Rule):
         # -----IC 3131.1.1 'Efficiency Index Diagram'------#
         # Operating period with secondary membrane stress
         # thermal loads are considered mandatory for ratcheting
-        sigma_nm = material.Nueber(T, refEvent.PmQm_ns)["stress"]
-        sigma_nmb = material.Nueber(T, refEvent.PmPbQm_ns)["stress"]
-        Em = material.Nueber(T, refEvent.PmQm_ns)["Young"]
-        Emb = material.Nueber(T, refEvent.PmPbQm_ns)["Young"]
+        sigma_nm = material.compute_delta_sigma_Neuber(
+            T, refEvent.PmQm_ns, 1, dpa=dpa, monotonic=True
+        )
+        sigma_nmb = material.compute_delta_sigma_Neuber(
+            T, refEvent.PmPbQm_ns, 1, dpa=dpa, monotonic=True
+        )
+        Em = material.compute_tangent_young(sigma_nm, T, dpa=dpa)
+        Emb = material.compute_tangent_young(sigma_nmb, T, dpa=dpa)
 
         try:
             sigma_mb = (
@@ -310,8 +336,12 @@ class IC3131_1_2(Rule):
             )
 
         except TypeError:  # no overstress of short duration
-            sigma_nm = material.Nueber(T, refEvent.PmQm)["stress"]
-            sigma_nmb = material.Nueber(T, refEvent.PmPbQm)["stress"]
+            sigma_nm = material.compute_delta_sigma_Neuber(
+                T, refEvent.PmQm, 1, dpa=dpa, monotonic=True
+            )
+            sigma_nmb = material.compute_delta_sigma_Neuber(
+                T, refEvent.PmPbQm, 1, dpa=dpa, monotonic=True
+            )
             sigma_mb = 0.5 * (refEvent.PmPb + sigma_nmb)
             sigma_m = 0.5 * (refEvent.Pm + sigma_nm)
 

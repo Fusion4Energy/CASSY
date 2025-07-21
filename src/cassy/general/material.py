@@ -268,23 +268,6 @@ class Material:
         except (ValueError, XLRDError):
             self.monotonic_stress_strain_table2 = None
 
-    def Nueber(self, T, s):
-        E = self.E(T)
-        df1 = self.monotonic_stress_strain_table  # up to 1.5% of strain
-
-        df2 = self.monotonic_stress_strain_table2  # up to 30% of strain
-
-        if df1 is None and df2 is None:
-            warnings.warn(
-                "Monotonic Stress-Strain Curves not implemented for "
-                + self.name
-                + ", Nueber rule returns nominal values"
-            )
-            return {"stress": s, "Young": E}
-
-        else:
-            return compute_Nueber(df1, df2, T, s, E)
-
     def cyclic_stress_strain(self, T, ds):
         E = self.E(T)
         K = self.K(T)
@@ -345,14 +328,16 @@ class Material:
 
         return interpolator
 
-    def get_monotonic_eps(self, sigma: float, T: float, dpa: float) -> float:
+    def monotonic_stress_strain(
+        self, sigma: float, T: float, dpa: float
+    ) -> tuple[float, float]:
         """Function that contains all average stress-strain curves for the
         different materials
 
         Parameters
         ----------
         sigma : float
-            _description_
+            strain value with which to enter the curve
 
         T: float
             temperature for the evaluation of epsilon
@@ -424,8 +409,39 @@ class Material:
 
         return eps, eps_MP
 
+    def compute_tangent_young(self, sigma, T: float, dpa: float = 0) -> float:
+        """Compute the tangent Young modulus for the material at given temperature and dpa.
+
+        Parameters
+        ----------
+        sigma : float
+            Stress value in Pa. Young modulus is to be computed tangent to this
+            point.
+        T : float
+            Temperature in Celsius.
+        dpa : float, optional
+            DPA value for the material, by default 0.
+
+        Returns
+        -------
+        float
+            Tangent Young modulus at the specified temperature and dpa.
+        """
+        interval = 0.001
+        sigma_lower = sigma - interval * sigma
+        sigma_upper = sigma + interval * sigma
+        eps_lower, _ = self.monotonic_stress_strain(sigma_lower, T, dpa)
+        eps_upper, _ = self.monotonic_stress_strain(sigma_upper, T, dpa)
+        E_tangent = (sigma_upper - sigma_lower) / (eps_upper - eps_lower)
+        return E_tangent
+
     def compute_delta_sigma_Neuber(
-        self, T: float, delta_sigma_N: float, Kf: float
+        self,
+        T: float,
+        delta_sigma_N: float,
+        Kf: float,
+        dpa: float = 0,
+        monotonic: bool = False,
     ) -> float:
         """Compute the Neuber's rule for the given material.
 
@@ -437,6 +453,11 @@ class Material:
             nominal stress range
         Kf : float
             intensification factor
+        dpa : float, optional
+            dpa value for the material, by default 0
+        monotonic : bool, optional
+            if True, the monotonic stress-strain curve is used, by default the cyclic
+            stress-strain curve is used.
 
         Returns
         -------
@@ -448,10 +469,11 @@ class Material:
             return Kf**2 * x1 * y1 / x
 
         def _intersection(sigma, epsN, sigmaN, T, Kf=4):
-            return (
-                _hyperbole(sigma, sigmaN, epsN, Kf)
-                - self.cyclic_stress_strain(T, sigma) / 100
-            )
+            if monotonic:
+                eps = self.monotonic_stress_strain(sigma, T, dpa)[0]
+            else:
+                eps = self.cyclic_stress_strain(T, sigma) / 100
+            return _hyperbole(sigma, sigmaN, epsN, Kf) - eps
 
         delta_eps_N = delta_sigma_N / self.E(T)
 
