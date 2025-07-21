@@ -1,0 +1,12 @@
+name: material_example
+description: BlaBla
+properties:
+  Poisson Ratio:
+    type: constant
+    value: 0.3
+  Young Modulus:
+    type: equation
+    lower_bound: [20, null] # degrees Celsius
+    upper_bound: [700, null] # degrees Celsius
+    equation: "(201660-84.8*T)/1000" # GPa
+    args: ["T", "DPA"] # in Celsius
