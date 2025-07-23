@@ -23,7 +23,7 @@ class TestSubmodel:
         with as_file(files(res).joinpath("submodel.xlsx")) as file:
             with as_file(files(res).joinpath("submodel_tensors.csv")) as tensors_file:
                 config = Configuration("Model_A", file, tensors_file)
-        with as_file(RES.joinpath("SS316L(N)-IG.xlsx")) as mat_path:
+        with as_file(RES.joinpath("SS316L(N)-IG_.xlsx")) as mat_path:
             steel = Material(mat_path)
 
         submodel = Submodel("Model", config, {"SS316L(N)-IG": steel})

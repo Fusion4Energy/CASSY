@@ -92,6 +92,23 @@ class Property(ABC):
         pass
 
 
+class NotImplementedProperty(Property):
+    def __init__(self, name: str, material: str) -> None:
+        """
+        Placeholder for properties that are not implemented. Helps keep clean the
+        intellisense.
+        """
+        self.name = name
+        self.material = material
+        self.lower_bound = None
+        self.upper_bound = None
+
+    def _function_to_call(self, *args) -> float:
+        raise NotImplementedError(
+            f"Property {self.name} not implemented for {self.material}"
+        )
+
+
 class Table1DProperty(Property):
     def __init__(self, data: dict) -> None:
         """
@@ -255,47 +272,64 @@ class Fatigue(Property):
         super().__init__(data)
         self.scale_x = float(data.get("scale_x", 1.0))
         self.scale_y = float(data.get("scale_y", 1.0))
+        self.mean_stress = data.get("mean_stress", False)
+        self.ftype = data["ftype"]
         # For fatigue, values are provided as N cycles Vs strain/stress. Some
         # reorganization of the input is needed to fit the Table2DProperty structure.
+        if self.mean_stress:
+            tables = data["tables"]
+        else:
+            tables = {"All": data["values"]}
 
-        # Add a point for eps 0 and one for eps>max
-        T = np.array(data["values"]["T"], dtype=float)
-        N_cyles = np.array(data["values"]["N_cyles"], dtype=float)
+        interpolators = {}
+        for mean_stress, table in tables.items():
+            # Add a point for eps 0 and one for eps>max
+            T = np.array(table["T"], dtype=float)
+            N_cycles_or = np.array(table["N_cycles"], dtype=float)
 
-        matrix_original = data["values"]["y"]
+            matrix_original = table["y"]
 
-        # add extrapolation to the table
-        matrix = [matrix_original[0]]
-        matrix.extend(matrix_original)
-        matrix.append([0] * len(matrix_original[0]))
-        N_cycles = [0]
-        N_cycles.extend(N_cyles.tolist())
-        N_cycles.append(max(N_cycles))
+            # add extrapolation to the table
+            matrix = [matrix_original[0]]
+            matrix.extend(matrix_original)
+            matrix.append([0] * len(matrix_original[0]))
+            N_cycles = [0]
+            N_cycles.extend(N_cycles_or.tolist())
+            N_cycles.append(max(N_cycles))
 
-        N_cycles = np.array(N_cycles, dtype=float)
-        matrix = np.array(matrix, dtype=float)
+            N_cycles = np.array(N_cycles, dtype=float)
+            matrix = np.array(matrix, dtype=float)
 
-        points = []
-        values = []
-        for i, eps_row in enumerate(matrix):
-            for j, eps in enumerate(eps_row):
-                point = [T[j], eps]
-                val = N_cycles[i]
-                points.append(point)
-                values.append(val)
+            points = []
+            values = []
+            for i, eps_row in enumerate(matrix):
+                for j, eps in enumerate(eps_row):
+                    point = [T[j], eps]
+                    val = N_cycles[i]
+                    points.append(point)
+                    values.append(val)
 
-        # Compute the triangulation
-        tri = Delaunay(points)
-        # Perform the interpolation with the given values:
-        self.interpolator = LinearNDInterpolator(tri, values)
-        self.ftype = data["ftype"]
+            # Compute the triangulation
+            tri = Delaunay(points)
+            # Perform the interpolation with the given values:
+            interpolator = LinearNDInterpolator(tri, values)
+            interpolators[mean_stress] = interpolator
+        self.interpolators = interpolators
 
         # Update the bounds. For the number of cycles extrapolation needs to be in the
-        # table values
+        # table values.
         self.lower_bound = [min(T), None]
         self.upper_bound = [max(T), None]
+        if mean_stress:
+            keys = [float(x) for x in tables.keys()]
+            mean_stresses = [0]
+            mean_stresses.extend(keys)
+            self.lower_bound.append(min(mean_stresses))
+            self.upper_bound.append(max(mean_stresses))
 
-    def _function_to_call(self, x: float, y: float) -> float:
+    def _function_to_call(
+        self, x: float, y: float, s_mean: float | None = None
+    ) -> float:
         """Return the value from the table at a given point.
 
         Parameters
@@ -304,12 +338,28 @@ class Fatigue(Property):
             x value to look up in the table.
         y : float
             y value to look up in the table.
+        s_mean : float, optional
+            Mean stress value, if applicable. If None, the All table is used.
         Returns
         -------
         float
             Value from the table at (x, y).
         """
-        return self.interpolator(x * self.scale_x, y * self.scale_y)
+        if s_mean is None:
+            # Use the All table
+            interpolator = self.interpolators["All"]
+        else:
+            interpolator = None
+            for mean_stress, interpolator_s in self.interpolators.items():
+                if s_mean <= float(mean_stress):
+                    interpolator = interpolator_s
+                    break
+            if interpolator is None:
+                raise OutOfBoundsError(
+                    f"No interpolator found for mean stress {s_mean}"
+                )
+
+        return interpolator(x * self.scale_x, y * self.scale_y)
 
 
 class PolynomialProperty(Property):
@@ -391,7 +441,9 @@ class EquationProperty(Property):
 
 
 class MultiProperty(Property):
-    def __init__(self, data: dict) -> None:
+    def __init__(
+        self, property_dictionary: dict, property_name: str, material_name: str
+    ) -> None:
         """
         Initialize the MultiProperty with a list of properties. This property is an
         arbitrary combinations of other property types, each specified in a specific
@@ -402,8 +454,12 @@ class MultiProperty(Property):
         properties : list of Property
             List of Property instances.
         """
+        data = property_dictionary[property_name]
         super().__init__(data)
-        self.ranges = [PropertyFactory.create_property(prop) for prop in data["ranges"]]
+        self.ranges = [
+            PropertyFactory.create_property({"A": prop}, "A", material_name)
+            for prop in data["ranges"]
+        ]
 
     def _function_to_call(self, *args) -> float:
         """Return the value of the property based on the input arguments.
@@ -428,7 +484,9 @@ class MultiProperty(Property):
 
 class PropertyFactory:
     @staticmethod
-    def create_property(data: dict) -> Property:
+    def create_property(
+        property_dictionary: dict, property_name: str, material_name: str
+    ) -> Property:
         """
         Create a Property instance based on the type specified in the data.
 
@@ -442,8 +500,13 @@ class PropertyFactory:
         Property
             An instance of a Property subclass.
         """
+        data = property_dictionary.get(property_name, None)
+        if data is None:
+            return NotImplementedProperty(property_name, material_name)
         if "type" not in data:
-            raise ConfigError("Property 'type' is missing in the data dictionary.")
+            raise ConfigError(
+                f"Property 'type' is missing in the data dictionary of {property_name} for {material_name}."
+            )
         prop_type = data["type"]
         if prop_type == PropertyType.CONSTANT.value:
             return ConstantProperty(data)
@@ -458,7 +521,7 @@ class PropertyFactory:
         elif prop_type == PropertyType.FATIGUE.value:
             return Fatigue(data)
         elif prop_type == PropertyType.MULTI.value:
-            return MultiProperty(data)
+            return MultiProperty(property_dictionary, property_name, material_name)
         elif prop_type == PropertyType.TABLE3D.value:
             return Table3DProperty(data)
         else:
@@ -478,42 +541,39 @@ class Material:
 
         # Mandatory properties
         data = config["properties"]
-        self.nu = PropertyFactory.create_property(data["Poisson Ratio"])
-        self.E = PropertyFactory.create_property(data["Young Modulus"])
-        self.Keps = PropertyFactory.create_property(data["Keps"])
-        self.Kmu = PropertyFactory.create_property(data["Kmu"])
-        self.Keff_rec = PropertyFactory.create_property(data["Keff_rec"])
-        self.N = PropertyFactory.create_property(data["Fatigue"])
-        self.Sm = PropertyFactory.create_property(data["Sm"])
-        self.Sy_min = PropertyFactory.create_property(data["Min Yield Strength"])
-        self.Su_min = PropertyFactory.create_property(data["Min Tensile Strength"])
+        self.nu = PropertyFactory.create_property(data, "Poisson Ratio", self.name)
+        self.E = PropertyFactory.create_property(data, "Young Modulus", self.name)
+        self.N = PropertyFactory.create_property(data, "Fatigue", self.name)
+        self.Sy_min = PropertyFactory.create_property(
+            data, "Min Yield Strength", self.name
+        )
+        self.Su_min = PropertyFactory.create_property(
+            data, "Min Tensile Strength", self.name
+        )
 
         # Optional properties
-        if "Mean Yield Strength" in data:
-            self.Sy_moy = PropertyFactory.create_property(data["Mean Yield Strength"])
-        if "Se" in data:
-            self.Se = PropertyFactory.create_property(data["Se"])
-        if "Sd" in data:
-            self.Sd = PropertyFactory.create_property(data["Sd"])
-        if "Sd_nopeak" in data:
-            self.Sd_nopeak = PropertyFactory.create_property(data["Sd_nopeak"])
-        if "m" in data and "K" in data:
-            self.K = PropertyFactory.create_property(data["K"])
-            self.m = PropertyFactory.create_property(data["m"])
-
-        # monotonic stress-strain curve
+        self.Sy_moy = PropertyFactory.create_property(
+            data, "Mean Yield Strength", self.name
+        )
+        self.Se = PropertyFactory.create_property(data, "Se", self.name)
+        self.Sd = PropertyFactory.create_property(data, "Sd", self.name)
+        self.Sd_nopeak = PropertyFactory.create_property(data, "Sd_nopeak", self.name)
+        self.m = PropertyFactory.create_property(data, "m", self.name)
+        self.K = PropertyFactory.create_property(data, "K", self.name)
+        self.Keps = PropertyFactory.create_property(data, "Keps", self.name)
+        self.Kmu = PropertyFactory.create_property(data, "Kmu", self.name)
+        self.Keff_rec = PropertyFactory.create_property(data, "Keff_rec", self.name)
+        self.Sm = PropertyFactory.create_property(data, "Sm", self.name)
+        self.Smb = PropertyFactory.create_property(data, "Smb", self.name)
         self.monotonic_min_stress_strain = PropertyFactory.create_property(
-            data["Monotonic Min True Stress Strain"]
+            data, "Monotonic Min True Stress Strain", self.name
         )
 
     def cyclic_stress_strain(self, T: float, ds: float, dpa: float = 0) -> float:
         """returns the plastic cyclic de_strain given a d_sigma (Pa) and T"""
         E = self.E(T, dpa) * 1e-6  # convert from Pa to MPa
-        try:
-            K = self.K(T)
-            m = self.m(T)
-        except AttributeError:
-            raise ValueError("No cyclic stress-strain curve is defined")
+        K = self.K(T)
+        m = self.m(T)
         ds = ds / 1e6  # convert from Pa to MPa
 
         de_tot = 100 * ds * (2 * (1 + self.nu()) / (3 * E)) + (ds / K) ** (1 / m)

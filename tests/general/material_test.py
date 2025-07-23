@@ -48,6 +48,8 @@ class TestMaterial:
             pytest.approx(material.monotonic_min_stress_strain(868.35e6, 20, 0.01))
             == 50.31966 / 100
         )
+        with pytest.raises(NotImplementedError):
+            material.Smb(20, 0)
 
     def test_cyclic_stress_strain(self, material: Material):
         assert (
@@ -58,6 +60,24 @@ class TestMaterial:
     def test_accept_tuple(self, material: Material):
         """Test that the cyclic_stress_strain method accepts a tuple for T and ds."""
         assert material.Sd((250, 4)) == 435e6
+
+
+def test_Inconel_SDC_IC():
+    """
+    Test that the Inconel 718 material file is read correctly.
+    """
+    with as_file(
+        MAT_FOLDER.joinpath("Inconel 718 (non leak tight) SDC-IC.yaml")
+    ) as mat_path:
+        material = Material(mat_path)
+    assert pytest.approx(material.E(350, 1), rel=5e-3) == 183e9
+    assert pytest.approx(material.Sy_min(20, 0), rel=1e-3) == 1035e6
+    assert material.Sy_min(350, 1) == 791e6
+    assert material.Smb(300, 0) == 425e6
+    assert material.Smb(300, 1) == 368e6
+    assert material.N(300, 220e6, 500e6) > 5e5
+    assert material.N(300, 103e6, 1000e6) == 2e6
+    assert material.Su_min(300, 1) == 994e6
 
 
 def test_read_materials():

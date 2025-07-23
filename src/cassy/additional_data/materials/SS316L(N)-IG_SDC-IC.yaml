@@ -1,5 +1,5 @@
-name: material_example
-description: BlaBla
+name: SS316L(N)-IG
+description: From Appendix A of the SDC-IC
 properties:
   Poisson Ratio:
     type: constant
