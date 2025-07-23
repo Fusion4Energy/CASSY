@@ -46,11 +46,11 @@ class BoltActionAssessor:
         """
         self.name = name
         self.poa = poa
+        self.preload = abs(preload)
         self.primary, self.all_loads = self._convert_actions(
             primary_actions, all_loads_actions
         )
         self.ref_event = ref_event
-        self.preload = abs(preload)
 
         self.loads_type = ["Preload", "primary", "all"]
 
@@ -68,8 +68,8 @@ class BoltActionAssessor:
         #     ncycles = int(ncycles.replace(" ", ""))
         # self.ncycles = ncycles
 
-    @staticmethod
     def _convert_actions(
+        self,
         primary: pd.Series,
         all_loads: pd.Series,
         axs=["z", "x", "y"],
@@ -84,7 +84,9 @@ class BoltActionAssessor:
         primary_dic = {"N": N, "M": M, "T": T}
 
         # All Loads
-        N = all_loads["F" + axs[0]]
+        N = (
+            abs(all_loads["F" + axs[0]]) - self.preload
+        )  # subtract preload from all loads actions
         M = (all_loads["M" + axs[1]] ** 2 + all_loads["M" + axs[2]] ** 2) ** 0.5
         T = (all_loads["F" + axs[1]] ** 2 + all_loads["F" + axs[2]] ** 2) ** 0.5
         all_loads_dic = {"N": N, "M": M, "T": T}
@@ -191,12 +193,12 @@ class BoltActionAssessor:
             contains all infos of the performed assessment, Vj included.
 
         """
-        assert isinstance(self.ref_event, BoltReferenceEventFatigue), (
-            "The reference event must be a BoltReferenceEventFatigue"
-        )
-        assert isinstance(self.poa, BoltLikeGeom), (
-            "Only Bolts can be assessed for fatigue usage fraction"
-        )
+        assert isinstance(
+            self.ref_event, BoltReferenceEventFatigue
+        ), "The reference event must be a BoltReferenceEventFatigue"
+        assert isinstance(
+            self.poa, BoltLikeGeom
+        ), "Only Bolts can be assessed for fatigue usage fraction"
         assessment = code.computeVj(
             self,
             self.poa.material,
@@ -312,7 +314,7 @@ class BoltActionAssessor:
         Cr = self.preload * (0.16 * bolt.p + 0.583 * bolt.f * bolt.df)
         Ct = self.preload * 0.5 * bolt.f_prime * bolt.Dm
         # Shear stress in threads
-        tau_Cr = 16 * Cr / (pi * bolt.dn**3)
+        tau_Cr = 16 * Cr * bolt.dn / (pi * (bolt.dn**4 - bolt.d_vh**4))
         try:
             tau_Ct = 16 * Ct / (pi * bolt.d1**3)
         except ZeroDivisionError:
@@ -321,7 +323,7 @@ class BoltActionAssessor:
         # --- Stress induced by transverse load T ---
         # Shear stress in the threaded root section
         T = actions["T"]
-        tau_T = 4 * T / (pi * bolt.dn**2)
+        tau_T = 4 * T / (pi * (bolt.dn**2 - bolt.d_vh**2))
 
         # --- Allowable stresses ---
         applicables["Primary stress"] = sigma_N

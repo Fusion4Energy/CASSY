@@ -40,7 +40,9 @@ INPUT_TITLE = "Internal Bolt Action Used During the Assessment"
 
 # #################### Code ###################################################
 # --- Initializations ---
-def run_bolts(root: PathLike, fatigue: bool = False) -> None:
+def run_bolts(
+    root: PathLike, fatigue: bool = False, matlib: PathLike | None = None
+) -> None:
     with xw.App(visible=False) as app:
         app.display_alerts = False  # Suppress merge warnings
 
@@ -48,6 +50,9 @@ def run_bolts(root: PathLike, fatigue: bool = False) -> None:
 
         # Generate the materials library
         materials = read_materials(MATERIALS_PATH)
+        if matlib is not None:
+            additional_materials = read_materials(matlib)
+            materials.update(additional_materials)
 
         # Read the available geometries
         geometries = read_geometries(folder_tree.geom_folder, materials)

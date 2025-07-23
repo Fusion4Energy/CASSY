@@ -1,4 +1,5 @@
 import os
+import re
 from abc import ABC
 from dataclasses import dataclass
 from typing import Optional
@@ -90,10 +91,12 @@ class BoltReferenceEvent(Event):
         service level of the event. Either I, II, III or IV.
     primary : tuple[str, str]
         primary actions of the event. The first element is the name of analysis
-        and the second element is the load step.
+        and the second element is the string describing the load steps linear
+        combination.
     all_loads : tuple[str, str]
         all actions of the event. The first element is the name of analysis
-        and the second element is the load step.
+        and the second element is the string describing the load steps linear
+        combination.
 
     Raises
     ------
@@ -107,16 +110,12 @@ class BoltReferenceEvent(Event):
     def __post_init__(self):
         super().__post_init__()
         # check that both primary and all_loads are of size 2
-        if len(self.primary) != 2:
-            raise ConfigError(
-                f"Primary actions {self.primary} not allowed. "
-                f"If building from excel use the notation analysis_loadstep "
-            )
-        if len(self.all_loads) != 2:
-            raise ConfigError(
-                f"All actions {self.all_loads} not allowed. "
-                f"If building from excel use the notation analysis_loadstep "
-            )
+        for item in [self.primary, self.all_loads]:
+            if len(item) != 2:
+                raise ConfigError(
+                    f"Actions {item} not allowed. "
+                    f"If building from excel use the notation (analysis, ls1-ls2+ls3)"
+                )
 
 
 @dataclass
@@ -272,8 +271,8 @@ class FlangeAssessmentConfig:
                     dpa=float(row["DPA"]),
                     load_category=row["Load Category"],
                     service_lvl=row["Service Level"],
-                    primary=tuple(row["Primary"].split("_")),
-                    all_loads=tuple(row["All"].split("_")),
+                    primary=_convert_str_to_tuple(row["Primary"]),
+                    all_loads=_convert_str_to_tuple(row["All"]),
                 )
                 re_list.append(re)
             REs[str(bolt_id)] = re_list
@@ -340,7 +339,7 @@ class FlangeAssessmentConfig:
         analysis : str
             The analysis type (e.g., "thermal").
         loadstep : str
-            The load step (e.g., "1").
+            The load step (e.g., "1" or a linear combination like ("2-1")).
 
         Returns
         -------
@@ -348,8 +347,56 @@ class FlangeAssessmentConfig:
             The primary actions for the given bolt ID and ref event.
         """
         try:
-            return self.actions.loc[bolt_id, analysis, int(loadstep)]
-        except KeyError:
+            steps = parse_linear_combination(loadstep)
+        except ValueError as e:
             raise ConfigError(
-                f"Actions for bolt {bolt_id} with analysis {analysis} and load step {loadstep} not found."
+                f"Error parsing loadstep '{loadstep}' for bolt {bolt_id} and analysis {analysis}: {e}"
             )
+        # initialize the series with zero values
+        actions = self.actions.iloc[0].copy()
+        actions[:] = 0
+
+        for sign, step in steps:
+            try:
+                to_add = self.actions.loc[bolt_id, analysis, step]
+            except KeyError:
+                raise ConfigError(
+                    f"Actions for bolt {bolt_id} with analysis {analysis} and load step {loadstep} not found."
+                )
+            if sign == "+":
+                actions += to_add
+            elif sign == "-":
+                actions -= to_add
+        return actions
+
+
+def _convert_str_to_tuple(s: str) -> tuple:
+    """
+    from '(A, B)' to ('A', 'B').
+    """
+    if s.startswith("(") and s.endswith(")"):
+        s = s[1:-1]
+    items = s.split(",")
+    new_items = []
+    for item in items:
+        newitem = item.strip()
+        new_items.append(newitem)
+    return tuple(new_items)
+
+
+TOKENS = re.compile(r"[+-]*\d+")
+
+
+def parse_linear_combination(expr: str) -> list[tuple[str, int]]:
+    # Returns list of (sign, loadstep) tuples, e.g. [('+', 7), ('-', 5), ...]
+    bits = TOKENS.findall(expr.replace(" ", ""))
+    to_combine = []
+    for bit in bits:
+        if bit.startswith(("+", "-")):
+            sign = bit[0]
+            step = int(bit[1:])
+        else:
+            sign = "+"
+            step = int(bit)
+        to_combine.append((sign, step))
+    return to_combine

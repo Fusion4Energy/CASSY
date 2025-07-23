@@ -53,6 +53,8 @@ class TestFlangeAssessment:
             ]["Max stress"]
             > 0
         )
+        actions = flange_assessment.bolts_assessments[1]["Lift"].primary
+        assert actions["N"] == 4
 
     def test_assess(self, flange_assessment: FlangeAssessment):
         # Test the assess method
