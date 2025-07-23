@@ -47,7 +47,7 @@ class RCC_MRx(Code):
         ds = f * refEvent.PQF
         T_ds = (T, ds)
         # de calculation
-        de1 = 100 * 2 / 3 * (1 + material.nu) * (ds / material.E(T))
+        de1 = 100 * 2 / 3 * (1 + material.nu()) * (ds / material.E(T))
 
         try:
             # tresca for shells Pm+0.67*(Pb+Pl-Pm)

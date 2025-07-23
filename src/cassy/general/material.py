@@ -1,415 +1,532 @@
-"""
-Created on Thu Mar  5 13:01:17 2020
-
-@author: Davide Laghi
-"""
-
-from __future__ import annotations
-
 import logging
 import os
-import warnings
-from functools import partial
+from abc import ABC, abstractmethod
+from enum import Enum
 
 import numpy as np
 import pandas as pd
-from scipy import interpolate
+import yaml
+from scipy.interpolate import LinearNDInterpolator
 from scipy.optimize import root_scalar
 from scipy.spatial import Delaunay
-from xlrd import XLRDError
 
+from cassy.auxiliary.custom_errors import ConfigError, OutOfBoundsError
 from cassy.auxiliary.types import PathLike
 
+MATH_SUBSTITUTIONS = {"EXP": np.exp, "SQRT": np.sqrt, "^": "**"}
 
-class Material:
-    def __init__(self, excel_data: os.PathLike, name: str = None):
-        """Object containing and processing material data
 
-        Parameters
-        ----------
-        excel_data : os.PathLike
-            path to the excel file containing the data
-        name : str, optional
-            name of the material, by default None
+class PropertyType(Enum):
+    CONSTANT = "constant"
+    POLYNOMIAL = "polynomial"
+    TABLE1D = "table1D"
+    TABLE2D = "table2D"
+    TABLE3D = "table3D"
+    EQUATION = "equation"
+    MULTI = "multi"
+    FATIGUE = "fatigue"
+
+
+class Property(ABC):
+    def __init__(self, data: dict) -> None:
         """
-        # --- Read Material properties---
-        if name is None:
-            filename = os.path.basename(excel_data)
-            self.name = filename.split(".")[0]
-        else:
-            self.name = name
-
-        # Poisson ratio
-        nu = pd.read_excel(excel_data, sheet_name="Nu")
-        nu = _cleanNA(nu)
-        self.nu = float(nu.values[0][0])
-
-        # Young modulus
-        E_table = pd.read_excel(excel_data, sheet_name="Young Modulus")
-        E_table = _cleanNA(E_table)
-        self.E_table = E_table
-        self.E = interpolate.interp1d(
-            E_table["T"].values, E_table["E [GPa]"].values * 1e9
-        )
-
-        try:
-            # This is needed for RCCMRx piping assessment
-            alpha_table = pd.read_excel(excel_data, sheet_name="alpha")
-            alpha_table = _cleanNA(alpha_table)
-            self.alpha_table = alpha_table
-            self.alpha = interpolate.interp1d(
-                alpha_table["T"].values, alpha_table["alpha [1/K]"].values
-            )
-        except ValueError:
-            # If it is not implemented it is ok, an error will be raised while
-            # trying to access the alpha attribute only during RCC-MRx
-            # assessment
-            pass
-
-        # Read n0 for monotonic epsilon calculation
-        try:
-            # This is needed for RCCMRx piping assessment
-            n0_table = pd.read_excel(excel_data, sheet_name="n0")
-            n0_table = _cleanNA(n0_table)
-            self.n0_table = n0_table
-            self.n0 = interpolate.interp1d(n0_table["T"].values, n0_table["n0"].values)
-        except ValueError:
-            # If it is not implemented it is ok, since only EUROFER has this
-            # parameter as a table
-            pass
-
-        # Read C0 for monotonic epsilon calculation
-        try:
-            # This is needed for RCCMRx piping assessment
-            C0_table = pd.read_excel(excel_data, sheet_name="C0")
-            C0_table = _cleanNA(C0_table)
-            self.C0_table = C0_table
-            self.C0 = interpolate.interp1d(n0_table["T"].values, C0_table["C0"].values)
-        except ValueError:
-            # If it is not implemented it is ok, since only EUROFER has this
-            # parameter as a table
-            pass
-
-        # --- Fatigue data ---
-        # K, m
-        K_table = pd.read_excel(excel_data, sheet_name="K-m")
-        K_table = _cleanNA(K_table)
-        self.K = interpolate.interp1d(K_table["T"].values, K_table["K"].values)
-        self.m = interpolate.interp1d(K_table["T"].values, K_table["m"].values)
-
-        # Keps/Kmu
-        K = {}
-        for k in ["Keps", "Kmu"]:
-            k_table = pd.read_excel(excel_data, sheet_name=k, skiprows=1)
-            k_table = _cleanNA(k_table)
-            k_table.set_index("T", inplace=True)
-            K[k] = _interpolate_df(k_table)  # (T, ds)
-
-        self.Keps = K["Keps"]
-        self.Kmu = K["Kmu"]
-
-        # Keff,rec
-        Keff_rec_table = pd.read_excel(excel_data, sheet_name="Keff_rec", skiprows=2)
-        Keff_rec_table = _cleanNA(Keff_rec_table)
-        self.Keff_rec_table = Keff_rec_table.set_index("T [°C]")
-        self.Keff_rec = _interpolate_df(self.Keff_rec_table)  # (T,dpa)
-
-        # Get number of Cycles
-        values = pd.read_excel(excel_data, sheet_name="Fatigue Curves", skiprows=2)
-        values = list(values.columns)[0]
-        if values == "stress":
-            self.fatigue_curve = "stress"
-        elif values == "strain":
-            self.fatigue_curve = "strain"
-        else:
-            raise ValueError(
-                name + " fatigue curve values must be either" + ' "stress" or "strain"'
-            )
-        self.fatigue_values = values
-        fatigue_table = pd.read_excel(
-            excel_data, sheet_name="Fatigue Curves", skiprows=3
-        )
-        fatigue_table = _cleanNA(fatigue_table)
-        fatigue_table = fatigue_table.set_index("Ncycles")
-        self.fatigue_table = fatigue_table
-
-        points = []
-        values = []
-        newcols = map(str, list(fatigue_table.columns))
-        fatigue_table.columns = newcols
-        for column in fatigue_table.columns:
-            for idx, row in fatigue_table.iterrows():
-                values.append(int(idx))
-                point = [int(column), float(row[column])]
-                points.append(point)
-
-        self.N = self._build_grid_interpolator(points, values)  # (T,e/s)
-
-        #  --- Allowables ---
-        # Sm irr
-        Sm_table = pd.read_excel(excel_data, sheet_name="Sm", skiprows=2)
-        Sm_table = _cleanNA(Sm_table)
-        self.Sm_table = Sm_table.set_index("T [°C]") * 1e6
-        self.Sm_irr = _interpolate_df(self.Sm_table)  # (T, dpa)
-
-        # Sy min
-        Sy_min_table = pd.read_excel(excel_data, sheet_name="Sy_min", skiprows=2)
-        Sy_min_table = _cleanNA(Sy_min_table)
-        self.Sy_min_table = Sy_min_table.set_index("T [°C]") * 1e6
-        self.Sy_min = _interpolate_df(self.Sy_min_table)  # (T, dpa)
-
-        # Sy mean
-        try:
-            Sy_moy_table = pd.read_excel(excel_data, sheet_name="Sy_moy", skiprows=2)
-            Sy_moy_table = _cleanNA(Sy_moy_table)
-            self.Sy_moy_table = Sy_moy_table.set_index("T [°C]") * 1e6
-            self.Sy_moy = _interpolate_df(self.Sy_moy_table)  # (T, dpa)
-        except ValueError:
-            # If it is not implemented it is ok, an error will be raised while
-            # trying to access the Sy_moy attribute only during RCC-MRx
-            # assessment
-            pass
-
-        # Su min
-        Su_min_table = pd.read_excel(excel_data, sheet_name="Su_min", skiprows=2)
-        Su_min_table = _cleanNA(Su_min_table)
-        self.Su_min_table = Su_min_table.set_index("T [°C]") * 1e6
-        self.Su_min = _interpolate_df(self.Su_min_table)  # (T, dpa)
-
-        # Se
-        try:
-            Se_table = pd.read_excel(excel_data, sheet_name="Se", skiprows=2)
-            Se_table = _cleanNA(Se_table)
-            Se_table.set_index("T [°C]", inplace=True)
-            with pd.option_context("future.no_silent_downcasting", True):
-                Se_table = Se_table.replace(
-                    to_replace="No limit", value=np.nan
-                ).infer_objects()
-            self.Se_table = Se_table * 1e6
-            self.Se = _interpolate_df(self.Se_table)  # (T, dpa)
-        except ValueError:
-            # Only in SDC-IC
-            pass
-
-        try:
-            # Sd (inluding peak stress and supposing TF =2)
-            Sd_table = pd.read_excel(excel_data, sheet_name="Sd", skiprows=2)
-            Sd_table = _cleanNA(Sd_table)
-            Sd_table.set_index("T [°C]", inplace=True)
-            with pd.option_context("future.no_silent_downcasting", True):
-                Sd_table = Sd_table.replace(
-                    to_replace="No limit", value=np.nan
-                ).infer_objects()
-            self.Sd_table = Sd_table * 1e6
-            self.Sd = _interpolate_df(self.Sd_table)  # (T, dpa)
-
-            # Sd (excluding peak stress and supposing TF =2)
-            Sd_nopeak_table = pd.read_excel(
-                excel_data, sheet_name="Sd_nopeak", skiprows=2
-            )
-            Sd_nopeak_table = _cleanNA(Sd_nopeak_table)
-            Sd_nopeak_table.set_index("T [°C]", inplace=True)
-            with pd.option_context("future.no_silent_downcasting", True):
-                Sd_nopeak_table = Sd_nopeak_table.replace(
-                    to_replace="No limit", value=np.nan
-                ).infer_objects()
-            self.Sd_nopeak_table = Sd_nopeak_table * 1e6
-            self.Sd_nopeak = _interpolate_df(self.Sd_nopeak_table)  # (T, dpa)
-        except ValueError:
-            pass
-
-        # Monotonic stress-strain
-        if name == "316L (non leak-tight)":
-            # Up to 5%
-            df = pd.read_excel(
-                excel_data,
-                sheet_name="Monotonic stress-strain",
-                usecols="A:M",
-                skiprows=1,
-            )
-            df = _cleanNA(df)
-            df = df.set_index("T [°C]")
-            df.columns = df.columns * 1e6  # Mpa -> Pa
-            self.mon_stress_strain_5 = _interpolate_df(df)  # (T, sigma)
-
-            # > 5%
-            # there is a need to go around a weird bug in pandas that adds
-            # some .1 after header values
-            df = pd.read_excel(
-                excel_data,
-                sheet_name="Monotonic stress-strain",
-                usecols="O:AC",
-                skiprows=0,
-            )
-            cols = df.iloc[0].values
-            df = pd.read_excel(
-                excel_data,
-                sheet_name="Monotonic stress-strain",
-                usecols="O:AC",
-                skiprows=1,
-            )
-            df.columns = cols
-            df = _cleanNA(df)
-            df = df.set_index("T [°C]")
-            df.columns = df.columns * 1e6  # Mpa -> Pa
-            self.mon_stress_strain_up = _interpolate_df(df)  # (T, sigma)
-
-        # True stress-strain curve
-        try:
-            self.monotonic_stress_strain_table = pd.read_excel(
-                excel_data, sheet_name="TrueStressStrain"
-            )
-        except (ValueError, XLRDError):
-            self.monotonic_stress_strain_table = None
-        try:
-            self.monotonic_stress_strain_table2 = pd.read_excel(
-                excel_data, sheet_name="TrueStressStrain2"
-            )
-        except (ValueError, XLRDError):
-            self.monotonic_stress_strain_table2 = None
-
-    def cyclic_stress_strain(self, T, ds):
-        E = self.E(T)
-        K = self.K(T)
-        m = self.m(T)
-
-        if K == 0 and m == 0:
-            raise ValueError("No cyclic stress-strain curve is defined")
-
-        de_tot = 100 * ds * (2 * (1 + self.nu) / (3 * E)) + (ds / K) ** (1 / m)
-
-        return de_tot
-
-    def cyclic_stress_strain_1(self, T, ds):
-        E = self.E(T)
-        K = self.K(T)
-        m = self.m(T)
-
-        if K == 0 and m == 0:
-            raise ValueError("No cyclic stress-strain curve is defined")
-
-        de_CP = (ds / K) ** (1 / m)
-
-        return de_CP
-
-    def get_Keff(self, T_dpa, K):
-        # To check if it is the same for all materials
-        k_rect = self.Keff_rec(T_dpa)
-        return 1 + 2 * (K - 1) * (k_rect - 1)
-
-    def _inconel_N(self, max_stress, SA):
-        df = self.fatigue_table
-        try:
-            newcols = map(str, list(df.columns))
-        except ValueError:
-            # There are NaNs most probably
-            # print the problematic df for additional debug
-            print(df)
-            raise ValueError("Problem in the excel table cell values")
-        df.columns = newcols
-        for column in df.columns:
-            if max_stress < float(column):
-                # the right column will be the last in memory
-                break
-        N = interpolate.interp1d(df[column].values, df.index)
-        return N(SA)
-
-    @staticmethod
-    def _build_grid_interpolator(
-        points: np.ndarray, values: np.ndarray
-    ) -> interpolate.LinearNDInterpolator:
-        # let's be sure that inputs are indeed arrays
-        points = np.array(points)
-        values = np.array(values)
-        # Compute the triangulation
-        tri = Delaunay(points)
-        # Perform the interpolation with the given values:
-        interpolator = interpolate.LinearNDInterpolator(tri, values)
-
-        return interpolator
-
-    def monotonic_stress_strain(
-        self, sigma: float, T: float, dpa: float
-    ) -> tuple[float, float]:
-        """Function that contains all average stress-strain curves for the
-        different materials
+        Initialize the Property with a dictionary.
 
         Parameters
         ----------
-        sigma : float
-            strain value with which to enter the curve
+        dict : dict
+            Dictionary containing property data.
+        """
+        if "type" not in data:
+            raise ConfigError("Property 'type' is missing in the data dictionary.")
+        self.type = PropertyType(data["type"])
 
-        T: float
-            temperature for the evaluation of epsilon
+        self.lower_bound = data.get("lower_bound", None)
+        self.upper_bound = data.get("upper_bound", None)
+        self.scale_result = float(data.get("scale_result", 1.0))  # Default scale is 1.0
 
-        dpa: float
-            DPA for the evaluation of epsilon
+    def __call__(self, *args) -> float:
+        """
+        Compute the property value and bounds.
+        """
+        # For legacy purposes, allow to provide all input in a tuple
+        if len(args) == 1 and isinstance(args[0], tuple):
+            args = args[0]
+        # Check bounds if they are defined
+        for i, arg in enumerate(args):
+            if (
+                self.lower_bound is not None
+                and self.lower_bound[i] is not None
+                and arg < self.lower_bound[i]
+            ):
+                raise OutOfBoundsError(
+                    f"Argument {arg} is below the lower bound {self.lower_bound[i]}."
+                )
+            if (
+                self.upper_bound is not None
+                and self.upper_bound[i] is not None
+                and arg > self.upper_bound[i]
+            ):
+                raise OutOfBoundsError(
+                    f"Argument {arg} is above the upper bound {self.upper_bound[i]}."
+                )
+
+        # if in boounds, safely call the function
+        return self._function_to_call(*args) * self.scale_result
+
+    @abstractmethod
+    def _function_to_call(self, *args) -> float:
+        """
+        Call the function associated with the property.
+
+        Parameters
+        ----------
+        *args : tuple
+            Arguments to pass to the function.
 
         Returns
         -------
-        eps: float
-            total true strain
-
-        Raises
-        ------
-        NotImplementedError
-            if the formula has not been implemented for the selecte material
-        ValueError
-            in some cases if the valid ranges for the formulas are exceeded
+        float
+            Result of the function call.
         """
-        msg_limit = "The limit of epsilon  has been reached for {} due to sigma {}"
-        if self.name == "SS316L(N)-IG":
-            C0 = 1.198
-            alpha = 1 / 0.1125
-            eps = (
-                100 * sigma / self.E(T)
-                + (sigma / (C0 * 1.28 * self.Sy_moy([T, dpa])[0])) ** alpha
-            ) / 100
-            eps_MP = ((sigma / (C0 * 1.28 * self.Sy_moy([T, dpa])[0])) ** alpha) / 100
-            # For SS316L(N)-IG the formula is valid only up to 1%
-            if eps > 0.015:
-                raise ValueError(msg_limit.format(eps, self.name))
-        elif self.name == "316L (non leak-tight)":
-            C0 = 1.198
-            alpha = 1 / 0.1125
-            eps = (
-                100 * sigma / self.E(T)
-                + (sigma / (C0 * self.Sy_moy([T, dpa])[0])) ** alpha
-            ) / 100
-            eps_MP = ((sigma / (C0 * self.Sy_moy([T, dpa])[0])) ** alpha) / 100
-            # For SS316L(N)-IG the formula is valid only up to 1.2%
-            if eps > 0.01:
-                # try with the up to 0.05 interpolation
-                eps = self.mon_stress_strain_5((T, sigma))[0]
-                if np.isnan(eps):
-                    # 5% was exceeded then, try with second table
-                    eps = self.mon_stress_strain_up((T, sigma))[0]
-                    if np.isnan(eps):
-                        # all limits have been exceeded
-                        print(T)
-                        raise ValueError(msg_limit.format(self.name, sigma))
-                    else:
-                        eps_MP = eps - sigma / self.E(T)
-                else:
-                    eps_MP = eps - sigma / self.E(T)
-            if eps_MP < 0:
-                eps_MP = 0
-        elif self.name == "EUROFER":
-            n0 = self.n0(T)
-            alpha = 1 / n0
-            C0 = self.C0(T)
-            eps = (
-                100 * sigma / self.E(T)
-                + (sigma / (C0 * self.Sy_moy([T, dpa])[0])) ** alpha
-            ) / 100
-            eps_MP = ((sigma / (C0 * self.Sy_moy([T, dpa])[0])) ** alpha) / 100
+        pass
+
+
+class Table1DProperty(Property):
+    def __init__(self, data: dict) -> None:
+        """
+        Initialize the Table1DProperty with a table of values.
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary containing table data.
+        """
+        super().__init__(data)
+        self.x = data["values"]["x"]
+        self.y = data["values"]["y"]
+        # override the lower and upper bounds
+        self.lower_bound = [min(self.x)]
+        self.upper_bound = [max(self.x)]
+
+    def _function_to_call(self, x: float) -> float:
+        """Return the value from the table at a given point.
+
+        Parameters
+        ----------
+        x : float
+            x value to look up in the table.
+        Returns
+        -------
+        float
+            Value from the table at x.
+        """
+        return np.interp(x, self.x, self.y)
+
+
+class Table2DProperty(Property):
+    def __init__(self, data: dict) -> None:
+        """
+        Initialize the Table2DProperty with a table of values.
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary containing table data.
+        """
+        super().__init__(data)
+        # Ensure that x and y are read as floats using np arrays
+        self.x = np.array(data["values"]["x"], dtype=float)
+        self.y = np.array(data["values"]["y"], dtype=float)
+        self.vals = np.array(data["values"]["vals"], dtype=float)
+        # perform some quality checks on the table
+        assert self.vals.shape == (len(self.x), len(self.y))
+
+        # get scale x, y if they are defined
+        self.scale_x = float(data.get("scale_x", 1.0))
+        self.scale_y = float(data.get("scale_y", 1.0))
+
+        # override the lower and upper bounds
+        self.lower_bound = [min(self.x) / self.scale_x, min(self.y) / self.scale_y]
+        self.upper_bound = [max(self.x) / self.scale_x, max(self.y) / self.scale_y]
+
+        # Initialize the grid interpolator
+        points = []
+        for x in self.x:
+            for y in self.y:
+                points.append([x, y])
+        points = np.array(points)
+        # Compute the triangulation
+        tri = Delaunay(points)
+        # Perform the interpolation with the given values:
+        self.interpolator = LinearNDInterpolator(tri, self.vals.flatten())
+
+    def _function_to_call(self, x: float, y: float) -> float:
+        """Return the value from the table at a given point.
+
+        Parameters
+        ----------
+        x : float
+            x value to look up in the table.
+        y : float
+            y value to look up in the table.
+        Returns
+        -------
+        float
+            Value from the table at (x, y).
+        """
+        return self.interpolator(x * self.scale_x, y * self.scale_y)
+
+
+class Table3DProperty(Property):
+    def __init__(self, data: dict) -> None:
+        """
+        Initialize the Table3DProperty with a table of values.
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary containing table data.
+        """
+        super().__init__(data)
+        self.scale_x = float(data.get("scale_x", 1.0))
+        self.scale_y = float(data.get("scale_y", 1.0))
+        self.scale_z = float(data.get("scale_z", 1.0))
+
+        df_values = data["values"]
+        cols = data["columns"]
+        df = pd.DataFrame(df_values, columns=cols, dtype=float)
+
+        points = []
+        values = []
+        for _, row in df.iterrows():
+            x = row["x"]
+            y = row["y"]
+            z = row["z"]
+            val = row["val"]
+            points.append([x, y, z])
+            values.append(val)
+
+        # Compute the triangulation
+        tri = Delaunay(points)
+        # Perform the interpolation with the given values:
+        self.interpolator = LinearNDInterpolator(tri, values)
+
+        # Update the bounds. For the number of cycles extrapolation needs to be in the
+        # table values
+        self.lower_bound = [
+            min(df["x"]) / self.scale_x,
+            min(df["y"]) / self.scale_y,
+            min(df["z"]) / self.scale_z,
+        ]
+        self.upper_bound = [
+            max(df["x"]) / self.scale_x,
+            max(df["y"]) / self.scale_y,
+            max(df["z"]) / self.scale_z,
+        ]
+
+    def _function_to_call(self, x: float, y: float, z: float) -> float:
+        """Return the value from the table at a given point.
+
+        Parameters
+        ----------
+        x : float
+            x value to look up in the table.
+        y : float
+            y value to look up in the table.
+        Returns
+        -------
+        float
+            Value from the table at (x, y).
+        """
+        return self.interpolator(x * self.scale_x, y * self.scale_y, z * self.scale_z)
+
+
+class Fatigue(Property):
+    def __init__(self, data: dict) -> None:
+        """
+        Initialize the Fatigue property with a table of values.
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary containing fatigue data.
+        """
+        super().__init__(data)
+        self.scale_x = float(data.get("scale_x", 1.0))
+        self.scale_y = float(data.get("scale_y", 1.0))
+        # For fatigue, values are provided as N cycles Vs strain/stress. Some
+        # reorganization of the input is needed to fit the Table2DProperty structure.
+
+        # Add a point for eps 0 and one for eps>max
+        T = np.array(data["values"]["T"], dtype=float)
+        N_cyles = np.array(data["values"]["N_cyles"], dtype=float)
+
+        matrix_original = data["values"]["y"]
+
+        # add extrapolation to the table
+        matrix = [matrix_original[0]]
+        matrix.extend(matrix_original)
+        matrix.append([0] * len(matrix_original[0]))
+        N_cycles = [0]
+        N_cycles.extend(N_cyles.tolist())
+        N_cycles.append(max(N_cycles))
+
+        N_cycles = np.array(N_cycles, dtype=float)
+        matrix = np.array(matrix, dtype=float)
+
+        points = []
+        values = []
+        for i, eps_row in enumerate(matrix):
+            for j, eps in enumerate(eps_row):
+                point = [T[j], eps]
+                val = N_cycles[i]
+                points.append(point)
+                values.append(val)
+
+        # Compute the triangulation
+        tri = Delaunay(points)
+        # Perform the interpolation with the given values:
+        self.interpolator = LinearNDInterpolator(tri, values)
+        self.ftype = data["ftype"]
+
+        # Update the bounds. For the number of cycles extrapolation needs to be in the
+        # table values
+        self.lower_bound = [min(T), None]
+        self.upper_bound = [max(T), None]
+
+    def _function_to_call(self, x: float, y: float) -> float:
+        """Return the value from the table at a given point.
+
+        Parameters
+        ----------
+        x : float
+            x value to look up in the table.
+        y : float
+            y value to look up in the table.
+        Returns
+        -------
+        float
+            Value from the table at (x, y).
+        """
+        return self.interpolator(x * self.scale_x, y * self.scale_y)
+
+
+class PolynomialProperty(Property):
+    def __init__(self, data: dict) -> None:
+        """
+        Initialize the PolynomialProperty with coefficients.
+
+        Parameters
+        ----------
+        coeff : list of float
+            Coefficients of the polynomial.
+        """
+        super().__init__(data)
+        self.coeff = data["coefficients"]
+
+    def _function_to_call(self, *args) -> float:
+        """Return the value of the polynomial at a given point.
+
+        Parameters
+        ----------
+        x : float
+            x of the polynomial.
+        Returns
+        -------
+        float
+            Value of the polynomial at x.
+        """
+        x = args[0]
+        res = 0
+        for i, c in enumerate(self.coeff):
+            res += float(c) * (x**i)
+        return res
+
+
+class ConstantProperty(Property):
+    def __init__(self, data: dict) -> None:
+        """
+        Initialize the ConstantProperty with a constant value.
+
+        Parameters
+        ----------
+        value : float
+            The constant value.
+        """
+        super().__init__(data)
+        self.value = data["value"]
+
+    def _function_to_call(self, *args) -> float:
+        return self.value
+
+
+class EquationProperty(Property):
+    def __init__(self, data: dict) -> None:
+        """
+        Initialize the EquationProperty with an equation function.
+
+        Parameters
+        ----------
+        equation_func : Callable
+            Function that computes the property value based on arguments.
+        """
+        super().__init__(data)
+        equation_str = data["equation"]
+        args_str = data["args"]
+        subs = MATH_SUBSTITUTIONS.copy()
+
+        def equation_func(*args):
+            if len(args) != len(args_str):
+                raise ConfigError(f"Expected {args_str} arguments, got {args}")
+            for i, arg in enumerate(args_str):
+                subs[arg] = args[i]
+
+            return eval(equation_str, subs)
+
+        self.equation_func = equation_func
+
+    def _function_to_call(self, *args) -> float:
+        return self.equation_func(*args)
+
+
+class MultiProperty(Property):
+    def __init__(self, data: dict) -> None:
+        """
+        Initialize the MultiProperty with a list of properties. This property is an
+        arbitrary combinations of other property types, each specified in a specific
+        validity range.
+
+        Parameters
+        ----------
+        properties : list of Property
+            List of Property instances.
+        """
+        super().__init__(data)
+        self.ranges = [PropertyFactory.create_property(prop) for prop in data["ranges"]]
+
+    def _function_to_call(self, *args) -> float:
+        """Return the value of the property based on the input arguments.
+
+        Parameters
+        ----------
+        *args : tuple
+            Arguments to pass to the property functions.
+
+        Returns
+        -------
+        float
+            Value of the property based on the input arguments.
+        """
+        for prop in self.ranges:
+            try:
+                return prop(*args)
+            except OutOfBoundsError:
+                continue
+        raise OutOfBoundsError("Input arguments are out of bounds for all ranges.")
+
+
+class PropertyFactory:
+    @staticmethod
+    def create_property(data: dict) -> Property:
+        """
+        Create a Property instance based on the type specified in the data.
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary containing property data.
+
+        Returns
+        -------
+        Property
+            An instance of a Property subclass.
+        """
+        if "type" not in data:
+            raise ConfigError("Property 'type' is missing in the data dictionary.")
+        prop_type = data["type"]
+        if prop_type == PropertyType.CONSTANT.value:
+            return ConstantProperty(data)
+        elif prop_type == PropertyType.POLYNOMIAL.value:
+            return PolynomialProperty(data)
+        elif prop_type == PropertyType.TABLE1D.value:
+            return Table1DProperty(data)
+        elif prop_type == PropertyType.EQUATION.value:
+            return EquationProperty(data)
+        elif prop_type == PropertyType.TABLE2D.value:
+            return Table2DProperty(data)
+        elif prop_type == PropertyType.FATIGUE.value:
+            return Fatigue(data)
+        elif prop_type == PropertyType.MULTI.value:
+            return MultiProperty(data)
+        elif prop_type == PropertyType.TABLE3D.value:
+            return Table3DProperty(data)
         else:
-            msg = "True stress-strain cycle is not implemented for: {}"
-            raise NotImplementedError(msg.format(self.name))
+            raise ConfigError(f"Unknown property type: {prop_type}")
 
-        return eps, eps_MP
 
-    def compute_tangent_young(self, sigma, T: float, dpa: float = 0) -> float:
+class Material:
+    def __init__(self, config_file: PathLike, name: str | None = None) -> None:
+        # Assign default name if not provided
+        if name is None:
+            filename = os.path.basename(config_file)
+            self.name = filename.split(".")[0]
+        else:
+            self.name = name
+        with open(config_file) as file:
+            config = yaml.safe_load(file)
+
+        # Mandatory properties
+        data = config["properties"]
+        self.nu = PropertyFactory.create_property(data["Poisson Ratio"])
+        self.E = PropertyFactory.create_property(data["Young Modulus"])
+        self.Keps = PropertyFactory.create_property(data["Keps"])
+        self.Kmu = PropertyFactory.create_property(data["Kmu"])
+        self.Keff_rec = PropertyFactory.create_property(data["Keff_rec"])
+        self.N = PropertyFactory.create_property(data["Fatigue"])
+        self.Sm = PropertyFactory.create_property(data["Sm"])
+        self.Sy_min = PropertyFactory.create_property(data["Min Yield Strength"])
+        self.Su_min = PropertyFactory.create_property(data["Min Tensile Strength"])
+
+        # Optional properties
+        if "Mean Yield Strength" in data:
+            self.Sy_moy = PropertyFactory.create_property(data["Mean Yield Strength"])
+        if "Se" in data:
+            self.Se = PropertyFactory.create_property(data["Se"])
+        if "Sd" in data:
+            self.Sd = PropertyFactory.create_property(data["Sd"])
+        if "Sd_nopeak" in data:
+            self.Sd_nopeak = PropertyFactory.create_property(data["Sd_nopeak"])
+        if "m" in data and "K" in data:
+            self.K = PropertyFactory.create_property(data["K"])
+            self.m = PropertyFactory.create_property(data["m"])
+
+        # monotonic stress-strain curve
+        self.monotonic_min_stress_strain = PropertyFactory.create_property(
+            data["Monotonic Min True Stress Strain"]
+        )
+
+    def cyclic_stress_strain(self, T: float, ds: float, dpa: float = 0) -> float:
+        """returns the plastic cyclic de_strain given a d_sigma (Pa) and T"""
+        E = self.E(T, dpa) * 1e-6  # convert from Pa to MPa
+        try:
+            K = self.K(T)
+            m = self.m(T)
+        except AttributeError:
+            raise ValueError("No cyclic stress-strain curve is defined")
+        ds = ds / 1e6  # convert from Pa to MPa
+
+        de_tot = 100 * ds * (2 * (1 + self.nu()) / (3 * E)) + (ds / K) ** (1 / m)
+
+        return de_tot / 100
+
+    def get_Keff(self, T: float, dpa: float, K: float) -> float:
+        """Compute the effective K value for the material at given temperature and dpa."""
+        # To check if it is the same for all materials
+        k_rect = self.Keff_rec(T, dpa)
+        return 1 + 2 * (K - 1) * (k_rect - 1)
+
+    def compute_tangent_young(self, sigma: float, T: float, dpa: float = 0) -> float:
         """Compute the tangent Young modulus for the material at given temperature and dpa.
 
         Parameters
@@ -430,8 +547,8 @@ class Material:
         interval = 0.001
         sigma_lower = sigma - interval * sigma
         sigma_upper = sigma + interval * sigma
-        eps_lower, _ = self.monotonic_stress_strain(sigma_lower, T, dpa)
-        eps_upper, _ = self.monotonic_stress_strain(sigma_upper, T, dpa)
+        eps_lower = self.monotonic_min_stress_strain(sigma_lower, T, dpa)
+        eps_upper = self.monotonic_min_stress_strain(sigma_upper, T, dpa)
         E_tangent = (sigma_upper - sigma_lower) / (eps_upper - eps_lower)
         return E_tangent
 
@@ -470,9 +587,9 @@ class Material:
 
         def _intersection(sigma, epsN, sigmaN, T, Kf=4):
             if monotonic:
-                eps = self.monotonic_stress_strain(sigma, T, dpa)[0]
+                eps = self.monotonic_min_stress_strain(sigma, T, dpa)
             else:
-                eps = self.cyclic_stress_strain(T, sigma) / 100
+                eps = self.cyclic_stress_strain(T, sigma)
             return _hyperbole(sigma, sigmaN, epsN, Kf) - eps
 
         delta_eps_N = delta_sigma_N / self.E(T)
@@ -485,65 +602,6 @@ class Material:
         )
 
         return sol.root
-
-
-def linear_interp(points, values, point):
-    return interpolate.interpn(points, values, point, bounds_error=False)
-
-
-def _interpolate_df(df):
-    """
-    Given a df return an interpolator for i, j values
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        data for interpolation.
-
-    Returns
-    -------
-    function
-        interpolator that takes (i, j) as argument.
-
-    """
-    points = []
-    values = []
-    xs = []
-    ys = []
-    try:
-        newcols = map(str, list(df.columns))
-    except ValueError:
-        # There are NaNs most probably
-        # print the problematic df for additional debug
-        print(df)
-        raise ValueError("Problem in the excel table cell values")
-    df.columns = newcols
-
-    for column in df.columns:
-        y = float(column)
-        ys.append(y)
-
-    for idx, row in df.iterrows():
-        value = []
-        x = float(idx)
-        xs.append(x)
-        value = row.values
-        values.append(value)
-
-    points = (xs, ys)
-    interpolator = partial(linear_interp, points, values)
-
-    # return Material._build_grid_interpolator(points, values)
-    return interpolator
-
-
-def _cleanNA(df):
-    # Drop all rows containing only NaN
-    df.dropna(axis=0, how="all", inplace=True)
-    # Drop all columns containing only NaN
-    df.dropna(axis=1, how="all", inplace=True)
-
-    return df
 
 
 def read_materials(mat_folder: PathLike) -> dict[str, Material]:
@@ -561,7 +619,7 @@ def read_materials(mat_folder: PathLike) -> dict[str, Material]:
     """
     materials = {}
     for file in os.listdir(mat_folder):
-        if file.endswith(".xlsx"):
+        if file.endswith(".yaml") or file.endswith(".yml"):
             logging.info("Reading {}".format(file))
             filepath = os.path.join(mat_folder, file)
             matname = file.split(".")[0]

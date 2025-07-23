@@ -47,7 +47,7 @@ class RCC_MR(Code):
         ds = f * refEvent.PQF
         T_ds = (T, ds)
         # de calculation
-        de1 = 100 * 2 / 3 * (1 + material.nu) * (ds / material.E(T))
+        de1 = 100 * 2 / 3 * (1 + material.nu()) * (ds / material.E(T))
 
         try:
             # tresca for shells Pm+0.67*(Pb+Pl-Pm)
@@ -55,7 +55,7 @@ class RCC_MR(Code):
             # de2 represents the "plastic" increase in strain due to the primary
             # stress range at the point examined, equal to tresca for shells
             de2 = material.cyclic_stress_strain(T, tresca) - 100 * 2 / 3 * (
-                1 + material.nu
+                1 + material.nu()
             ) * (tresca / material.E(T))
         except TypeError:
             # There are no primary stresses

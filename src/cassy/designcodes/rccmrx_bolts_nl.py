@@ -67,7 +67,7 @@ class RCCMRx_Bolts(BoltCode):
         T_ds = (ref_event.temp, ds_tot)
 
         # delta epsilon calculation
-        de1 = 100 * 2 / 3 * (1 + material.nu) * (ds_tot / material.E(ref_event.temp))
+        de1 = 100 * 2 / 3 * (1 + material.nu()) * (ds_tot / material.E(ref_event.temp))
         de2 = 0
         Keps = material.Keps(T_ds)[0]
         if Keps > 1:
