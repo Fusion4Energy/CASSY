@@ -248,18 +248,19 @@ class ExcelOutput:
 
         """
         # check that all the relevant values are floats and not arrays
-        cols = ["de1", "de2", "de3", "de4", "N", "Vj"]
-        for col in cols:
-            try:
-                fatigue_df[col] = fatigue_df[col].apply(lambda x: float(x[0]))
-            except TypeError:
-                pass
-        fatigue_df["de_tot"] = (
-            fatigue_df["de1"]
-            + fatigue_df["de2"]
-            + fatigue_df["de3"]
-            + fatigue_df["de4"]
-        )
+        if not bolt:
+            cols = ["de1", "de2", "de3", "de4", "N", "Vj"]
+            for col in cols:
+                try:
+                    fatigue_df[col] = fatigue_df[col].apply(lambda x: float(x[0]))
+                except TypeError:
+                    pass
+            fatigue_df["de_tot"] = (
+                fatigue_df["de1"]
+                + fatigue_df["de2"]
+                + fatigue_df["de3"]
+                + fatigue_df["de4"]
+            )
 
         # Copy the template sheet
         template_sheet = self.fatigue_sheet
