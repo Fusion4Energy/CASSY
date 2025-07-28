@@ -312,12 +312,13 @@ class BoltActionAssessor:
         # --- Stress induced by residual twisting
         #     torques Cr and Ct (B 3812.2.6.3) ---
         Cr = self.preload * (0.16 * bolt.p + 0.583 * bolt.f * bolt.df)
-        Ct = self.preload * 0.5 * bolt.f_prime * bolt.Dm
         # Shear stress in threads
         tau_Cr = 16 * Cr * bolt.dn / (pi * (bolt.dn**4 - bolt.d_vh**4))
-        try:
+
+        if isinstance(bolt, BoltGeom):
+            Ct = self.preload * 0.5 * bolt.f_prime * bolt.Dm
             tau_Ct = 16 * Ct / (pi * bolt.d1**3)
-        except ZeroDivisionError:
+        else:
             tau_Ct = 0  # in case of insert
 
         # --- Stress induced by transverse load T ---
