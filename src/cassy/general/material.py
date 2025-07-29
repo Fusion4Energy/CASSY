@@ -45,6 +45,10 @@ class Property(ABC):
         self.upper_bound = data.get("upper_bound", None)
         self.scale_result = float(data.get("scale_result", 1.0))  # Default scale is 1.0
 
+        # particular flags used in fatigue. Defined here for linter
+        self.mean_stress = None
+        self.ftype = None
+
     def __call__(self, *args) -> float:
         """
         Compute the property value and bounds.
@@ -405,7 +409,10 @@ class ConstantProperty(Property):
             The constant value.
         """
         super().__init__(data)
-        self.value = data["value"]
+        value = data["value"]
+        if value is None:
+            value = np.nan
+        self.value = float(value)
 
     def _function_to_call(self, *args) -> float:
         return self.value
@@ -652,7 +659,7 @@ class Material:
                 eps = self.cyclic_stress_strain(T, sigma)
             return _hyperbole(sigma, sigmaN, epsN, Kf) - eps
 
-        delta_eps_N = delta_sigma_N / self.E(T)
+        delta_eps_N = delta_sigma_N / self.E(T, dpa)
 
         sol = root_scalar(
             _intersection,

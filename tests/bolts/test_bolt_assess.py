@@ -15,7 +15,7 @@ class TestFlangeAssessment:
     @pytest.fixture
     def geometries(self):
         with as_file(
-            files(materials).joinpath("Inconel 718 (non leak-tight).xlsx")
+            files(materials).joinpath("Inconel 718 (non leak tight) SDC-IC.yaml")
         ) as mat_path:
             material = Material(mat_path)
         mat_lib = {"SS660 (non leak-tight)": material}
@@ -56,13 +56,14 @@ class TestFlangeAssessment:
         actions = flange_assessment.bolts_assessments[1]["Lift"].primary
         assert actions["N"] == 4
 
-    def test_assess(self, flange_assessment: FlangeAssessment):
+    def test_assess_RCC_MRx(self, flange_assessment: FlangeAssessment):
         # Test the assess method
         assessments = flange_assessment.assess()
         assert len(assessments) == 1
         assert assessments[1]["Immediate"].iloc[0]["ID"] == "NOS-I.1"
         assessments = flange_assessment.assess(insert=True)
 
+    def test_assess_SDC_IC(self, flange_assessment: FlangeAssessment):
         # Assess also SDC-IC
         flange_assessment.config.code = SDC_IC_Bolts()
         assessments = flange_assessment.assess()

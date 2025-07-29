@@ -129,13 +129,11 @@ class BoltActionAssessor:
                     # Rounded at the MPa (compute on mm so already MPa)
                     applied = int(assessed[i][0])
                     allowable = assessed[i][1]
-                    if allowable != "No limit":
-                        allowable = allowable[0]
-                        if not np.isnan(allowable):
-                            allowable = int(allowable * 1e-6)  # make sure is rounded
+                    # If allowable is nan, it means that there are no limits
+                    if allowable != "No limit" and not np.isnan(allowable):
+                        allowable = int(allowable * 1e-6)  # make sure is rounded
 
                     if allowable == "No limit" or np.isnan(allowable):
-                        # This happens also for interpolations out of range!
                         allowable = "No Limit"
                         res = "Assessment not required"
                         sm = None
@@ -193,12 +191,12 @@ class BoltActionAssessor:
             contains all infos of the performed assessment, Vj included.
 
         """
-        assert isinstance(
-            self.ref_event, BoltReferenceEventFatigue
-        ), "The reference event must be a BoltReferenceEventFatigue"
-        assert isinstance(
-            self.poa, BoltLikeGeom
-        ), "Only Bolts can be assessed for fatigue usage fraction"
+        assert isinstance(self.ref_event, BoltReferenceEventFatigue), (
+            "The reference event must be a BoltReferenceEventFatigue"
+        )
+        assert isinstance(self.poa, BoltLikeGeom), (
+            "Only Bolts can be assessed for fatigue usage fraction"
+        )
         assessment = code.computeVj(
             self,
             self.poa.material,

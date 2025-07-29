@@ -209,3 +209,9 @@ properties:
           [87, 87],
           [83, 83]
         ]
+  Se:
+    type: constant
+    value: null
+  Sd:
+    type: constant
+    value: null
