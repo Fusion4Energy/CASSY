@@ -73,7 +73,7 @@ class BoltActionAssessor:
         primary: pd.Series,
         all_loads: pd.Series,
         axs=["z", "x", "y"],
-    ):
+    ) -> tuple[dict[str, float], dict[str, float]]:
         """
         Generate a bolt action object starting from dfs
         """
@@ -87,9 +87,10 @@ class BoltActionAssessor:
         N = (
             abs(all_loads["F" + axs[0]]) - self.preload
         )  # subtract preload from all loads actions
+        N_fatigue = abs(all_loads["F" + axs[0]])  # preload is not included here
         M = (all_loads["M" + axs[1]] ** 2 + all_loads["M" + axs[2]] ** 2) ** 0.5
         T = (all_loads["F" + axs[1]] ** 2 + all_loads["F" + axs[2]] ** 2) ** 0.5
-        all_loads_dic = {"N": N, "M": M, "T": T}
+        all_loads_dic = {"N": N, "M": M, "T": T, "N_fatigue": N_fatigue}
 
         return primary_dic, all_loads_dic
 
@@ -231,27 +232,27 @@ class BoltActionAssessor:
 
         # --- Stress Induced by axial loads (SDC-IC B 3812.2.6.1) ---
         N = abs(actions["N"])
-        # mean tensile stress
+        # mean tensile stress [N/mm^2 = MPa]
         sigma_N = N / bolt.An
         if group == "all":
             self.sigma_tensile = self.preload / bolt.An + sigma_N
             sigma_N = self.sigma_tensile
-        # shear stress in the threads
+        # shear stress in the threads [N/mm^2 = MPa]
         if group == "all":
             tth_N = 2 * (N + self.preload) / (pi * bolt.df * bolt.Le_shear)
         else:
             tth_N = 2 * (N) / (pi * bolt.df * bolt.Le_shear)
-        # shear stress in the head
+        # shear stress in the head [N/mm^2 = MPa]
         if not isinstance(bolt, BoltGeom) or bolt.H == 0:
             th_N = 0
         else:  # There is washer
             th_N = N / (pi * bolt.d1 * bolt.H)
 
-        # Contact pressure between threads
+        # Contact pressure between threads [N*mm/mm^3 = MPa]
         pth_N = 4 * N * bolt.p / (pi * (bolt.d**2 - bolt.D**2) * bolt.Le)
 
         # Contact pressure between head and assembly, do not compute for insert
-        if isinstance(bolt, BoltGeom):
+        if isinstance(bolt, BoltGeom):  # [N/mm^2 = MPa]
             if bolt.B == 0:  # There is no washer
                 ph_N = 4 * (N + self.preload) / (pi * (bolt.a**2 - bolt.Dp**2))
             else:  # there is washer
@@ -260,8 +261,8 @@ class BoltActionAssessor:
                 ph_N = 4 * (N + self.preload) / (pi * (a_prime**2 - Dp_prime**2))
 
         # --- Stress Induced by bending moment M (SDC-IC B 3812.2.6.2) ---
-        M = actions["M"]
-        # bending stress
+        M = actions["M"] * 1000
+        # Easier to bring the Moment N/m -> N/mm to avoid errors with units
         sigma_M = M / bolt.Z  # used the one on the thread root section
         # shear stress in the threads
         tth_M = 2 * M / (pi * bolt.df**2 * bolt.Le_shear)
@@ -342,7 +343,8 @@ class BoltActionAssessor:
                     (th_N + th_M) ** 2 + tau_Ct**2
                 ) ** 0.5
             applicables["Stress intensity range"] = (
-                (sigma_N + sigma_M) ** 2 + 3 * (tau_T) ** 2
+                # sigma N needs to be recomputed or it will have the preload added
+                (actions["N_fatigue"] / bolt.An + sigma_M) ** 2 + 3 * (tau_T) ** 2
             ) ** 0.5
 
         applicables["Avg contact pressure betweeen threads"] = pth_M + pth_N

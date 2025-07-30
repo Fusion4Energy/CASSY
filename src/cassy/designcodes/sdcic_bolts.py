@@ -93,7 +93,7 @@ class SDC_IC_Bolts(BoltCode):
             ds = material.compute_delta_sigma_Neuber(
                 ref_event.temp, ds_n, boltAction.poa.KF
             )
-        except ValueError:
+        except NotImplementedError:
             # Correction implemented in case true stress-strain curve is not
             # available
             ds = boltAction.poa.KF * ds_n
@@ -122,6 +122,8 @@ class SDC_IC_Bolts(BoltCode):
                 SA = ds / 2
                 # Sigma pre is used as max mean stress
                 N = material.N(ref_event.temp, SA, s_pre)
+                # update ds_bar as it will be the one displayed
+                ds_bar = ds
             else:
                 T_s = (ref_event.temp, ds_bar / 2)  # use the amplitude
                 N = material.N(T_s)
