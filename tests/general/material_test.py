@@ -75,8 +75,8 @@ def test_Inconel_SDC_IC():
     assert material.Sy_min(350, 1) == 791e6
     assert material.Smb(300, 0) == 425e6
     assert material.Smb(300, 1) == 368e6
-    assert material.N(300, 220e6, 500e6) > 5e5
-    assert material.N(300, 103e6, 1000e6) == 2e6
+    assert material.N(300, 220, 500) > 5e5
+    assert material.N(300, 103, 1000) == 2e6
     assert material.Su_min(300, 1) == 994e6
 
 

@@ -324,7 +324,7 @@ class Fatigue(Property):
         # table values.
         self.lower_bound = [min(T), None]
         self.upper_bound = [max(T), None]
-        if mean_stress:
+        if self.mean_stress:
             keys = [float(x) for x in tables.keys()]
             mean_stresses = [0]
             mean_stresses.extend(keys)
