@@ -28,7 +28,7 @@ class PropertyType(Enum):
 
 
 class Property(ABC):
-    def __init__(self, data: dict) -> None:
+    def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the Property with a dictionary.
 
@@ -36,6 +36,10 @@ class Property(ABC):
         ----------
         dict : dict
             Dictionary containing property data.
+        name : str
+            Name of the property.
+        material_name : str
+            Name of the material this property belongs to.
         """
         if "type" not in data:
             raise ConfigError("Property 'type' is missing in the data dictionary.")
@@ -48,6 +52,8 @@ class Property(ABC):
         # particular flags used in fatigue. Defined here for linter
         self.mean_stress = None
         self.ftype = None
+        self.name = name
+        self.material_name = material_name
 
     def __call__(self, *args) -> float:
         """
@@ -65,6 +71,7 @@ class Property(ABC):
             ):
                 raise OutOfBoundsError(
                     f"Argument {arg} is below the lower bound {self.lower_bound[i]}."
+                    f" Property: {self.name}, Material: {self.material_name}"
                 )
             if (
                 self.upper_bound is not None
@@ -73,6 +80,7 @@ class Property(ABC):
             ):
                 raise OutOfBoundsError(
                     f"Argument {arg} is above the upper bound {self.upper_bound[i]}."
+                    f" Property: {self.name}, Material: {self.material_name}"
                 )
 
         # if in boounds, safely call the function
@@ -97,24 +105,24 @@ class Property(ABC):
 
 
 class NotImplementedProperty(Property):
-    def __init__(self, name: str, material: str) -> None:
+    def __init__(self, name: str, material_name: str) -> None:
         """
         Placeholder for properties that are not implemented. Helps keep clean the
         intellisense.
         """
         self.name = name
-        self.material = material
+        self.material_name = material_name
         self.lower_bound = None
         self.upper_bound = None
 
     def _function_to_call(self, *args) -> float:
         raise NotImplementedError(
-            f"Property {self.name} not implemented for {self.material}"
+            f"Property {self.name} not implemented for {self.material_name}"
         )
 
 
 class Table1DProperty(Property):
-    def __init__(self, data: dict) -> None:
+    def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the Table1DProperty with a table of values.
 
@@ -122,8 +130,12 @@ class Table1DProperty(Property):
         ----------
         data : dict
             Dictionary containing table data.
+        name : str
+            Name of the property.
+        material_name : str
+            Name of the material this property belongs to.
         """
-        super().__init__(data)
+        super().__init__(data, name, material_name)
         self.x = data["values"]["x"]
         self.y = data["values"]["y"]
         # override the lower and upper bounds
@@ -146,7 +158,7 @@ class Table1DProperty(Property):
 
 
 class Table2DProperty(Property):
-    def __init__(self, data: dict) -> None:
+    def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the Table2DProperty with a table of values.
 
@@ -154,8 +166,12 @@ class Table2DProperty(Property):
         ----------
         data : dict
             Dictionary containing table data.
+        name : str
+            Name of the property.
+        material_name : str
+            Name of the material this property belongs to.
         """
-        super().__init__(data)
+        super().__init__(data, name, material_name)
         # Ensure that x and y are read as floats using np arrays
         self.x = np.array(data["values"]["x"], dtype=float)
         self.y = np.array(data["values"]["y"], dtype=float)
@@ -200,7 +216,7 @@ class Table2DProperty(Property):
 
 
 class Table3DProperty(Property):
-    def __init__(self, data: dict) -> None:
+    def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the Table3DProperty with a table of values.
 
@@ -208,8 +224,12 @@ class Table3DProperty(Property):
         ----------
         data : dict
             Dictionary containing table data.
+        name : str
+            Name of the property.
+        material_name : str
+            Name of the material this property belongs to.
         """
-        super().__init__(data)
+        super().__init__(data, name, material_name)
         self.scale_x = float(data.get("scale_x", 1.0))
         self.scale_y = float(data.get("scale_y", 1.0))
         self.scale_z = float(data.get("scale_z", 1.0))
@@ -264,7 +284,7 @@ class Table3DProperty(Property):
 
 
 class Fatigue(Property):
-    def __init__(self, data: dict) -> None:
+    def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the Fatigue property with a table of values.
 
@@ -272,8 +292,12 @@ class Fatigue(Property):
         ----------
         data : dict
             Dictionary containing fatigue data.
+        name : str
+            Name of the property.
+        material_name : str
+            Name of the material this property belongs to.
         """
-        super().__init__(data)
+        super().__init__(data, name, material_name)
         self.scale_x = float(data.get("scale_x", 1.0))
         self.scale_y = float(data.get("scale_y", 1.0))
         self.mean_stress = data.get("mean_stress", False)
@@ -325,11 +349,9 @@ class Fatigue(Property):
         self.lower_bound = [min(T), None]
         self.upper_bound = [max(T), None]
         if self.mean_stress:
-            keys = [float(x) for x in tables.keys()]
-            mean_stresses = [0]
-            mean_stresses.extend(keys)
-            self.lower_bound.append(min(mean_stresses))
-            self.upper_bound.append(max(mean_stresses))
+            # do not put limits for mean stress
+            self.lower_bound.append(None)
+            self.upper_bound.append(None)
 
     def _function_to_call(
         self, x: float, y: float, s_mean: float | None = None
@@ -359,15 +381,19 @@ class Fatigue(Property):
                     interpolator = interpolator_s
                     break
             if interpolator is None:
-                raise OutOfBoundsError(
-                    f"No interpolator found for mean stress {s_mean}"
+                # insteading of raising an error, we can use the last interpolator
+                # with a warning
+                logging.warning(
+                    f"Mean stress {s_mean} is above the maximum defined in the "
+                    f"fatigue table. Using the last interpolator."
                 )
+                interpolator = interpolator_s
 
         return interpolator(x * self.scale_x, y * self.scale_y)
 
 
 class PolynomialProperty(Property):
-    def __init__(self, data: dict) -> None:
+    def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the PolynomialProperty with coefficients.
 
@@ -375,8 +401,12 @@ class PolynomialProperty(Property):
         ----------
         coeff : list of float
             Coefficients of the polynomial.
+        data : dict
+            Dictionary containing polynomial data.
+        name : str
+            Name of the property.
         """
-        super().__init__(data)
+        super().__init__(data, name, material_name)
         self.coeff = data["coefficients"]
 
     def _function_to_call(self, *args) -> float:
@@ -399,7 +429,7 @@ class PolynomialProperty(Property):
 
 
 class ConstantProperty(Property):
-    def __init__(self, data: dict) -> None:
+    def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the ConstantProperty with a constant value.
 
@@ -407,8 +437,12 @@ class ConstantProperty(Property):
         ----------
         value : float
             The constant value.
+        data : dict
+            Dictionary containing constant data.
+        name : str
+            Name of the property.
         """
-        super().__init__(data)
+        super().__init__(data, name, material_name)
         value = data["value"]
         if value is None:
             value = np.nan
@@ -419,16 +453,20 @@ class ConstantProperty(Property):
 
 
 class EquationProperty(Property):
-    def __init__(self, data: dict) -> None:
+    def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the EquationProperty with an equation function.
 
         Parameters
         ----------
-        equation_func : Callable
-            Function that computes the property value based on arguments.
+        data : dict
+            Dictionary containing equation data.
+        name : str
+            Name of the property.
+        material_name : str
+            Name of the material this property belongs to.
         """
-        super().__init__(data)
+        super().__init__(data, name, material_name)
         equation_str = data["equation"]
         args_str = data["args"]
         subs = MATH_SUBSTITUTIONS.copy()
@@ -462,11 +500,30 @@ class MultiProperty(Property):
             List of Property instances.
         """
         data = property_dictionary[property_name]
-        super().__init__(data)
+        super().__init__(data, property_name, material_name)
         self.ranges = [
             PropertyFactory.create_property({"A": prop}, "A", material_name)
             for prop in data["ranges"]
         ]
+
+        # go trough the ranges and find the maximum bounds
+        for prop in self.ranges:
+            if prop.lower_bound is not None:
+                if self.lower_bound is None:
+                    self.lower_bound = prop.lower_bound
+                else:
+                    self.lower_bound = [
+                        min(self.lower_bound[i], prop.lower_bound[i])
+                        for i in range(len(self.lower_bound))
+                    ]
+            if prop.upper_bound is not None:
+                if self.upper_bound is None:
+                    self.upper_bound = prop.upper_bound
+                else:
+                    self.upper_bound = [
+                        max(self.upper_bound[i], prop.upper_bound[i])
+                        for i in range(len(self.upper_bound))
+                    ]
 
     def _function_to_call(self, *args) -> float:
         """Return the value of the property based on the input arguments.
@@ -486,7 +543,10 @@ class MultiProperty(Property):
                 return prop(*args)
             except OutOfBoundsError:
                 continue
-        raise OutOfBoundsError("Input arguments are out of bounds for all ranges.")
+        raise OutOfBoundsError(
+            f"Input arguments {args} are out of bounds for all ranges."
+            f" Property: {self.name}, Material: {self.material_name}"
+        )
 
 
 class PropertyFactory:
@@ -516,21 +576,21 @@ class PropertyFactory:
             )
         prop_type = data["type"]
         if prop_type == PropertyType.CONSTANT.value:
-            return ConstantProperty(data)
+            return ConstantProperty(data, property_name, material_name)
         elif prop_type == PropertyType.POLYNOMIAL.value:
-            return PolynomialProperty(data)
+            return PolynomialProperty(data, property_name, material_name)
         elif prop_type == PropertyType.TABLE1D.value:
-            return Table1DProperty(data)
+            return Table1DProperty(data, property_name, material_name)
         elif prop_type == PropertyType.EQUATION.value:
-            return EquationProperty(data)
+            return EquationProperty(data, property_name, material_name)
         elif prop_type == PropertyType.TABLE2D.value:
-            return Table2DProperty(data)
+            return Table2DProperty(data, property_name, material_name)
         elif prop_type == PropertyType.FATIGUE.value:
-            return Fatigue(data)
+            return Fatigue(data, property_name, material_name)
         elif prop_type == PropertyType.MULTI.value:
             return MultiProperty(property_dictionary, property_name, material_name)
         elif prop_type == PropertyType.TABLE3D.value:
-            return Table3DProperty(data)
+            return Table3DProperty(data, property_name, material_name)
         else:
             raise ConfigError(f"Unknown property type: {prop_type}")
 
@@ -648,8 +708,13 @@ class Material:
         float
             resulting equivalent stress range after Neuber
         """
+        if monotonic:
+            s_lower_bound = self.monotonic_min_stress_strain.lower_bound[0]
+            s_upper_bound = self.monotonic_min_stress_strain.upper_bound[0]
 
         def _hyperbole(x, x1, y1, Kf=4):
+            if x == 0:
+                return np.inf
             return Kf**2 * x1 * y1 / x
 
         def _intersection(sigma, epsN, sigmaN, T, Kf=4):
@@ -657,15 +722,25 @@ class Material:
                 eps = self.monotonic_min_stress_strain(sigma, T, dpa)
             else:
                 eps = self.cyclic_stress_strain(T, sigma)
+            if np.isnan(eps):
+                # just take a large value
+                eps = np.inf
             return _hyperbole(sigma, sigmaN, epsN, Kf) - eps
 
         delta_eps_N = delta_sigma_N / self.E(T, dpa)
 
+        if monotonic:
+            bounds = [
+                s_lower_bound,
+                s_upper_bound,
+            ]
+        else:
+            bounds = [0, 2000 * 1e6]  # should be enough for all application ranges
         sol = root_scalar(
             _intersection,
             args=(delta_eps_N, delta_sigma_N, T, Kf),
-            bracket=[0, 2000 * 1e6],  # should be enough for all application ranges
-            method="bisect",
+            bracket=bounds,
+            method="brentq",
         )
 
         return sol.root

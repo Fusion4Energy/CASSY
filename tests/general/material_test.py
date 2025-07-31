@@ -61,6 +61,22 @@ class TestMaterial:
         """Test that the cyclic_stress_strain method accepts a tuple for T and ds."""
         assert material.Sd((250, 4)) == 435e6
 
+    def test_compute_delta_sigma_Neuber(self, material: Material):
+        # if the stress is low enough, the result should be the same as the elastic one
+        T = 50
+        dpa = 0
+        sigma = 10e6
+
+        sigma_plastic = material.compute_delta_sigma_Neuber(T, sigma, 1, 0)
+        eps_plastic = material.cyclic_stress_strain(T, sigma_plastic)
+        assert pytest.approx(eps_plastic, rel=1e-1) == sigma / material.E(T, dpa)
+
+        sigma_plastic = material.compute_delta_sigma_Neuber(
+            T, sigma, 1, 0, monotonic=True
+        )
+        eps_plastic = material.monotonic_min_stress_strain(sigma_plastic, T, dpa)
+        assert pytest.approx(eps_plastic, rel=1e-1) == sigma / material.E(T, dpa)
+
 
 def test_Inconel_SDC_IC():
     """

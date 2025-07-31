@@ -83,6 +83,27 @@ properties:
         [414, 351, 351],
         [408, 347, 347]
       ]
+  # For non leak-tight Sm and Smb are considered the same as in the appendix only Sm for
+  # plates is given.
+  Sm: 
+    type: table2D
+    scale_result: 1e6 # to convert MPa to Pa
+    values:
+      x: [20, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500] # degrees Celsius
+      y: [0, 0.01, 10] # DPA
+      vals: [
+        [425, 401, 401],
+        [425, 398, 398],
+        [425, 391, 391],
+        [425, 386, 386],
+        [425, 380, 380],
+        [425, 374, 374],
+        [425, 368, 368],
+        [425, 362, 362],
+        [420, 357, 357],
+        [414, 351, 351],
+        [408, 347, 347]
+      ]
   Fatigue:
     type: fatigue
     ftype: stress

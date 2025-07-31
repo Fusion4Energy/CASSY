@@ -175,7 +175,7 @@ class IC6113(Rule):
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
-            allowable1 = material.Smb(T_dpa)
+            allowable1 = material.Sm(T_dpa)
         elif service_lvl == "D":
             allowable1 = "No limit"
         else:
@@ -220,12 +220,12 @@ class IC6121_1_3_1(Rule):
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
-            allowable1 = material.Smb(T_dpa)
+            allowable1 = material.Sm(T_dpa)
             allowable2 = min(
                 0.9 * material.Sy_min(T_dpa), 0.67 * material.Su_min(T_dpa)
             )
         elif service_lvl == "D":
-            allowable1 = 2 * material.Smb(T_dpa)
+            allowable1 = 2 * material.Sm(T_dpa)
             allowable2 = "No limit"
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
@@ -268,10 +268,10 @@ class IC6121_1_3_2(Rule):
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
-            allowable1 = 1.5 * material.Smb(T_dpa)
+            allowable1 = 1.5 * material.Sm(T_dpa)
             allowable2 = min(1.2 * material.Sy_min(T_dpa), 0.9 * material.Su_min(T_dpa))
         elif service_lvl == "D":
-            allowable1 = 3 * material.Smb(T_dpa)
+            allowable1 = 3 * material.Sm(T_dpa)
             allowable2 = "No limit"
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
@@ -319,7 +319,7 @@ class IC6121_1_3_3(Rule):
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
-            allowable1 = allowable2 = 0.6 * material.Smb(T_dpa)
+            allowable1 = allowable2 = 0.6 * material.Sm(T_dpa)
             allowable3 = allowable4 = 0.6 * material.Sy_min(T_dpa)
         elif service_lvl == "D":
             allowable1 = "No limit"
@@ -379,7 +379,7 @@ class IC6121_1_3_3_insert(Rule):
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
-            allowable1 = 0.6 * material.Smb(T_dpa)
+            allowable1 = 0.6 * material.Sm(T_dpa)
             allowable2 = 0.6 * material.Sy_min(T_dpa)
         elif service_lvl == "D":
             allowable1 = "No limit"

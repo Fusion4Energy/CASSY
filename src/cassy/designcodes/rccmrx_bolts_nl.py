@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from cassy.bolts.code_assessor import BoltActionAssessor
+import logging
+
 from cassy.designcodes.codes import BoltCode, Rule
 from cassy.general.material import Material
 
@@ -75,19 +77,37 @@ class RCCMRx_Bolts(BoltCode):
             * (ds_tot / material.E(ref_event.temp, ref_event.dpa))
         )
         de2 = 0
-        Keps = material.Keps(T_ds)
-        if Keps > 1:
+        try:
+            Keps = material.Keps(T_ds)
+            Kmu = material.Kmu(T_ds)
             de3 = (de1 + de2) * (Keps - 1)
-        else:
-            de3 = 0
-        Kmu = material.Kmu(T_ds)
-        if Kmu > 1:
             de4 = de1 * (Kmu - 1)
-        else:
+        except NotImplementedError:
+            logging.warning(
+                'Keps, Kmu not implemented for material "%s"', material.name
+            )
+            logging.warning("assuming de3 = 0, de4 = 0")
+            de3 = 0
             de4 = 0
+
         detot = de1 + de2 + de3 + de4
 
-        N = material.N((ref_event.temp, detot))
+        if material.N.ftype == "strain":
+            N = material.N((ref_event.temp, detot))
+        elif material.N.ftype == "stress":
+            logging.warning(
+                "stress based fatigue in RCC-MRx is not orthodox, check results carefully"
+            )
+            if material.N.mean_stress:
+                SA = ds_tot / 2
+                s_tens_sust = boltAction.sigma_tensile
+                ds_tens = boltAction.applicable_stresses["all"]["Primary stress"]
+                s_pre = s_tens_sust + ds_tens
+                # Sigma pre is used as max mean stress
+                N = material.N(ref_event.temp, SA, s_pre)
+            else:
+                T_s = (ref_event.temp, ds_tot / 2)  # use the amplitude
+                N = material.N(T_s)
 
         return {
             "de1": de1,
