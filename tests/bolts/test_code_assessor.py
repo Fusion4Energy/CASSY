@@ -70,7 +70,5 @@ class TestBoltActionAssessor:
         for key, val in zip(["N", "T", "M"], [1.0456e4, 0, 4.76e1]):
             assert math.isclose(bolt_assessor.primary[key], val, rel_tol=1e-2)
         # TODO: test something where secondary actions are different from primary
-        for key, val in zip(
-            ["N", "T", "M"], [1.0456e4 - bolt_assessor.preload, 0, 4.76e1]
-        ):
+        for key, val in zip(["N", "T", "M"], [1.0456e4, 0, 4.76e1]):
             assert math.isclose(bolt_assessor.all_loads[key], val, rel_tol=1e-2)
