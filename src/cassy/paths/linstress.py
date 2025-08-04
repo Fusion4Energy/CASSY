@@ -886,7 +886,7 @@ class ReferenceEvent:
                     new_vol = new_vol + s
         else:
             if vol is None and ine is None:
-                return None  # there are no loads!
+                return 0  # there are no loads!
             else:
                 new_vol = vol
         vol = new_vol

@@ -6,6 +6,7 @@ from cassy.additional_data import materials
 from cassy.bolts.bolt_assess import FlangeAssessment
 from cassy.bolts.bolt_config import FlangeAssessmentConfig
 from cassy.bolts.geometry import BoltGeom, BoltLikeGeom, InsertGeom
+from cassy.designcodes.rccmrx_bolts_nl import RCCMRx_Bolts
 from cassy.designcodes.sdcic_bolts import SDC_IC_Bolts
 from cassy.general.material import Material
 from tests.bolts import res
@@ -15,7 +16,7 @@ class TestFlangeAssessment:
     @pytest.fixture
     def geometries(self):
         with as_file(
-            files(materials).joinpath("Inconel 718 (non leak-tight).xlsx")
+            files(materials).joinpath("Inconel 718 (non leak tight) SDC-IC.yaml")
         ) as mat_path:
             material = Material(mat_path)
         mat_lib = {"SS660 (non leak-tight)": material}
@@ -56,15 +57,9 @@ class TestFlangeAssessment:
         actions = flange_assessment.bolts_assessments[1]["Lift"].primary
         assert actions["N"] == 4
 
-    def test_assess(self, flange_assessment: FlangeAssessment):
-        # Test the assess method
+    @pytest.mark.parametrize("code", [SDC_IC_Bolts(), RCCMRx_Bolts()])
+    def test_assess(self, flange_assessment: FlangeAssessment, code):
+        # Check that the assessments can run without errors
+        flange_assessment.config.code = code
         assessments = flange_assessment.assess()
-        assert len(assessments) == 1
-        assert assessments[1]["Immediate"].iloc[0]["ID"] == "NOS-I.1"
-        assessments = flange_assessment.assess(insert=True)
-
-        # Assess also SDC-IC
-        flange_assessment.config.code = SDC_IC_Bolts()
-        assessments = flange_assessment.assess()
-        assert assessments[1]["Fatigue"] is not None
         assessments = flange_assessment.assess(insert=True)

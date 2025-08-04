@@ -8,10 +8,12 @@ Created on Tue Nov  3 12:16:20 2020
 import math
 
 from cassy.designcodes.codes import Code, Rule
+from cassy.general.material import Material
+from cassy.paths.linstress import ReferenceEvent
 
 
 class SDC_IC(Code):
-    def __init__(self, failure_modes=None):
+    def __init__(self, failure_modes: list = None):
         super().__init__(failure_modes=failure_modes, name="SDC-IC")
         # --- Initiate all elastic rules, negligible creep ---
         # M-Type
@@ -25,7 +27,9 @@ class SDC_IC(Code):
         self.damage_types = ("Immediate", "Ratcheting")
         self.fatigue = True
 
-    def computeVj(self, refEvent, material, T, dpa):
+    def computeVj(
+        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
+    ) -> dict:
         """
         Asses the Rule
         Parameters
@@ -52,15 +56,15 @@ class SDC_IC(Code):
         ds = f * refEvent.PQF
         T_ds = (T, ds)
         # de calculation
-        de1 = 100 * 2 / 3 * (1 + material.nu) * (ds / material.E(T))
+        de1 = 100 * 2 / 3 * (1 + material.nu()) * (ds / material.E(T, dpa))
         try:
             # tresca for shells Pm+0.67*(Pb+Pl-Pm)
             tresca = refEvent.tresca
             # de2 represents the "plastic" increase in strain due to the primary
             # stress range at the point examined, equal to tresca for shells
             de2 = material.cyclic_stress_strain(T, tresca) - 100 * 2 / 3 * (
-                1 + material.nu
-            ) * (tresca / material.E(T))
+                1 + material.nu()
+            ) * (tresca / material.E(T, dpa))
         except TypeError:
             # there is no primary stress
             de2 = 0
@@ -74,9 +78,9 @@ class SDC_IC(Code):
         # ordinates (epsilon) by f factor
         detot = detot / f
         # total allowable cycles calculation
-        if material.fatigue_curve == "strain":
+        if material.N.ftype == "strain":
             N_all = material.N((T, detot))
-        elif material.fatigue_curve == "stress":
+        elif material.N.ftype == "stress":
             # TODO not implemented yet!
             raise ValueError("stress based curves need to be implemented")
 
@@ -93,13 +97,20 @@ class SDC_IC(Code):
 
 
 class IC3121_1_1_2a(Rule):
-    def __init__(self):
+    def __init__(self) -> None:
         self.damage_type = "Immediate"
         self.ref = "IC 3121.1.1.2a"
         self.description = ["Primary membrane", "Primary Membrane plus Bending"]
         # self.equation = '$$A_{b}$$ (P_L+ P_b ) ̅≤〖K_eff S〗_m (〖T_m,Φt〗_m)'
 
-    def assess(self, refEvent, material, T, dpa, K=1.5):
+    def assess(
+        self,
+        refEvent: ReferenceEvent,
+        material: Material,
+        T: float,
+        dpa: float,
+        K: float = 1.5,
+    ) -> list:
         """
         Assess the rule
 
@@ -128,31 +139,31 @@ class IC3121_1_1_2a(Rule):
         n = refEvent.n_welding
         # select allowable
         if service_lvl == "A":
-            allowable1 = n * material.Sm_irr(T_dpa)
+            allowable1 = n * material.Sm(T_dpa)
         elif service_lvl == "C":
-            allowable1 = min(1.2 * n * material.Sm_irr(T_dpa), material.Sy_min(T_dpa))
+            allowable1 = min(1.2 * n * material.Sm(T_dpa), material.Sy_min(T_dpa))
         elif service_lvl == "D":
-            allowable1 = min(
-                2.4 * n * material.Sm_irr(T_dpa), 0.7 * material.Su_min(T_dpa)
-            )
+            allowable1 = min(2.4 * n * material.Sm(T_dpa), 0.7 * material.Su_min(T_dpa))
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
 
         stress1 = refEvent.Pm
         stress2 = refEvent.PmPb
-        allowable2 = material.get_Keff(T_dpa, K) * allowable1
+        allowable2 = material.get_Keff(T, dpa, K) * allowable1
 
         return [(stress1, allowable1), (stress2, allowable2)]
 
 
 class IC3121_2_1(Rule):
-    def __init__(self):
+    def __init__(self) -> None:
         self.damage_type = "Immediate"
         self.ref = "IC 3121.2.1"
         self.description = ["Primary plus secondary membrane stress"]
         # self.equation = '$$A_{b}$$ (P_L+ P_b ) ̅≤〖K_eff S〗_m (〖T_m,Φt〗_m)'
 
-    def assess(self, refEvent, material, T, dpa):
+    def assess(
+        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
+    ) -> list:
         """
         Assess the rule
 
@@ -193,7 +204,7 @@ class IC3121_2_1(Rule):
 
 
 class IC3121_3_1(Rule):
-    def __init__(self):
+    def __init__(self) -> None:
         self.damage_type = "Immediate"
         self.ref = "IC 3121.3.1"
         self.description = [
@@ -202,7 +213,9 @@ class IC3121_3_1(Rule):
         ]
         # self.equation = '$$A_{b}$$ (P_L+ P_b ) ̅≤〖K_eff S〗_m (〖T_m,Φt〗_m)'
 
-    def assess(self, refEvent, material, T, dpa):
+    def assess(
+        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
+    ) -> list:
         """
         Assess the rule
 
@@ -247,13 +260,20 @@ class IC3121_3_1(Rule):
 
 
 class IC3131_1_2(Rule):
-    def __init__(self):
+    def __init__(self) -> None:
         self.damage_type = "Ratcheting"
         self.ref = "IC 3131.1"
         self.description = ["3Sm rule", "Efficiency Index", "Efficiency Index"]
         # self.equation = '$$A_{b}$$ (P_L+ P_b ) ̅≤〖K_eff S〗_m (〖T_m,Φt〗_m)'
 
-    def assess(self, refEvent, material, T, dpa, K=1.5):
+    def assess(
+        self,
+        refEvent: ReferenceEvent,
+        material: Material,
+        T: float,
+        dpa: float,
+        K: float = 1.5,
+    ) -> list:
         """
         Assess the rule
 
@@ -281,7 +301,7 @@ class IC3131_1_2(Rule):
         # ------IC 3131.1.2 '3Sm Rule'-------#
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
-            allowable1 = 3 * material.Sm_irr(T_dpa)
+            allowable1 = 3 * material.Sm(T_dpa)
         elif service_lvl == "D":
             # warnings.warn(service_lvl +
             #               ' is not an admissible service level')
@@ -294,24 +314,32 @@ class IC3131_1_2(Rule):
         # -----IC 3131.1.1 'Efficiency Index Diagram'------#
         # Operating period with secondary membrane stress
         # thermal loads are considered mandatory for ratcheting
-        sigma_nm = material.Nueber(T, refEvent.PmQm_ns)["stress"]
-        sigma_nmb = material.Nueber(T, refEvent.PmPbQm_ns)["stress"]
-        Em = material.Nueber(T, refEvent.PmQm_ns)["Young"]
-        Emb = material.Nueber(T, refEvent.PmPbQm_ns)["Young"]
+        sigma_nm = material.compute_delta_sigma_Neuber(
+            T, refEvent.PmQm_ns, 1, dpa=dpa, monotonic=True
+        )
+        sigma_nmb = material.compute_delta_sigma_Neuber(
+            T, refEvent.PmPbQm_ns, 1, dpa=dpa, monotonic=True
+        )
+        Em = material.compute_tangent_young(sigma_nm, T, dpa=dpa)
+        Emb = material.compute_tangent_young(sigma_nmb, T, dpa=dpa)
 
         try:
             sigma_mb = (
                 0.5 * (refEvent.PmPb_ns + sigma_nmb)
-                + (3 * material.E(T) / Emb) * refEvent.PmPbs
+                + (3 * material.E(T, dpa) / Emb) * refEvent.PmPbs
             )
             sigma_m = (
                 0.5 * (refEvent.Pm_ns + sigma_nm)
-                + (3 * material.E(T) / Em) * refEvent.Pms
+                + (3 * material.E(T, dpa) / Em) * refEvent.Pms
             )
 
         except TypeError:  # no overstress of short duration
-            sigma_nm = material.Nueber(T, refEvent.PmQm)["stress"]
-            sigma_nmb = material.Nueber(T, refEvent.PmPbQm)["stress"]
+            sigma_nm = material.compute_delta_sigma_Neuber(
+                T, refEvent.PmQm, 1, dpa=dpa, monotonic=True
+            )
+            sigma_nmb = material.compute_delta_sigma_Neuber(
+                T, refEvent.PmPbQm, 1, dpa=dpa, monotonic=True
+            )
             sigma_mb = 0.5 * (refEvent.PmPb + sigma_nmb)
             sigma_m = 0.5 * (refEvent.Pm + sigma_nm)
 
@@ -340,7 +368,7 @@ class IC3131_1_2(Rule):
 
         stress2 = p1
         stress3 = p2
-        allowable2 = 1.3 * material.Sm_irr(T_dpa)
+        allowable2 = 1.3 * material.Sm(T_dpa)
         allowable3 = 1.5 * allowable2
 
         # # -------Bree diagram Rule (IC 3131.1.2)--------- #

@@ -13,6 +13,7 @@ from cassy.auxiliary.types import PathLike
 from cassy.bolts.bolt_assess import FlangeAssessment
 from cassy.bolts.bolt_config import FlangeAssessmentConfig
 from cassy.bolts.geometry import read_geometries
+from cassy.designcodes.sdcic_bolts import SDC_IC_Bolts
 from cassy.general.folder_tree import BoltsFolderTree
 from cassy.general.material import read_materials
 from cassy.office.word_helper import WordOutput
@@ -23,6 +24,7 @@ MATERIALS_PATH = files(materials)
 
 # Templates
 TEMPLATE_BOLT = files(templates).joinpath("template bolt.xlsx")
+TEMPLATE_BOLT_SDC_IC = files(templates).joinpath("template sdic_bolt.xlsx")
 TEMPLATE_WORD = files(templates).joinpath("template bolts.docx")
 
 # Sheet additional data
@@ -83,10 +85,16 @@ def run_bolts(
                 shutil.rmtree(assessment_folder)
             os.mkdir(assessment_folder)
 
+            # select the correct template
+            if isinstance(flange_assessment.config.code, SDC_IC_Bolts):
+                template = TEMPLATE_BOLT_SDC_IC
+            else:
+                template = TEMPLATE_BOLT
+
             recap_immediate, recap_fatigue = flange_assessment.print_assessment(
                 assessment_folder,
                 app,
-                TEMPLATE_BOLT,
+                template,
                 img_folder=folder_tree.img_folder,
                 fatigue=fatigue,
                 insert=True,

@@ -456,10 +456,15 @@ class FlangeAssessment:
                     slvl = ""
                     rule = ""
 
+            # recover the bolt geometry
+            geom = self.config.bolts_spec.loc[boltID, "Geom data"]
+            if isinstance(geom, pd.DataFrame) or isinstance(geom, pd.Series):
+                geom = geom.values[0]
+
             row = {
                 "Submodel": self.config.name,
                 "Path": str(boltID),
-                "Path Type": "N.A.",
+                "Path Type": str(geom),
                 "Assessment": ass,
                 "Reference Event": re,
                 "Service lvl": slvl,

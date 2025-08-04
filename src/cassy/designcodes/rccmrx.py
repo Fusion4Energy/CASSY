@@ -7,6 +7,8 @@
 import math
 
 from cassy.designcodes.codes import Code, Rule
+from cassy.general.material import Material
+from cassy.paths.linstress import ReferenceEvent
 
 
 class RCC_MRx(Code):
@@ -23,7 +25,9 @@ class RCC_MRx(Code):
         self.damage_types = ("Immediate", "Ratcheting")
         self.fatigue = True
 
-    def computeVj(self, refEvent, material, T, dpa):
+    def computeVj(
+        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
+    ):
         """
         Asses the Rule
         Parameters
@@ -47,7 +51,7 @@ class RCC_MRx(Code):
         ds = f * refEvent.PQF
         T_ds = (T, ds)
         # de calculation
-        de1 = 100 * 2 / 3 * (1 + material.nu) * (ds / material.E(T))
+        de1 = 100 * 2 / 3 * (1 + material.nu()) * (ds / material.E(T, dpa))
 
         try:
             # tresca for shells Pm+0.67*(Pb+Pl-Pm)
@@ -56,7 +60,7 @@ class RCC_MRx(Code):
             # stress range at the point examined, equal to tresca for shells
             de2 = material.cyclic_stress_strain(T, tresca) - 100 * 2 / 3 * (
                 1 + material.nu
-            ) * (tresca / material.E(T))
+            ) * (tresca / material.E(T, dpa))
         except TypeError:
             # There are no primary stresses
             de2 = 0
@@ -69,9 +73,9 @@ class RCC_MRx(Code):
         # ordinates (epsilon) by f factor
         detot = detot / f
         # total allowable cycles calculation
-        if material.fatigue_curve == "strain":
+        if material.N.ftype == "strain":
             N_all = material.N((T, detot))
-        elif material.fatigue_curve == "stress":
+        elif material.N.ftype == "stress":
             # TODO not implemented yet!
             raise ValueError("stress based curves need to be implemented")
 
@@ -93,7 +97,9 @@ class RB_3251_112(Rule):
         self.ref = "RB 3251.112"
         self.description = ["Primary membrane", "Primary Membrane plus Bending"]
 
-    def assess(self, refEvent, material, T, dpa):
+    def assess(
+        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
+    ):
         """
         Assess the rule
 
@@ -118,15 +124,13 @@ class RB_3251_112(Rule):
         T_dpa = (T, 0)  # dpa is set to zero in RCC_MR
         # select allowable
         if service_lvl == "A":
-            allowable1 = n * material.Sm_irr(T_dpa)
-            allowable2 = 1.5 * n * material.Sm_irr(T_dpa)
+            allowable1 = n * material.Sm(T_dpa)
+            allowable2 = 1.5 * n * material.Sm(T_dpa)
         elif service_lvl == "C":
-            allowable1 = min(1.35 * n * material.Sm_irr(T_dpa), material.Sy_min(T_dpa))
+            allowable1 = min(1.35 * n * material.Sm(T_dpa), material.Sy_min(T_dpa))
             allowable2 = 1.5 * allowable1
         elif service_lvl == "D":
-            allowable1 = min(
-                2.4 * n * material.Sm_irr(T_dpa), 0.7 * material.Su_min(T_dpa)
-            )
+            allowable1 = min(2.4 * n * material.Sm(T_dpa), 0.7 * material.Su_min(T_dpa))
             allowable2 = 1.5 * allowable1
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
@@ -145,7 +149,14 @@ class RB_3261_111(Rule):
         #                     'Efficiency Index']
         self.description = ["3Sm rule"]
 
-    def assess(self, refEvent, material, T, dpa, K=1.5):
+    def assess(
+        self,
+        refEvent: ReferenceEvent,
+        material: Material,
+        T: float,
+        dpa: float,
+        K: float = 1.5,
+    ):
         """
         Assess the rule
 
@@ -173,7 +184,7 @@ class RB_3261_111(Rule):
         # ------IC 3131.1.2 '3Sm Rule'-------#
         # select allowable
         if service_lvl == "A":
-            allowable1 = 3 * material.Sm_irr(T_dpa)
+            allowable1 = 3 * material.Sm(T_dpa)
         elif service_lvl == "D" or service_lvl == "C":
             # warnings.warn(service_lvl +
             #               ' is not an admissible service level')

@@ -25,4 +25,4 @@ def test_run_bolts(tmpdir):
     assert os.path.exists(excel_file)
     # check number of sheets in an excel file with pandas
     with pd.ExcelFile(excel_file) as xls:
-        assert len(xls.sheet_names) == 5
+        assert len(xls.sheet_names) == 6
