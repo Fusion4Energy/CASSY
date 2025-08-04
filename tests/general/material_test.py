@@ -96,5 +96,30 @@ def test_Inconel_SDC_IC():
     assert material.Su_min(300, 1) == 994e6
 
 
+def test_CuCrZr_Tr_B_SDC_IC():
+    """
+    Test that the CuCrZr-IG Tr B material file is read correctly.
+    """
+    with as_file(MAT_FOLDER.joinpath("CuCrZr-IG Tr B SDC-IC.yaml")) as mat_path:
+        material = Material(mat_path)
+    assert pytest.approx(material.E(250, 1), rel=5e-3) == 118.481e9
+    assert pytest.approx(material.Sy_min(90, 4), rel=1e-3) == 395.5e6
+    assert pytest.approx(material.Sy_min(90, 0.1), rel=1e-3) == 230.5e6
+    assert pytest.approx(material.Su_min(90, 4), rel=1e-3) == 401e6
+    assert pytest.approx(material.Su_min(90, 0.1), rel=1e-3) == 342e6
+    assert pytest.approx(material.Sm(125, 0), rel=1e-3) == 120e6
+    assert pytest.approx(material.Sm(125, 0.1), rel=1e-3) == 120e6
+    assert (
+        pytest.approx(
+            material.monotonic_min_stress_strain(243.5547e6, 20, 0.1), rel=1e-3
+        )
+        == 0.4333075e-2
+    )
+    # assert pytest.approx(material.E(125, 0.1), rel=1e-3) == 120e6
+    # assert material.N(300, 220, 500) > 5e5
+    # assert material.N(300, 103, 1000) == 2e6
+    # assert material.Su_min(300, 1) == 994e6
+
+
 def test_read_materials():
     read_materials(MAT_FOLDER)
