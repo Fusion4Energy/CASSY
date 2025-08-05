@@ -43,48 +43,60 @@ INPUT_TITLE = "Internal Bolt Action Used During the Assessment"
 # #################### Code ###################################################
 # --- Initializations ---
 def run_bolts(
-    root: PathLike, fatigue: bool = False, matlib: PathLike | None = None
+    root: PathLike,
+    fatigue: bool = False,
+    matlib: PathLike | None = None,
+    print_recap: bool = True,
 ) -> None:
+    folder_tree = BoltsFolderTree(root)
+
+    # Generate the materials library
+    materials = read_materials(MATERIALS_PATH)
+    if matlib is not None:
+        additional_materials = read_materials(matlib)
+        materials.update(additional_materials)
+
+    # Read the available geometries
+    geometries = read_geometries(folder_tree.geom_folder, materials)
+
+    recaps = {"Immediate": [], "Fatigue": []}
+    connections = {}
+    for connection in os.listdir(folder_tree.configurations):
+        connection_name = connection.split(".")[0]
+        config_path = os.path.join(folder_tree.configurations, connection)
+
+        # intialize the config of the flange
+        actions_path = Path(folder_tree.actions_folder, f"{connection_name}.csv")
+        flange_config = FlangeAssessmentConfig.from_excel(
+            config_path, actions_path, fatigue=fatigue
+        )
+
+        # perform the assessment
+        flange_assessment = FlangeAssessment(geometries, flange_config, fatigue=fatigue)
+        flange_assessment.assess()
+        flange_assessment.assess(insert=True)
+
+        # print the assessment
+        assessment_folder = Path(folder_tree.assessment_folder, connection_name)
+        connections[connection_name] = flange_assessment
+
+        # override eventual old results
+        if os.path.exists(assessment_folder):
+            shutil.rmtree(assessment_folder)
+        os.mkdir(assessment_folder)
+
+        if not print_recap:
+            # if no recap is requested, just save the global df
+            flange_assessment.print_global_df(assessment_folder)
+            flange_assessment.print_global_df(assessment_folder, insert=True)
+            continue
+    if not print_recap:
+        print("No word recap requested. Assessment completed")
+        return  # Exit here if no word recap is requested
+
     with xw.App(visible=False) as app:
         app.display_alerts = False  # Suppress merge warnings
-
-        folder_tree = BoltsFolderTree(root)
-
-        # Generate the materials library
-        materials = read_materials(MATERIALS_PATH)
-        if matlib is not None:
-            additional_materials = read_materials(matlib)
-            materials.update(additional_materials)
-
-        # Read the available geometries
-        geometries = read_geometries(folder_tree.geom_folder, materials)
-
-        recaps = {"Immediate": [], "Fatigue": []}
-        connections = {}
-        for connection in os.listdir(folder_tree.configurations):
-            connection_name = connection.split(".")[0]
-            config_path = os.path.join(folder_tree.configurations, connection)
-
-            # intialize the config of the flange
-            actions_path = Path(folder_tree.actions_folder, f"{connection_name}.csv")
-            flange_config = FlangeAssessmentConfig.from_excel(
-                config_path, actions_path, fatigue=fatigue
-            )
-
-            # perform the assessment
-            flange_assessment = FlangeAssessment(
-                geometries, flange_config, fatigue=fatigue
-            )
-            flange_assessment.assess()
-            flange_assessment.assess(insert=True)
-
-            # print the assessment
-            assessment_folder = Path(folder_tree.assessment_folder, connection_name)
-            # override eventual old results
-            if os.path.exists(assessment_folder):
-                shutil.rmtree(assessment_folder)
-            os.mkdir(assessment_folder)
-
+        for _, flange_assessment in connections.items():
             # select the correct template
             if isinstance(flange_assessment.config.code, SDC_IC_Bolts):
                 template = TEMPLATE_BOLT_SDC_IC
@@ -102,7 +114,7 @@ def run_bolts(
             recaps["Immediate"].append(recap_immediate)
             if fatigue:
                 recaps["Fatigue"].append(recap_fatigue)
-            connections[connection_name] = flange_assessment
+
         print("Assessing Completed")
 
     print("Generating Word Recap")

@@ -447,6 +447,45 @@ class Submodel:
         self.assessments = assessments
         self.code = code
 
+    def print_global_df(self, outpath: PathLike) -> None:
+        """dump a global dataframe with all the assessment results.
+
+        Parameters
+        ----------
+        outpath : PathLike
+            path to the output folder.
+
+        Raises
+        ------
+        ValueError
+            If the assessment has not been run yet.
+        """
+        if self.assessments is None:
+            raise ValueError("Please assess the submodel first")
+        outfile = os.path.join(outpath, f"{self.name}_global_assessment.xlsx")
+        outfile_fatigue = os.path.join(
+            outpath, f"{self.name}_global_assessment_fatigue.xlsx"
+        )
+        dfs = []
+        dfs_fatigue = []
+        for pnum, dfs_dict in self.assessments.items():
+            for pos, df in dfs_dict.items():
+                if df is not None:
+                    df["Path"] = pnum
+                    df["Position"] = pos
+                    if "fatigue" in pos:
+                        dfs_fatigue.append(df)
+                    else:
+                        dfs.append(df)
+        global_df = pd.concat(dfs).set_index(["Path", "Position", "ID"])
+        global_df.to_excel(outfile)
+
+        if dfs_fatigue:
+            global_df_fatigue = pd.concat(dfs_fatigue).set_index(
+                ["Path", "Position", "ID"]
+            )
+            global_df_fatigue.to_excel(outfile_fatigue)
+
     if EXCEL_AVAILABLE:
 
         def print_assessment(

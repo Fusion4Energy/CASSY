@@ -26,3 +26,10 @@ def test_run_bolts(tmpdir):
     # check number of sheets in an excel file with pandas
     with pd.ExcelFile(excel_file) as xls:
         assert len(xls.sheet_names) == 6
+
+
+def test_run_bolts_no_recap(tmpdir):
+    to_copy = files(runners).joinpath("bolts")
+    dest = tmpdir.join("bolts")
+    shutil.copytree(to_copy, dest)
+    run_bolts(dest, fatigue=True, print_recap=False)
