@@ -115,6 +115,10 @@ def test_CuCrZr_Tr_B_SDC_IC():
         )
         == 0.4333075e-2
     )
+    assert np.isnan(material.Se(350, 1))
+    assert material.Se(275, 1) == 99.5e6
+    assert np.isnan(material.Sd(450, 1))
+
     # assert pytest.approx(material.E(125, 0.1), rel=1e-3) == 120e6
     # assert material.N(300, 220, 500) > 5e5
     # assert material.N(300, 103, 1000) == 2e6

@@ -167,7 +167,7 @@ properties:
              [null, null],
              [null, null],
              [null, null],]
-      scale_result: 1e6 # to convert MPa to Pa
+    scale_result: 1e6 # to convert MPa to Pa
   Sd:
     type: table2D
     values:
@@ -183,7 +183,7 @@ properties:
              [null, null],
              [null, null],
              [null, null],]
-      scale_result: 1e6 # to convert MPa to Pa
+    scale_result: 1e6 # to convert MPa to Pa
   Sd_nopeak:
     type: table2D
     values:
@@ -199,7 +199,7 @@ properties:
              [null, null],
              [null, null],
              [null, null],]
-      scale_result: 1e6 # to convert MPa to Pa
+    scale_result: 1e6 # to convert MPa to Pa
   Keps:
     type: table2D
     values:
