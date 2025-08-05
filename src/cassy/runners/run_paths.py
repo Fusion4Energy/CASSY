@@ -56,45 +56,58 @@ PATNUM = re.compile(r"\d+")
 
 # #################### Code ###################################################
 def run_paths(
-    root: PathLike, fatigue: bool = False, matlib: PathLike | None = None
+    root: PathLike,
+    fatigue: bool = False,
+    matlib: PathLike | None = None,
+    print_recap: bool = True,
 ) -> None:
     folder_tree = PathsFolderTree(root)
     # --- Initializations ---
+
+    materials = read_materials(MATERIALS_PATH)
+    if matlib is not None:
+        additional_materials = read_materials(matlib)
+        materials.update(additional_materials)
+
+    # --- Load Configuration files ---
+    configs = parse_cfg_files(folder_tree.configurations, folder_tree.stress_tensors)
+    # --- Reorganize and create the LinStresses and Combined ones + Assessment ---
+    print("\nAssessing the results...")
+    submodels = []
+    recap_rows = {}
+    for submodel_name, conf in configs.items():
+        submodel = Submodel(submodel_name, conf, materials)
+        if fatigue:
+            try:
+                CODES[conf.code].fatigue
+            except AttributeError:
+                raise KeyError(
+                    "For "
+                    + CODES[conf.code].name
+                    + " fatigue needs to"
+                    + " be set as False"
+                )
+        submodel.build_REs(fatigue=fatigue)
+        submodel.assess(CODES[conf.code], fatigue=fatigue)
+        # Generate the assessment folder
+        ass_path = os.path.join(folder_tree.assessment_folder, submodel.name)
+        if os.path.exists(ass_path):
+            shutil.rmtree(ass_path)
+        os.mkdir(ass_path)
+
+        submodels.append(submodel)
+
+        if not print_recap:
+            submodel.print_global_df(ass_path)
+            continue  # skip printing the excel assessments
+
+    if not print_recap:
+        print("No word recap requested. Assessment completed")
+        return  # Exit here if no word recap is requested
+
     with xw.App(visible=False) as app:
         app.display_alerts = False  # Suppress merge warnings
-        materials = read_materials(MATERIALS_PATH)
-        if matlib is not None:
-            additional_materials = read_materials(matlib)
-            materials.update(additional_materials)
-
-        # --- Load Configuration files ---
-        configs = parse_cfg_files(
-            folder_tree.configurations, folder_tree.stress_tensors
-        )
-        # --- Reorganize and create the LinStresses and Combined ones + Assessment ---
-        print("\nAssessing the results...")
-        submodels = []
-        recap_rows = {}
-        for submodel_name, conf in configs.items():
-            submodel = Submodel(submodel_name, conf, materials)
-            if fatigue:
-                try:
-                    CODES[conf.code].fatigue
-                except AttributeError:
-                    raise KeyError(
-                        "For "
-                        + CODES[conf.code].name
-                        + " fatigue needs to"
-                        + " be set as False"
-                    )
-            submodel.build_REs(fatigue=fatigue)
-            submodel.assess(CODES[conf.code], fatigue=fatigue)
-            # Generate the assessment folder
-            ass_path = os.path.join(folder_tree.assessment_folder, submodel.name)
-            if os.path.exists(ass_path):
-                shutil.rmtree(ass_path)
-            os.mkdir(ass_path)
-
+        for submodel in submodels:
             submodel.print_assessment(
                 ass_path,
                 app,
@@ -102,7 +115,6 @@ def run_paths(
                 img_folder=folder_tree.img_folder,
                 fatigue=fatigue,
             )
-            submodels.append(submodel)
             for key, item in submodel.recap_rows.items():
                 if key not in recap_rows:
                     recap_rows[key] = []

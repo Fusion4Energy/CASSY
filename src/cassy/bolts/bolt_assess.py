@@ -293,6 +293,55 @@ class FlangeAssessment:
             self.bolt_results = results
         return results
 
+    def print_global_df(self, mainfolder: PathLike, insert: bool = False):
+        """
+        Print the global DataFrame of the bolts assessment to an Excel file.
+
+        Parameters
+        ----------
+        mainfolder : PathLike
+            The folder where the global DataFrame will be saved.
+        insert : bool, optional
+            If true, the insert results are printed. The default is False.
+
+        Returns
+        -------
+        None.
+
+        """
+        if insert:
+            if self.insert_results is None:
+                raise ValueError("Please assess the insert first")
+            results = self.insert_results
+            tag = "base_material"
+        else:
+            if self.bolt_results is None:
+                raise ValueError("Please assess the submodel first")
+            results = self.bolt_results
+            tag = "bolt"
+
+        # Create a DataFrame to hold all results
+        dfs = []
+        fatigue_dfs = []
+        for bolt_id, assessment in results.items():
+            immediate = assessment["Immediate"]
+            fatigue = assessment["Fatigue"]
+            for df, list_df in zip([immediate, fatigue], [dfs, fatigue_dfs]):
+                if df is not None:
+                    df["Bolt ID"] = bolt_id
+                    list_df.append(df)
+
+        df = pd.concat(dfs, ignore_index=True).set_index(["Bolt ID", "ID"])
+        df.to_excel(os.path.join(mainfolder, f"{self.name}_{tag}_immediate.xlsx"))
+
+        if fatigue_dfs:
+            fatigue_df = pd.concat(fatigue_dfs, ignore_index=True).set_index(
+                ["Bolt ID", "ID"]
+            )
+            fatigue_df.to_excel(
+                os.path.join(mainfolder, f"{self.name}_{tag}_fatigue.xlsx")
+            )
+
     if EXCEL_AVAILABLE:
 
         def print_assessment(
