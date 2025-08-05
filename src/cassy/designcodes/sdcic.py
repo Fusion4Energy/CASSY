@@ -57,7 +57,7 @@ class SDC_IC(Code):
         T_ds = (T, ds)
         # de calculation
         de1 = 100 * 2 / 3 * (1 + material.nu()) * (ds / material.E(T, dpa))
-        try:
+        if refEvent.tresca is not None:
             # tresca for shells Pm+0.67*(Pb+Pl-Pm)
             tresca = refEvent.tresca
             # de2 represents the "plastic" increase in strain due to the primary
@@ -65,7 +65,7 @@ class SDC_IC(Code):
             de2 = material.cyclic_stress_strain(T, tresca) - 100 * 2 / 3 * (
                 1 + material.nu()
             ) * (tresca / material.E(T, dpa))
-        except TypeError:
+        else:
             # there is no primary stress
             de2 = 0
 
