@@ -25,7 +25,6 @@ def main():
     parser.add_argument(
         "--recap",
         help="print the complete recap assessment in word and excel",
-        action="store_true",
         default=True,
     )
     args = parser.parse_args()
