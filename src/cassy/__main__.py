@@ -23,17 +23,19 @@ def main():
         "--matlib", help="Path to material library", default=None
     )  # Replace with actual version
     parser.add_argument(
-        "--recap",
+        "--norecap",
         help="print the complete recap assessment in word and excel",
-        default=True,
+        default=False,
+        action="store_true",
     )
     args = parser.parse_args()
     args.recap = bool(args.recap)
+    print_recap = not args.norecap
 
     if args.assess == "bolts":
-        run_bolts(args.root, args.fatigue, matlib=args.matlib, print_recap=args.recap)
+        run_bolts(args.root, args.fatigue, matlib=args.matlib, print_recap=print_recap)
     elif args.assess == "paths":
-        run_paths(args.root, args.fatigue, matlib=args.matlib, print_recap=args.recap)
+        run_paths(args.root, args.fatigue, matlib=args.matlib, print_recap=print_recap)
     else:
         raise ValueError(
             "Assessment type not recognized, please choose between bolts and paths"
