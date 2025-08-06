@@ -29,7 +29,6 @@ def main():
         action="store_true",
     )
     args = parser.parse_args()
-    args.recap = bool(args.recap)
     print_recap = not args.norecap
 
     if args.assess == "bolts":
