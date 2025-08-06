@@ -51,18 +51,18 @@ class RCC_MR(Code):
         ds = f * refEvent.PQF
         T_ds = (T, ds)
         # de calculation
-        de1 = 100 * 2 / 3 * (1 + material.nu()) * (ds / material.E(T, dpa))
-
-        try:
+        de1 = 2 / 3 * (1 + material.nu()) * (ds / material.E(T, dpa))
+        if refEvent.tresca is not None:
             # tresca for shells Pm+0.67*(Pb+Pl-Pm)
             tresca = refEvent.tresca
             # de2 represents the "plastic" increase in strain due to the primary
             # stress range at the point examined, equal to tresca for shells
-            de2 = material.cyclic_stress_strain(T, tresca) - 100 * 2 / 3 * (
+            # cyclic_stress_strain looks like it returns strain in [-], not %, so not change it
+            de2 = material.cyclic_stress_strain(T, tresca) - 2 / 3 * (
                 1 + material.nu()
             ) * (tresca / material.E(T, dpa))
-        except TypeError:
-            # There are no primary stresses
+        else:
+            # there is no primary stress
             de2 = 0
 
         # de3 is derived as the intersection point of the cyclic curve and
