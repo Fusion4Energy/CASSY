@@ -29,6 +29,7 @@ def main():
         default=True,
     )
     args = parser.parse_args()
+    args.recap = bool(args.recap)
 
     if args.assess == "bolts":
         run_bolts(args.root, args.fatigue, matlib=args.matlib, print_recap=args.recap)
