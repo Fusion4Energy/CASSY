@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Dec 22 14:05:28 2020
-
-@author: davide laghi
-"""
-
 from math import pi
 
 import numpy as np
@@ -78,7 +71,7 @@ class BoltActionAssessor:
         Generate a bolt action object starting from dfs
         """
 
-        N = primary["F" + axs[0]]
+        N = abs(primary["F" + axs[0]])
         M = (primary["M" + axs[1]] ** 2 + primary["M" + axs[2]] ** 2) ** 0.5
         T = (primary["F" + axs[1]] ** 2 + primary["F" + axs[2]] ** 2) ** 0.5
         primary_dic = {"N": N, "M": M, "T": T}
@@ -138,17 +131,17 @@ class BoltActionAssessor:
                         allowable = "No Limit"
                         res = "Assessment not required"
                         sm = None
-                    elif applied < allowable:
-                        res = "OK"
+                    else:
+                        if applied < allowable:
+                            res = "OK"
+                        else:
+                            res = "FAILED"
                         try:
                             sm = round(allowable / applied, 2)
                             if sm > 10:
                                 sm = "> 10"
                         except ZeroDivisionError:
                             sm = "> 10"
-                    else:
-                        res = "FAILED"
-                        sm = None
 
                     row = {
                         "ID": self.ref_event.name,

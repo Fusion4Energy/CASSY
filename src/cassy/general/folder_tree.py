@@ -17,13 +17,9 @@ class FolderTree:
         """
         self.configurations = os.path.join(root, "config")
         self.assessment_folder = os.path.join(root, "assessment")
-        self.img_folder = os.path.join(root, "images")
         self.out_word = os.path.join(root, "Recap.docx")
 
-        # Free up the assessment folder and images folder
-        if os.path.exists(self.img_folder):
-            shutil.rmtree(self.img_folder)
-        os.mkdir(self.img_folder)
+        # Free up the assessment folder
         if os.path.exists(self.assessment_folder):
             shutil.rmtree(self.assessment_folder)
         os.mkdir(self.assessment_folder)

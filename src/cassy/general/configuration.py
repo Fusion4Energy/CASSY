@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Nov 26 15:15:07 2020
-
-@author: Davide Laghi
-"""
-
 from __future__ import annotations
 
 import os

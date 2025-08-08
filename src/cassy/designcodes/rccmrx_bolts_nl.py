@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Nov 18 10:35 2022
-
-@authors: davide falco, davide laghi
-"""
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -117,6 +110,7 @@ class RCCMRx_Bolts(BoltCode):
             "N": float(N),
             "Rule ID": ruleID,
             "sigma tot": ds_tot * 1e-6,
+            "de tot": detot,
         }
 
 
