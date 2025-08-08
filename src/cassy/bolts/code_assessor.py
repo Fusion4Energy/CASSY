@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Dec 22 14:05:28 2020
-
-@author: davide laghi
-"""
-
 from math import pi
 
 import numpy as np
@@ -73,23 +66,24 @@ class BoltActionAssessor:
         primary: pd.Series,
         all_loads: pd.Series,
         axs=["z", "x", "y"],
-    ):
+    ) -> tuple[dict[str, float], dict[str, float]]:
         """
         Generate a bolt action object starting from dfs
         """
 
-        N = primary["F" + axs[0]]
+        N = abs(primary["F" + axs[0]])
         M = (primary["M" + axs[1]] ** 2 + primary["M" + axs[2]] ** 2) ** 0.5
         T = (primary["F" + axs[1]] ** 2 + primary["F" + axs[2]] ** 2) ** 0.5
         primary_dic = {"N": N, "M": M, "T": T}
 
         # All Loads
-        N = (
-            abs(all_loads["F" + axs[0]]) - self.preload
+        N_nopreload = abs(
+            all_loads["F" + axs[0]] - self.preload
         )  # subtract preload from all loads actions
+        N = abs(all_loads["F" + axs[0]])
         M = (all_loads["M" + axs[1]] ** 2 + all_loads["M" + axs[2]] ** 2) ** 0.5
         T = (all_loads["F" + axs[1]] ** 2 + all_loads["F" + axs[2]] ** 2) ** 0.5
-        all_loads_dic = {"N": N, "M": M, "T": T}
+        all_loads_dic = {"N": N, "M": M, "T": T, "N_nopreload": N_nopreload}
 
         return primary_dic, all_loads_dic
 
@@ -129,27 +123,25 @@ class BoltActionAssessor:
                     # Rounded at the MPa (compute on mm so already MPa)
                     applied = int(assessed[i][0])
                     allowable = assessed[i][1]
-                    if allowable != "No limit":
-                        allowable = allowable[0]
-                        if not np.isnan(allowable):
-                            allowable = int(allowable * 1e-6)  # make sure is rounded
+                    # If allowable is nan, it means that there are no limits
+                    if allowable != "No limit" and not np.isnan(allowable):
+                        allowable = int(allowable * 1e-6)  # make sure is rounded
 
                     if allowable == "No limit" or np.isnan(allowable):
-                        # This happens also for interpolations out of range!
                         allowable = "No Limit"
                         res = "Assessment not required"
                         sm = None
-                    elif applied < allowable:
-                        res = "OK"
+                    else:
+                        if applied < allowable:
+                            res = "OK"
+                        else:
+                            res = "FAILED"
                         try:
                             sm = round(allowable / applied, 2)
                             if sm > 10:
                                 sm = "> 10"
                         except ZeroDivisionError:
                             sm = "> 10"
-                    else:
-                        res = "FAILED"
-                        sm = None
 
                     row = {
                         "ID": self.ref_event.name,
@@ -193,12 +185,12 @@ class BoltActionAssessor:
             contains all infos of the performed assessment, Vj included.
 
         """
-        assert isinstance(
-            self.ref_event, BoltReferenceEventFatigue
-        ), "The reference event must be a BoltReferenceEventFatigue"
-        assert isinstance(
-            self.poa, BoltLikeGeom
-        ), "Only Bolts can be assessed for fatigue usage fraction"
+        assert isinstance(self.ref_event, BoltReferenceEventFatigue), (
+            "The reference event must be a BoltReferenceEventFatigue"
+        )
+        assert isinstance(self.poa, BoltLikeGeom), (
+            "Only Bolts can be assessed for fatigue usage fraction"
+        )
         assessment = code.computeVj(
             self,
             self.poa.material,
@@ -232,38 +224,35 @@ class BoltActionAssessor:
         applicables = {}
 
         # --- Stress Induced by axial loads (SDC-IC B 3812.2.6.1) ---
-        N = abs(actions["N"])
-        # mean tensile stress
+        N = actions["N"]
+        # mean tensile stress [N/mm^2 = MPa]
         sigma_N = N / bolt.An
         if group == "all":
-            self.sigma_tensile = self.preload / bolt.An + sigma_N
-            sigma_N = self.sigma_tensile
-        # shear stress in the threads
-        if group == "all":
-            tth_N = 2 * (N + self.preload) / (pi * bolt.df * bolt.Le_shear)
-        else:
-            tth_N = 2 * (N) / (pi * bolt.df * bolt.Le_shear)
-        # shear stress in the head
+            self.sigma_tensile = sigma_N
+        # shear stress in the threads [N/mm^2 = MPa]
+        tth_N = 2 * (N) / (pi * bolt.df * bolt.Le_shear)
+
+        # shear stress in the head [N/mm^2 = MPa]
         if not isinstance(bolt, BoltGeom) or bolt.H == 0:
             th_N = 0
         else:  # There is washer
             th_N = N / (pi * bolt.d1 * bolt.H)
 
-        # Contact pressure between threads
+        # Contact pressure between threads [N*mm/mm^3 = MPa]
         pth_N = 4 * N * bolt.p / (pi * (bolt.d**2 - bolt.D**2) * bolt.Le)
 
         # Contact pressure between head and assembly, do not compute for insert
-        if isinstance(bolt, BoltGeom):
+        if isinstance(bolt, BoltGeom):  # [N/mm^2 = MPa]
             if bolt.B == 0:  # There is no washer
-                ph_N = 4 * (N + self.preload) / (pi * (bolt.a**2 - bolt.Dp**2))
+                ph_N = 4 * N / (pi * (bolt.a**2 - bolt.Dp**2))
             else:  # there is washer
                 a_prime = bolt.a + 2 * bolt.C
                 Dp_prime = max(bolt.Dp, bolt.B)
-                ph_N = 4 * (N + self.preload) / (pi * (a_prime**2 - Dp_prime**2))
+                ph_N = 4 * N / (pi * (a_prime**2 - Dp_prime**2))
 
         # --- Stress Induced by bending moment M (SDC-IC B 3812.2.6.2) ---
-        M = actions["M"]
-        # bending stress
+        M = actions["M"] * 1000
+        # Easier to bring the Moment N/m -> N/mm to avoid errors with units
         sigma_M = M / bolt.Z  # used the one on the thread root section
         # shear stress in the threads
         tth_M = 2 * M / (pi * bolt.df**2 * bolt.Le_shear)
@@ -312,12 +301,13 @@ class BoltActionAssessor:
         # --- Stress induced by residual twisting
         #     torques Cr and Ct (B 3812.2.6.3) ---
         Cr = self.preload * (0.16 * bolt.p + 0.583 * bolt.f * bolt.df)
-        Ct = self.preload * 0.5 * bolt.f_prime * bolt.Dm
         # Shear stress in threads
         tau_Cr = 16 * Cr * bolt.dn / (pi * (bolt.dn**4 - bolt.d_vh**4))
-        try:
+
+        if isinstance(bolt, BoltGeom):
+            Ct = self.preload * 0.5 * bolt.f_prime * bolt.Dm
             tau_Ct = 16 * Ct / (pi * bolt.d1**3)
-        except ZeroDivisionError:
+        else:
             tau_Ct = 0  # in case of insert
 
         # --- Stress induced by transverse load T ---

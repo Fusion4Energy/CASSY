@@ -1,13 +1,8 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Apr 19 12:13:22 2021
-
-@author: s.guidozzi
-"""
-
 import math
 
 from cassy.designcodes.codes import Code, Rule
+from cassy.general.material import Material
+from cassy.paths.linstress import ReferenceEvent
 
 
 class SDC_IC_ML(Code):
@@ -23,7 +18,9 @@ class SDC_IC_ML(Code):
         self.damage_types = ("Immediate", "Ratcheting")
         self.fatigue = True
 
-    def computeVj(self, refEvent, material, T, dpa):
+    def computeVj(
+        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
+    ):
         """
         Asses the Rule
         Parameters
@@ -50,16 +47,17 @@ class SDC_IC_ML(Code):
         ds = f * refEvent.PQF
         T_ds = (T, ds)
         # de calculation
-        de1 = 100 * 2 / 3 * (1 + material.nu) * (ds / material.E(T))
-        try:
+        de1 = 2 / 3 * (1 + material.nu()) * (ds / material.E(T))
+        if refEvent.tresca is not None:
             # tresca for shells Pm+0.67*(Pb+Pl-Pm)
             tresca = refEvent.tresca
             # de2 represents the "plastic" increase in strain due to the primary
             # stress range at the point examined, equal to tresca for shells
-            de2 = material.cyclic_stress_strain(T, tresca) - 100 * 2 / 3 * (
-                1 + material.nu
-            ) * (tresca / material.E(T))
-        except TypeError:
+            # cyclic_stress_strain looks like it returns strain in [-], not %, so not change it
+            de2 = material.cyclic_stress_strain(T, tresca) - 2 / 3 * (
+                1 + material.nu()
+            ) * (tresca / material.E(T, dpa))
+        else:
             # there is no primary stress
             de2 = 0
 
@@ -72,9 +70,9 @@ class SDC_IC_ML(Code):
         # ordinates (epsilon) by f factor
         detot = detot / f
         # total allowable cycles calculation
-        if material.fatigue_curve == "strain":
+        if material.N.ftype == "strain":
             N_all = material.N((T, detot))
-        elif material.fatigue_curve == "stress":
+        elif material.N.ftype == "stress":
             # TODO not implemented yet!
             raise ValueError("stress based curves need to be implemented")
 
@@ -83,6 +81,7 @@ class SDC_IC_ML(Code):
             "de2": de2,
             "de3": de3,
             "de4": de4,
+            "de tot": detot,
             "N": N_all,
             "Rule ID": name,
             "sigma tot": ds * 1e-6,

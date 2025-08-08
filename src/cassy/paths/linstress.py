@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Nov 17 09:20:26 2020
-
-@author: Davide Laghi
-"""
-
 from copy import deepcopy
 from typing import Union
 
@@ -886,7 +879,7 @@ class ReferenceEvent:
                     new_vol = new_vol + s
         else:
             if vol is None and ine is None:
-                return None  # there are no loads!
+                return 0  # there are no loads!
             else:
                 new_vol = vol
         vol = new_vol
@@ -973,22 +966,21 @@ class ReferenceEvent:
                 except TypeError:
                     allowable = allowable.item()
 
-                if applied < allowable:
-                    res = "OK"
+                if np.isnan(allowable):
+                    allowable = "No Limit"
+                    res = "Assessment not required"
+                    sm = None
+                else:
+                    if applied < allowable:
+                        res = "OK"
+                    else:
+                        res = "FAILED"
                     try:
                         sm = round(allowable / applied, 2)
                         if sm > 10:
                             sm = "> 10"
                     except ZeroDivisionError:
                         sm = "> 10"
-                elif np.isnan(allowable):
-                    # This happens also for interpolations out of range!
-                    allowable = "No Limit"
-                    res = "Assessment not required"
-                    sm = None
-                else:
-                    res = "FAILED"
-                    sm = None
 
                 row = {
                     "ID": self.name,
@@ -1001,7 +993,7 @@ class ReferenceEvent:
                     "Rule ID": rule.ref,
                     "Sub-Rule": subrulename,
                     "T [°C]": self.T,
-                    "dpa": self.dpa,
+                    "DPA": self.dpa,
                     "Applied [MPa]": applied,
                     "Allowable [MPa]": allowable,
                     "Result": res,

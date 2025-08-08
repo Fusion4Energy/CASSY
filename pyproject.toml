@@ -22,11 +22,11 @@ dependencies = [
     "shapely",
     "python-docx",
     "seaborn",
-    "xlwings",
     "tqdm",
     "pyvista",
     "openpyxl",
-    "xlrd"
+    "xlrd",
+    "pyyaml"
 ]
 
 [project.optional-dependencies]

@@ -1,28 +1,15 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Dec  1 09:24:31 2020
-
-@author: davide laghi
-"""
-
 import os
-import shutil
 from typing import Union
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from cassy.auxiliary.constants import EXCEL_AVAILABLE
 from cassy.auxiliary.types import PathLike
 from cassy.designcodes.codes import Code
 from cassy.general.configuration import Configuration
 from cassy.general.material import Material
-from cassy.office.excel_helper import ExcelOutput
 from cassy.paths.linstress import LinStress, ReferenceEvent
-
-if EXCEL_AVAILABLE:
-    import xlwings as xw
 
 
 class Path:
@@ -200,113 +187,6 @@ class Path:
 
         return self.ass_fatigue_beg, self.ass_fatigue_end
 
-    def assess_Se(self, code: Code):
-        """
-        Assess fatigue according to ASME B31.3
-
-        Parameters
-        ----------
-        code : code.Code
-            Design code to use
-
-        Returns
-        -------
-        self.ass_fatigue_beg, self.ass_fatigue_end
-
-        pd.DataFrames containing the assessments of the begin and end
-
-        """
-
-        # List of Fatigue REs for ASME B31.3, usually Thernal NO and Baking
-        refEvent_list_beg = self.REs_fatigue_beg
-        refEvent_list_end = self.REs_fatigue_end
-
-        # get the assessment dictionary of compute Se
-        assessment_beg = code.compute_Se(refEvent_list_beg, self.material)
-        assessment_end = code.compute_Se(refEvent_list_end, self.material)
-        # begin
-        try:
-            applied_beg = round(assessment_beg["Se [MPa]"] * 1e-6)
-            try:
-                allowable_beg = round(assessment_beg["Sa [MPa]"] * 1e-6)
-            except ValueError:
-                # it means is NaN
-                allowable_beg = assessment_beg["Sa [MPa]"] * 1e-6
-        except TypeError:
-            return None
-            # The assessment is None, hence the assessment was not
-            # valid, return None
-
-        if applied_beg < allowable_beg:
-            res_beg = "OK"
-            try:
-                sm_beg = round(allowable_beg / applied_beg, 2)
-                if sm_beg > 10:
-                    sm_beg = "> 10"
-            except ZeroDivisionError:
-                sm_beg = "> 10"
-        elif np.isnan(allowable_beg):
-            # This happens also for interpolations out of range!
-            allowable_beg = "No Limit"
-            res_beg = "Assessment not required"
-            sm_beg = None
-        else:
-            res_beg = "FAILED"
-            sm_beg = None
-
-        assessment_beg["Sa [MPa]"] = allowable_beg
-        assessment_beg["Se [MPa]"] = applied_beg
-        assessment_beg["Result"] = res_beg
-        assessment_beg["Safety Margin"] = sm_beg
-
-        # end
-        try:
-            applied_end = round(assessment_end["Se [MPa]"] * 1e-6)
-            try:
-                allowable_end = round(assessment_end["Sa [MPa]"] * 1e-6)
-            except ValueError:
-                # it means is NaN
-                allowable_end = assessment_end["Sa [MPa]"] * 1e-6
-        except TypeError:
-            return None
-            # The assessment is None, hence the assessment was not
-            # valid, return None
-
-        if applied_end < allowable_end:
-            res_end = "OK"
-            try:
-                sm_end = round(allowable_end / applied_end, 2)
-                if sm_end > 10:
-                    sm_end = "> 10"
-            except ZeroDivisionError:
-                sm_end = "> 10"
-        elif np.isnan(allowable_end):
-            # This happens also for interpolations out of range!
-            allowable_end = "No Limit"
-            res_end = "Assessment not required"
-            sm_end = None
-        else:
-            res_end = "FAILED"
-            sm_end = None
-
-        assessment_end["Sa [MPa]"] = allowable_end
-        assessment_end["Se [MPa]"] = applied_end
-        assessment_end["Result"] = res_end
-        assessment_end["Safety Margin"] = sm_end
-
-        row_beg = []
-        row_end = []
-
-        row_beg.append(assessment_beg)
-        row_end.append(assessment_end)
-
-        df_beg = pd.DataFrame(row_beg)
-        df_end = pd.DataFrame(row_end)
-        self.ass_fatigue_beg = df_beg
-        self.ass_fatigue_end = df_end
-
-        return self.ass_fatigue_beg, self.ass_fatigue_end
-
     def _get_basic_loads_df(self, pos):
         """
         build a DF from all the stress matrix of the single loads acting
@@ -324,10 +204,16 @@ class Path:
 
         """
         dfs = []
-        stress_names = ["Membrane stress", "Bending stress", "Peak stress"]
+        stress_names = [
+            "Membrane stress",
+            "Bending stress",
+            "Peak stress",
+        ]
         for linstress in self.basic_loads[pos]:
             # get it in MPa
             mtrx = linstress.original_mtrx.copy() * 1e-6
+            # reorder the index
+            mtrx = mtrx.loc[["Pm", "Pb", "F"]]
             stress_mtrx = mtrx.reset_index()
             stress_mtrx["Load Condition"] = linstress.name
             stress_mtrx["Stress breakdown"] = stress_names
@@ -436,308 +322,212 @@ class Submodel:
             assessments[path.pnum] = {"begin": beg, "end": end}
 
             if fatigue:
-                if code.name == "ASME B31.3":
-                    beg_f, end_f = path.assess_Se(code)
-
-                else:
-                    beg_f, end_f = path.assess_fatigue(code)
+                beg_f, end_f = path.assess_fatigue(code)
                 assessments[path.pnum]["begin fatigue"] = beg_f
                 assessments[path.pnum]["end fatigue"] = end_f
 
         self.assessments = assessments
         self.code = code
 
-    if EXCEL_AVAILABLE:
+    def print_global_df(self, outpath: PathLike) -> None:
+        """dump a global dataframe with all the assessment results.
 
-        def print_assessment(
-            self,
-            mainfolder: PathLike,
-            app: xw.App,
-            template_path: PathLike,
-            img_folder: PathLike = "Images",
-            fatigue: bool = True,
-        ):
-            """
-            Prints the excel assessment for each path (both begin and end) and at
-            the same time grabs and saves the images of the assessment in the
-            img_folder. Additionally it returns the rows for the final recap table
-            of the assessment.
+        Parameters
+        ----------
+        outpath : PathLike
+            path to the output folder.
 
-            Parameters
-            ----------
-            mainfolder : str or path
-                path to the submodel assessment (i.e. where to put excels).
-            app : xw.App
-                Excel app from xlwings.
-            template_path : str or path
-                path to the excel template.
-            img_folder : str or path, optional
-                path to the folder where to store the images.
-                The default is 'Images'.
-            fatigue: bool, optional
-                if False the fatigue assessment is skipped. The default is True
+        Raises
+        ------
+        ValueError
+            If the assessment has not been run yet.
+        """
+        if self.assessments is None:
+            raise ValueError("Please assess the submodel first")
+        outfile = os.path.join(outpath, f"{self.name}_global_assessment.xlsx")
+        outfile_fatigue = os.path.join(
+            outpath, f"{self.name}_global_assessment_fatigue.xlsx"
+        )
+        dfs = []
+        dfs_fatigue = []
+        for pnum, dfs_dict in self.assessments.items():
+            for pos, df in dfs_dict.items():
+                if df is not None:
+                    df["Path"] = pnum
+                    df["Position"] = pos
+                    if "fatigue" in pos:
+                        dfs_fatigue.append(df)
+                    else:
+                        dfs.append(df)
+        global_df = pd.concat(dfs).set_index(["Path", "Position", "ID"])
+        global_df.to_excel(outfile)
 
-            Raises
-            ------
-            ValueError
-                If the assessment has not been run yet.
-
-            Returns
-            -------
-            recap_rows : dic
-                the keys are the damage type and the items are dictionaries
-                containing the rows for the final recap table.
-
-            """
-
-            if self.assessments is None:
-                raise ValueError("Please assess the submodel first")
-
-            print("Assessing " + self.name + " with " + self.code.name)
-
-            # Safe creation of folder for images
-            imgs = os.path.join(img_folder, self.name)
-            if not os.path.exists(img_folder):
-                os.mkdir(img_folder)
-            if os.path.exists(imgs):
-                shutil.rmtree(imgs)
-            os.mkdir(imgs)
-
-            # Cycling on all paths
-            # recap_rows = {'Immediate': [], 'Ratcheting': [], 'Fatigue': []}
-            recap_rows = {}
-            for pnum, dfs in tqdm(self.assessments.items(), desc="Path"):
-                self.images[pnum] = {}
-                # Cycling on begin and end
-                for pos in ["begin", "end"]:
-                    self.images[pnum][pos] = {}
-                    # Get all needed data for compilation
-                    poa = "Path " + str(pnum) + " " + pos
-                    material = self.paths[pnum].material.name
-                    idx = [
-                        "ID",
-                        "Operating Conditions",
-                        "Initiating Event",
-                        "Concatenated Event",
-                        "Loading Category",
-                        "Service Level",
-                        "Rule Extended Description",
-                        "Rule ID",
-                        "Sub-Rule",
-                        "T [°C]",
-                        "dpa",
-                    ]
-                    df = dfs[pos].set_index(idx)
-
-                    col = "Damage Type"
-                    # get the damage type names
-                    df_types = {}
-                    damage_types = self.code.damage_types
-                    for key in damage_types:
-                        df_type = df[df[col] == key]
-                        df_type = _round_ass_df(df_type)
-                        df_type = df_type.drop(col, axis=1)
-                        df_types[key] = df_type
-
-                    # Get the input df
-                    input_df = self.paths[pnum]._get_basic_loads_df(pos)
-                    df_types["Input"] = input_df
-
-                    # Write the excel file
-                    file = self.name + "_" + str(pnum) + "_" + pos + ".xlsx"
-                    out_path = os.path.join(mainfolder, file)
-                    if os.path.isfile(out_path):
-                        os.remove(out_path)
-                    shutil.copyfile(template_path, out_path)
-
-                    out = ExcelOutput(app, out_path)
-
-                    # Fill the banners
-                    out.fill_banner("SA_template", self.name, poa, material, self.code)
-                    out.fill_banner(
-                        "Input_template",
-                        self.name,
-                        poa,
-                        material,
-                        None,
-                        template="Input_template",
-                    )
-
-                    if fatigue:
-                        # no further actions needed on the df
-                        fatigue_df = dfs[pos + " fatigue"]
-                        if self.code.name == "ASME B31.3":
-                            idx = ["Rule ID", "loads"]
-                            fatigue_df.set_index(idx, inplace=True)
-                            # Fill the banner
-                            out.fill_banner(
-                                "Fatigue", self.name, poa, material, self.code
-                            )
-
-                        else:
-                            # Fill banner
-                            out.fill_banner(
-                                "Fatigue_template",
-                                self.name,
-                                poa,
-                                material,
-                                self.code,
-                                template="fatigue",
-                            )
-
-                        df_types["Fatigue"] = fatigue_df
-
-                    for sheet, df in df_types.items():
-                        if sheet == "Input":
-                            out.insert_SA_df(
-                                df,
-                                sheet,
-                                divide_blocks="Load Condition",
-                                print_header=False,
-                                word=True,
-                                start_row=10,
-                            )
-                        elif sheet == "Fatigue":
-                            if self.code.name == "ASME B31.3":
-                                out.insert_SA_df(df, sheet)
-                            else:
-                                out.insert_fatigue_df(df, sheet)
-
-                        else:
-                            out.insert_SA_df(df, sheet, divide_blocks="ID")
-
-                        # lastcell = tab .anchor_end
-                        file = (
-                            self.name
-                            + "_"
-                            + str(pnum)
-                            + "_"
-                            + pos
-                            + "_"
-                            + sheet
-                            + ".png"
-                        )
-                        outpath = os.path.join(imgs, file)
-                        self.images[pnum][pos][sheet] = outpath
-                        out.grab_img("all", "all", sheet, outpath)
-
-                    # file = self.name+'_'+str(pnum)+'_'+pos+'.xlsx'
-                    out.save()
-
-                    for sheet, df in df_types.items():
-                        if sheet in ["Fatigue", "Input"]:
-                            continue
-                        else:
-                            if sheet not in recap_rows.keys():
-                                recap_rows[sheet] = []
-
-                        if len(df[df["Result"] == "FAILED"]) > 0:
-                            ass = "NOK"
-                            sm = "-"
-                            re = "-"
-                            slvl = "-"
-                            rule = "-"
-                        else:
-                            ass = "OK"
-                            # Individuate design driver
-                            try:
-                                # take out the > 10
-                                df = df[df["Safety Margin"] != "> 10"]
-                                df["Safety Margin"] = df["Safety Margin"].astype(float)
-                                idx = df["Safety Margin"].idxmin()
-
-                                # Get the idxs of indices
-                                names = df.index.names
-                                try:
-                                    try:
-                                        # If the DF is too long we can have siries
-                                        sm = df.loc[idx, "Safety Margin"].iloc[0]
-                                    except AttributeError:
-                                        # If the DF is shorter
-                                        sm = df.loc[idx, "Safety Margin"]
-                                    re = idx[names.index("ID")]
-                                    slvl = idx[names.index("Service Level")]
-                                    rule = idx[names.index("Sub-Rule")]
-                                except KeyError:
-                                    # should be key error nan hence sm > 10
-                                    re = "No driver"
-                                    sm = ""
-                                    slvl = ""
-                                    rule = ""
-                            except TypeError:  # most likely nan
-                                sm = ""
-                                re = "No driver"
-                                slvl = ""
-                                rule = ""
-                            except ValueError:  # they are all >10
-                                sm = ""
-                                re = "No driver"
-                                slvl = ""
-                                rule = ""
-
-                        row = {
-                            "Submodel": self.name,
-                            "Path": "Path " + str(pnum) + " " + pos,
-                            "Path Type": self.paths[pnum].ptype,
-                            "Assessment": ass,
-                            "Reference Event": re,
-                            "Service lvl": slvl,
-                            "Rule": rule,
-                            "Safety Margin": sm,
-                        }
-
-                        recap_rows[sheet].append(row)
-
-                    if fatigue:
-                        if "Fatigue" not in recap_rows.keys():
-                            recap_rows["Fatigue"] = []
-                        if self.code.name == "ASME B31.3":
-                            df = fatigue_df
-                            if len(df[df["Result"] == "FAILED"]) > 0:
-                                ass = "NOK"
-                                sm = "-"
-                            else:
-                                ass = "OK"
-                                try:
-                                    sm = float(df.loc["302.3.5 d", "Safety Margin"])
-                                except ValueError:  # sm > 10
-                                    sm = "-"
-                            row = {
-                                "Submodel": self.name,
-                                "Path": "Path " + str(pnum) + " " + pos,
-                                "Path Type": self.paths[pnum].ptype,
-                                "Assessment": ass,
-                                "Safety Margin": sm,
-                            }
-
-                            recap_rows["Fatigue"].append(row)
-
-                        else:
-                            Vtot = fatigue_df["Vj"].sum()
-                            if Vtot < 1:
-                                ass = "OK"
-                            else:
-                                ass = "NOK"
-
-                            tuf = round(Vtot * 100, 2)
-                            row = {
-                                "Submodel": self.name,
-                                "Path": "Path " + str(pnum) + " " + pos,
-                                "Assessment": ass,
-                                "Total Usage Fraction [%]": tuf,
-                            }
-
-                            recap_rows["Fatigue"].append(row)
-
-                self.recap_rows = recap_rows
-
-            return recap_rows
-    else:
-
-        def print_assessment(self, *args, **kwargs):
-            raise ImportError(
-                "xlwings is required for print_assessment, but it is not installed."
+        if dfs_fatigue:
+            global_df_fatigue = pd.concat(dfs_fatigue).set_index(
+                ["Path", "Position", "ID"]
             )
+            global_df_fatigue.to_excel(outfile_fatigue)
+
+    def compute_banner(
+        self,
+        pnum: int,
+        pos: str,
+        complete: bool = False,
+        assessment: str | None = None,
+        paragraph: str | None = None,
+    ) -> dict[str, str]:
+        """Compute the banner for a single assessment table
+
+        Parameters
+        ----------
+        pnum : int
+            Path number.
+        pos : str
+            Position (begin or end).
+        complete : bool, optional
+            If True, the complete banner is returned, by default False.
+        assessment : str | None, optional
+            Assessment type, by default None
+        paragraph : str | None, optional
+            Paragraph text, by default None
+
+        Returns
+        -------
+        dict[str, str]
+            A dictionary containing the banner information.
+        """
+
+        poa = "Path " + str(pnum) + " " + pos
+        material = self.paths[pnum].material.name
+        banner = {
+            "model": "",
+            "submodel": self.config.submodel,
+            "id": poa,
+            "material": material,
+        }
+        if complete:
+            banner.update(
+                {
+                    "assessment": assessment,
+                    "code": self.config.code,
+                    "paragraph": paragraph,
+                }
+            )
+        return banner
+
+    def get_recap(
+        self,
+        fatigue: bool = True,
+    ):
+        """
+        Get the recap rows for the assessment.
+
+        Parameters
+        ----------
+        fatigue: bool, optional
+            if False the fatigue assessment is skipped. The default is True
+
+        Raises
+        ------
+        ValueError
+            If the assessment has not been run yet.
+
+        Returns
+        -------
+        recap_rows : dic
+            the keys are the damage type and the items are dictionaries
+            containing the rows for the final recap table.
+
+        """
+
+        if self.assessments is None:
+            raise ValueError("Please assess the submodel first")
+
+        print("Assessing " + self.name + " with " + self.code.name)
+
+        # Cycling on all paths
+        # recap_rows = {'Immediate': [], 'Ratcheting': [], 'Fatigue': []}
+        recap_rows = {}
+        for pnum, dfs in tqdm(self.assessments.items(), desc="Path"):
+            # Cycling on begin and end
+            for pos in ["begin", "end"]:
+                df = dfs[pos]
+                col = "Damage Type"
+                # get the damage type names
+                df_types = {}
+                damage_types = self.code.damage_types
+                for key in damage_types:
+                    df_type = df[df[col] == key]
+                    df_type = _round_ass_df(df_type)
+                    df_type = df_type.drop(col, axis=1)
+                    df_types[key] = df_type
+
+                for sheet, df in df_types.items():
+                    if sheet not in recap_rows.keys():
+                        recap_rows[sheet] = []
+
+                    # first check if the assessment was successful
+                    if len(df[df["Result"] == "FAILED"]) > 0:
+                        ass = "NOK"
+                    else:
+                        ass = "OK"
+
+                    # --- Individuate design driver ---
+                    # take out the > 10 and assessment not required
+                    df1 = df[df["Safety Margin"] != "> 10"]
+                    df1 = df1[df1["Result"] != "Assessment not required"]
+                    # it may be now that there are no rows left, no driver
+                    if len(df1) == 0:
+                        # No driver found
+                        re = "No driver"
+                        sm = ""
+                        slvl = ""
+                        rule = ""
+                    else:
+                        margins = df1["Safety Margin"].astype(float).values
+                        idx = np.argmin(margins)
+
+                        sm = margins[idx]
+                        re = df1.iloc[idx]["ID"]
+                        slvl = df1.iloc[idx]["Service Level"]
+                        rule = df1.iloc[idx]["Sub-Rule"]
+
+                    row = {
+                        "Submodel": self.name,
+                        "Path": "Path " + str(pnum) + " " + pos,
+                        "Path Type": self.paths[pnum].ptype,
+                        "Assessment": ass,
+                        "Reference Event": re,
+                        "Service lvl": slvl,
+                        "Rule": rule,
+                        "Safety Margin": sm,
+                    }
+
+                    recap_rows[sheet].append(row)
+
+                if fatigue:
+                    if "Fatigue" not in recap_rows.keys():
+                        recap_rows["Fatigue"] = []
+
+                    Vtot = dfs[pos + " fatigue"]["Vj"].sum()
+                    if Vtot < 1:
+                        ass = "OK"
+                    else:
+                        ass = "NOK"
+
+                    tuf = round(Vtot * 100, 2)
+                    row = {
+                        "Submodel": self.name,
+                        "ID": "Path " + str(pnum) + " " + pos,
+                        "Assessment": ass,
+                        "Total Usage Fraction [%]": tuf,
+                    }
+
+                    recap_rows["Fatigue"].append(row)
+
+            self.recap_rows = recap_rows
+
+        return recap_rows
 
     def build_REs(self, fatigue: bool = False):
         """Build all the reference events for all paths in the submodel.

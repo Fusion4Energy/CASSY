@@ -52,14 +52,10 @@ class BoltLikeGeom(ABC):
     p: float
     d: float
     dn: float
-    d1: float
     df: float
     D: float
-    Dp: float
-    Dm: float
     Le: float
     f: float
-    f_prime: float
     d_vh: float
 
     def __post_init__(self):
@@ -181,6 +177,10 @@ class BoltGeom(BoltLikeGeom):
         friction coefficient under head.
     """
 
+    d1: float
+    Dm: float
+    Dp: float
+    f_prime: float
     H: float
     a: float
     B: float

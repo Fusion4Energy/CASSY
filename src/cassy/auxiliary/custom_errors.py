@@ -12,3 +12,11 @@ class ConfigError(Exception):
     def __init__(self, message: str):
         self.message = message
         super().__init__(self.message)
+
+
+class OutOfBoundsError(Exception):
+    """Exception raised when a value is out of the defined bounds."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)

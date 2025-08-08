@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Dec 22 11:48:39 2020
-
-@author: davide laghi
-"""
-
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -85,15 +78,15 @@ class SDC_IC_Bolts(BoltCode):
         # Nominal stress intensity range
         ds_n = boltAction.applicable_stresses["all"]["Stress intensity range"]
         # --- Nominal elastic strain range (IC 6131.2.1.1) ---
-        de_n = ds_n / material.E(ref_event.temp)
+        de_n = ds_n / material.E(ref_event.temp, 0)  # No DPA dependent prop
 
         # --- Correction for stress concentration and plasticity ---
         #                    (IC 6131.2.1.2)
         try:
-            material.cyclic_stress_strain(ref_event.temp, ds_n)
-            # TODO Neuber's Rule is not implemented yet!
-            raise ValueError("Proper Neuber needs to be implemented")
-        except ValueError:
+            ds = material.compute_delta_sigma_Neuber(
+                ref_event.temp, ds_n, boltAction.poa.KF
+            )
+        except NotImplementedError:
             # Correction implemented in case true stress-strain curve is not
             # available
             ds = boltAction.poa.KF * ds_n
@@ -102,9 +95,9 @@ class SDC_IC_Bolts(BoltCode):
         # --- Correction for mean stress (IC 6131.2.1.3) ---
         #             Goodman's correction
         # minimum ultimate tensile strength
-        Su = material.Su_min(T_dpa)[0]
+        Su = material.Su_min(T_dpa)
         # minimum yield strength
-        Sy = material.Sy_min(T_dpa)[0]
+        Sy = material.Sy_min(T_dpa)
         # maximum average tensile stress in bolt during cycle
         # Sigma m
         s_m = min(
@@ -113,20 +106,17 @@ class SDC_IC_Bolts(BoltCode):
         # equivalent stress range at zero mean stress
         ds_bar = ds / (1 - s_m / Su)
 
-        if material.fatigue_curve == "strain":
-            # TODO not implemented yet!
-            raise ValueError("strain based curves need to be implemented")
-        elif material.fatigue_curve == "stress":
+        if material.N.ftype == "strain":
+            de_bar = material.cyclic_stress_strain(ref_event.temp, ds_bar)
+            N = material.N(ref_event.temp, de_bar)
+        elif material.N.ftype == "stress":
             de_bar = "-"
-            if material.name == "Inconel 718 (non leak-tight)":
-                # For Inconel the curve is T independent but is dependent by
-                # the max mean stress
-                # Since the stress-cycles curves of Inconel 718 are already dependent on
-                # the mean stress, goodman correction is not applied as is already
-                # implemented in the curves, and ds should be used to compute the stress amplitude
+            if material.N.mean_stress:
                 SA = ds / 2
                 # Sigma pre is used as max mean stress
-                N = material._inconel_N(s_pre, SA)
+                N = material.N(ref_event.temp, SA, s_pre)
+                # update ds_bar as it will be the one displayed
+                ds_bar = ds
             else:
                 T_s = (ref_event.temp, ds_bar / 2)  # use the amplitude
                 N = material.N(T_s)
@@ -178,7 +168,7 @@ class IC6113(Rule):
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
-            allowable1 = material.Sm_irr(T_dpa)
+            allowable1 = material.Sm(T_dpa)
         elif service_lvl == "D":
             allowable1 = "No limit"
         else:
@@ -223,12 +213,12 @@ class IC6121_1_3_1(Rule):
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
-            allowable1 = material.Sm_irr(T_dpa)
+            allowable1 = material.Sm(T_dpa)
             allowable2 = min(
                 0.9 * material.Sy_min(T_dpa), 0.67 * material.Su_min(T_dpa)
             )
         elif service_lvl == "D":
-            allowable1 = 2 * material.Sm_irr(T_dpa)
+            allowable1 = 2 * material.Sm(T_dpa)
             allowable2 = "No limit"
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
@@ -271,10 +261,10 @@ class IC6121_1_3_2(Rule):
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
-            allowable1 = 1.5 * material.Sm_irr(T_dpa)
+            allowable1 = 1.5 * material.Sm(T_dpa)
             allowable2 = min(1.2 * material.Sy_min(T_dpa), 0.9 * material.Su_min(T_dpa))
         elif service_lvl == "D":
-            allowable1 = 3 * material.Sm_irr(T_dpa)
+            allowable1 = 3 * material.Sm(T_dpa)
             allowable2 = "No limit"
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
@@ -322,7 +312,7 @@ class IC6121_1_3_3(Rule):
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
-            allowable1 = allowable2 = 0.6 * material.Sm_irr(T_dpa)
+            allowable1 = allowable2 = 0.6 * material.Sm(T_dpa)
             allowable3 = allowable4 = 0.6 * material.Sy_min(T_dpa)
         elif service_lvl == "D":
             allowable1 = "No limit"
@@ -382,7 +372,7 @@ class IC6121_1_3_3_insert(Rule):
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
-            allowable1 = 0.6 * material.Sm_irr(T_dpa)
+            allowable1 = 0.6 * material.Sm(T_dpa)
             allowable2 = 0.6 * material.Sy_min(T_dpa)
         elif service_lvl == "D":
             allowable1 = "No limit"

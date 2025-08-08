@@ -1,14 +1,9 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Nov 18 10:35 2022
-
-@authors: davide falco, davide laghi
-"""
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from cassy.bolts.code_assessor import BoltActionAssessor
+import logging
+
 from cassy.designcodes.codes import BoltCode, Rule
 from cassy.general.material import Material
 
@@ -67,21 +62,45 @@ class RCCMRx_Bolts(BoltCode):
         T_ds = (ref_event.temp, ds_tot)
 
         # delta epsilon calculation
-        de1 = 100 * 2 / 3 * (1 + material.nu) * (ds_tot / material.E(ref_event.temp))
+        de1 = (
+            100
+            * 2
+            / 3
+            * (1 + material.nu())
+            * (ds_tot / material.E(ref_event.temp, ref_event.dpa))
+        )
         de2 = 0
-        Keps = material.Keps(T_ds)[0]
-        if Keps > 1:
+        try:
+            Keps = material.Keps(T_ds)
+            Kmu = material.Kmu(T_ds)
             de3 = (de1 + de2) * (Keps - 1)
-        else:
-            de3 = 0
-        Kmu = material.Kmu(T_ds)[0]
-        if Kmu > 1:
             de4 = de1 * (Kmu - 1)
-        else:
+        except NotImplementedError:
+            logging.warning(
+                'Keps, Kmu not implemented for material "%s"', material.name
+            )
+            logging.warning("assuming de3 = 0, de4 = 0")
+            de3 = 0
             de4 = 0
+
         detot = de1 + de2 + de3 + de4
 
-        N = material.N((ref_event.temp, detot))
+        if material.N.ftype == "strain":
+            N = material.N((ref_event.temp, detot))
+        elif material.N.ftype == "stress":
+            logging.warning(
+                "stress based fatigue in RCC-MRx is not orthodox, check results carefully"
+            )
+            if material.N.mean_stress:
+                SA = ds_tot / 2
+                s_tens_sust = boltAction.sigma_tensile
+                ds_tens = boltAction.applicable_stresses["all"]["Primary stress"]
+                s_pre = s_tens_sust + ds_tens
+                # Sigma pre is used as max mean stress
+                N = material.N(ref_event.temp, SA, s_pre)
+            else:
+                T_s = (ref_event.temp, ds_tot / 2)  # use the amplitude
+                N = material.N(T_s)
 
         return {
             "de1": de1,
@@ -91,6 +110,7 @@ class RCCMRx_Bolts(BoltCode):
             "N": float(N),
             "Rule ID": ruleID,
             "sigma tot": ds_tot * 1e-6,
+            "de tot": detot,
         }
 
 
@@ -125,28 +145,26 @@ class RB3284_1112:
         T_dpa = (boltasessor.ref_event.temp, boltasessor.ref_event.dpa)
         # select allowable
         if service_lvl == "A":
-            allowable = material.Sm_irr(T_dpa)
+            allowable = material.Smb(T_dpa)
             allowable2 = min(
                 0.9 * material.Sy_min(T_dpa), 0.67 * material.Su_min(T_dpa)
             )
 
         elif service_lvl == "C":
             if material.Su_min(T_dpa) >= 700e6:
-                allowable = material.Sm_irr(T_dpa)
+                allowable = material.Smb(T_dpa)
                 allowable2 = min(
                     0.9 * material.Sy_min(T_dpa), 0.67 * material.Su_min(T_dpa)
                 )
             else:
-                allowable = 1.5 * material.Sm_irr(T_dpa)
+                allowable = 1.5 * material.Smb(T_dpa)
                 allowable2 = "No limit"
 
         elif service_lvl == "D":
             if material.Su_min(T_dpa) <= 700e6:
-                allowable = min(
-                    2.4 * material.Sm_irr(T_dpa), 0.7 * material.Su_min(T_dpa)
-                )
+                allowable = min(2.4 * material.Smb(T_dpa), 0.7 * material.Su_min(T_dpa))
             else:
-                allowable = 2 * material.Sm_irr(T_dpa)
+                allowable = 2 * material.Smb(T_dpa)
 
             allowable2 = "No limit"
         else:
@@ -194,7 +212,7 @@ class RB3284_1113:
                 0.9 * material.Sy_min(T_dpa), 0.67 * material.Su_min(T_dpa)
             )
         elif service_lvl == "C":
-            allowable1 = 2.25 * material.Sm_irr(T_dpa)
+            allowable1 = 2.25 * material.Smb(T_dpa)
             if material.Su_min(T_dpa) >= 700e6:
                 allowable2 = 1.33 * min(
                     0.9 * material.Sy_min(T_dpa), 0.67 * material.Su_min(T_dpa)
@@ -208,7 +226,7 @@ class RB3284_1113:
                 allowable2 = 1.5 * allowable1
             else:
                 allowable1 = "No limit"
-                allowable2 = 3 * material.Sm_irr(T_dpa)
+                allowable2 = 3 * material.Smb(T_dpa)
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
 
@@ -253,12 +271,12 @@ class RB3284_1211(Rule):
         T_dpa = (boltaction.ref_event.temp, boltaction.ref_event.dpa)
         # select allowable
         if service_lvl == "A":
-            allowable1 = allowable2 = 0.6 * material.Sm_irr(T_dpa)
+            allowable1 = allowable2 = 0.6 * material.Smb(T_dpa)
             allowable3 = allowable4 = 0.6 * material.Sy_min(T_dpa)
 
         elif service_lvl == "C":
             if material.Su_min(T_dpa) >= 700e6:
-                allowable1 = allowable2 = 0.6 * material.Sm_irr(T_dpa)
+                allowable1 = allowable2 = 0.6 * material.Smb(T_dpa)
                 allowable3 = allowable4 = 0.6 * material.Sy_min(T_dpa)
 
             else:
@@ -324,7 +342,7 @@ class RB3284_1211_insert(Rule):
         T_dpa = (boltaction.ref_event.temp, boltaction.ref_event.dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
-            allowable1 = 0.6 * material.Sm_irr(T_dpa)
+            allowable1 = 0.6 * material.Smb(T_dpa)
             allowable2 = 0.6 * material.Sy_min(T_dpa)
 
         elif service_lvl == "D":

@@ -32,8 +32,8 @@ class TestFlangeAssessmentConfig:
         actions = config.get_actions("1", "loads", "2")
         assert actions["My"] == 2
 
-        actions = config.get_actions("1", "loads", "2- 1+3 ")
-        assert actions["Fx"] == 13
+        actions = config.get_actions("1", "loads", "2- 1+5 ")
+        assert actions["Fx"] == 15
 
         with pytest.raises(ConfigError):
             actions = config.get_actions("1", "loads", "6")
