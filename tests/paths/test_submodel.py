@@ -2,8 +2,7 @@ from importlib.resources import as_file, files
 
 import pytest
 
-from cassy.additional_data import materials, templates
-from cassy.auxiliary.constants import EXCEL_AVAILABLE
+from cassy.additional_data import materials
 from cassy.designcodes.codes import Code
 from cassy.designcodes.rccmr import RCC_MR
 from cassy.designcodes.rccmrx import RCC_MRx
@@ -12,9 +11,6 @@ from cassy.general.configuration import Configuration
 from cassy.general.material import Material
 from cassy.paths.submodel import Submodel
 from tests.paths import res
-
-if EXCEL_AVAILABLE:
-    import xlwings as xw
 
 # Add path to material files
 RES = files(materials)
@@ -42,22 +38,10 @@ class TestSubmodel:
         submodel.build_REs(fatigue=True)
         submodel.assess(code, fatigue=True)
 
-    @pytest.mark.skipif(
-        not EXCEL_AVAILABLE,
-        reason="Excel is not installed, skipping test.",
-    )
-    def test_print_assessment(self, submodel: Submodel, tmpdir):
-        # Test the print_assessment method
+    def test_get_recap(self, submodel: Submodel):
+        # Test the get_recap method
         submodel.build_REs(fatigue=True)
-        code = RCC_MRx()
-        submodel.assess(code, fatigue=True)
-        images_folder = tmpdir.join("Images")
-        with xw.App(visible=False) as app:
-            with as_file(files(templates).joinpath("template.xlsx")) as template_path:
-                submodel.print_assessment(
-                    tmpdir,
-                    app,
-                    template_path,
-                    img_folder=images_folder,
-                    fatigue=True,
-                )
+        submodel.assess(RCC_MRx(), fatigue=True)
+        recap = submodel.get_recap()
+        assert isinstance(recap, dict)
+        assert pytest.approx(recap["Immediate"][0]["Safety Margin"]) == 4.49

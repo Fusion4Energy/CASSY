@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Apr 19 12:13:22 2021
-
-@author: s.guidozzi
-"""
-
 import math
 
 from cassy.designcodes.codes import Code, Rule
@@ -88,6 +81,7 @@ class SDC_IC_ML(Code):
             "de2": de2,
             "de3": de3,
             "de4": de4,
+            "de tot": detot,
             "N": N_all,
             "Rule ID": name,
             "sigma tot": ds * 1e-6,

@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Nov  3 12:06:35 2020
-
-@author: Davide Laghi
-"""
-
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
