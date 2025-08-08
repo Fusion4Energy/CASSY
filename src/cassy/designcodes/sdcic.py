@@ -1,4 +1,5 @@
 import math
+import logging
 
 from cassy.designcodes.codes import Code, Rule
 from cassy.general.material import Material
@@ -56,9 +57,13 @@ class SDC_IC(Code):
             # de2 represents the "plastic" increase in strain due to the primary
             # stress range at the point examined, equal to tresca for shells
             # cyclic_stress_strain looks like it returns strain in [-], not %, so not change it
-            de2 = material.cyclic_stress_strain(T, tresca) - 2 / 3 * (
-                1 + material.nu()
-            ) * (tresca / material.E(T, dpa))
+            try:
+                de2 = material.cyclic_stress_strain(T, tresca) - 2 / 3 * (
+                    1 + material.nu()
+                ) * (tresca / material.E(T, dpa))
+            except NotImplementedError as e:
+                de2 = 0
+                logging.warning(f"Cyclic stress-strain curves not implemented, de2=0")
         else:
             # there is no primary stress
             de2 = 0
@@ -240,16 +245,18 @@ class IC3121_3_1(Rule):
         # select allowable
         if service_lvl == "A":
             allowable1 = material.Sd(T_dpa)
+            allowable2 = material.Sd_nopeak(T_dpa)
         elif service_lvl == "C":
             allowable1 = 1.2 * material.Sd(T_dpa)
+            allowable2 = 1.2 * material.Sd_nopeak(T_dpa)
         elif service_lvl == "D":
             allowable1 = 1.35 * material.Sd(T_dpa)
+            allowable2 = 1.35 * material.Sd_nopeak(T_dpa)
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
 
         stress1 = refEvent.PQF
         stress2 = refEvent.PQ
-        allowable2 = allowable1
 
         return [(stress1, allowable1), (stress2, allowable2)]
 

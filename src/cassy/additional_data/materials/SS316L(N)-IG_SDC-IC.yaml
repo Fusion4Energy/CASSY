@@ -209,6 +209,21 @@ properties:
         [null, null, 419, 427, 435, 442, 449]
       ]
     scale_result: 1e6 # from MPa to Pa when returning the result
+  Sd_nopeak:
+    type: table2D
+    values:
+      x: [0, 100, 150, 200, 250, 300, 350] # degrees Celsius
+      y: [0.0, 2.5, 3, 3.5, 4, 4.5, 5] # DPA
+      vals: [
+        [null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null],
+        [null, null, null, null, null, 411, 411],
+        [null, null, null, 419, 423, 427, 429],
+        [null, null, 419, 427, 435, 442, 449],
+        [null, null, 419, 427, 435, 442, 449],
+        [null, null, 419, 427, 435, 442, 449]
+      ]
+    scale_result: 1e6 # from MPa to Pa when returning the result
   Monotonic Min True Stress Strain:
     type: multi
     ranges:
