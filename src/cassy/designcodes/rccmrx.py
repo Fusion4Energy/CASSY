@@ -1,4 +1,5 @@
 import math
+import logging
 
 from cassy.designcodes.codes import Code, Rule
 from cassy.general.material import Material
@@ -52,9 +53,13 @@ class RCC_MRx(Code):
             # de2 represents the "plastic" increase in strain due to the primary
             # stress range at the point examined, equal to tresca for shells
             # cyclic_stress_strain looks like it returns strain in [-], not %, so not change it
-            de2 = material.cyclic_stress_strain(T, tresca) - 2 / 3 * (
-                1 + material.nu()
-            ) * (tresca / material.E(T, dpa))
+            try:
+                de2 = material.cyclic_stress_strain(T, tresca) - 2 / 3 * (
+                    1 + material.nu()
+                ) * (tresca / material.E(T, dpa))
+            except NotImplementedError as e:
+                de2 = 0
+                logging.warning(f"Cyclic stress-strain curves not implemented, de2=0")
         else:
             # there is no primary stress
             de2 = 0

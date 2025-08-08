@@ -116,9 +116,9 @@ class FlangeAssessment:
     def _build_fatigue_assessors(
         self, row: pd.Series, boltID: str
     ) -> dict[str, BoltActionAssessor]:
-        assert self.config.REs_fatigue is not None, (
-            "Fatigue reference events are not defined in the configuration."
-        )
+        assert (
+            self.config.REs_fatigue is not None
+        ), "Fatigue reference events are not defined in the configuration."
         geom_data = self.geometries[f"{row['Geom data']}_{row['Geom type']}"]
         preload = row["Preload [N]"]
         ref_events = self.config.REs_fatigue[str(boltID)]
@@ -176,9 +176,9 @@ class FlangeAssessment:
         # Assess bolts
         results = {}
         code = self.config.code
-        assert isinstance(code, BoltCode), (
-            f"The code must be a code specific for bolts, not {code.name}"
-        )
+        assert isinstance(
+            code, BoltCode
+        ), f"The code must be a code specific for bolts, not {code.name}"
         if insert:
             assessors = self.insert_assessments
         else:
