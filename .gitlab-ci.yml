@@ -14,7 +14,7 @@ cache:
   paths:
     - .cache/pip
 
-test:
+test_linux:
   variables:
     python: "/usr/bin/python${PYTHON_VERSION}"
   before_script:
@@ -43,6 +43,36 @@ test:
     # Run on merge requests targeting main or developing
     - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "developing"'
+
+test_windows:
+  tags:
+    - windows
+  variables:
+    # python: "/usr/bin/python${PYTHON_VERSION}"
+    python: ${PYTHON_VERSION}
+  before_script:
+    - py.exe -0 # list available Python versions for debugging
+    - py.exe -3.11 --version
+    - py.exe -$env:python --version # For debugging
+    - py.exe -$env:python -m pip --version  # For debugging
+    - py.exe -$env:python -m pip install virtualenv
+    - py.exe -$env:python -m virtualenv venv
+    # - source venv/bin/activate  # activate virtual environment on linux/macOS
+    - ./venv/Scripts/activate.ps1 # Activate the virtual environment on Windows PS
+  script:
+    - py.exe -$env:python -m pip install -e .[dev]
+    - py.exe -$env:python -m pytest --cov=src --cov-report=xml --cov-report=term
+  coverage: /TOTAL.*?(\d+(?:\.\d+)?)%$/
+  parallel:
+    matrix:
+      - PYTHON_VERSION:
+        - "3.11"
+        - "3.12"
+  rules:
+    # Run on pushes to main or developing
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    # Run on merge requests targeting main or developing
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
 # run:
 #   script:
 #     - pip install .
