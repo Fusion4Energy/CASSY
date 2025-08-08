@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Dec 22 11:48:39 2020
-
-@author: davide laghi
-"""
-
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:

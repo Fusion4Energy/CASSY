@@ -28,11 +28,23 @@ def main():
         default=False,
         action="store_true",
     )
+    parser.add_argument(
+        "--nomerge",
+        help="Skip merging the tables in the Word document (faster)",
+        default=True,
+        action="store_false",
+    )
     args = parser.parse_args()
     print_recap = not args.norecap
 
     if args.assess == "bolts":
-        run_bolts(args.root, args.fatigue, matlib=args.matlib, print_recap=print_recap)
+        run_bolts(
+            args.root,
+            args.fatigue,
+            matlib=args.matlib,
+            print_recap=print_recap,
+            merge=args.nomerge,
+        )
     elif args.assess == "paths":
         run_paths(args.root, args.fatigue, matlib=args.matlib, print_recap=print_recap)
     else:

@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-@author: Simone Guidozzi
-
-"""
-
 import math
 
 from cassy.designcodes.codes import Code, Rule
@@ -84,6 +78,7 @@ class RCC_MRx(Code):
             "de2": de2,
             "de3": de3,
             "de4": de4,
+            "de tot": detot,
             "N": N_all,
             "Rule ID": name,
             "sigma tot": ds * 1e-6,

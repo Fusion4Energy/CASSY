@@ -22,7 +22,6 @@ dependencies = [
     "shapely",
     "python-docx",
     "seaborn",
-    "xlwings",
     "tqdm",
     "pyvista",
     "openpyxl",

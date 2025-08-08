@@ -12,35 +12,35 @@ from cassy.general.material import Material
 from tests.bolts import res
 
 
+@pytest.fixture
+def geometries():
+    with as_file(
+        files(materials).joinpath("Inconel 718 (non leak tight) SDC-IC.yaml")
+    ) as mat_path:
+        material = Material(mat_path)
+    mat_lib = {"SS660 (non leak-tight)": material}
+
+    with as_file(files(res).joinpath("M12_bolt.xlsx")) as path:
+        bolt_geom = BoltGeom.from_excel(path, mat_lib)
+
+    with as_file(files(res).joinpath("M12_insert.xlsx")) as path:
+        insert_geom = InsertGeom.from_excel(path, mat_lib)
+
+    return {"M12_bolt": bolt_geom, "M12_insert": insert_geom}
+
+
+@pytest.fixture
+def flange_assessment(geometries: dict[str, BoltLikeGeom]) -> FlangeAssessment:
+    # Test the from_excel method
+    with as_file(files(res).joinpath("Flange1.xlsx")) as config_file:
+        with as_file(files(res).joinpath("Flange1.csv")) as actions_file:
+            config = FlangeAssessmentConfig.from_excel(
+                config_file, actions_file, fatigue=True
+            )
+    return FlangeAssessment(geometries, config, fatigue=True)
+
+
 class TestFlangeAssessment:
-    @pytest.fixture
-    def geometries(self):
-        with as_file(
-            files(materials).joinpath("Inconel 718 (non leak tight) SDC-IC.yaml")
-        ) as mat_path:
-            material = Material(mat_path)
-        mat_lib = {"SS660 (non leak-tight)": material}
-
-        with as_file(files(res).joinpath("M12_bolt.xlsx")) as path:
-            bolt_geom = BoltGeom.from_excel(path, mat_lib)
-
-        with as_file(files(res).joinpath("M12_insert.xlsx")) as path:
-            insert_geom = InsertGeom.from_excel(path, mat_lib)
-
-        return {"M12_bolt": bolt_geom, "M12_insert": insert_geom}
-
-    @pytest.fixture
-    def flange_assessment(
-        self, geometries: dict[str, BoltLikeGeom]
-    ) -> FlangeAssessment:
-        # Test the from_excel method
-        with as_file(files(res).joinpath("Flange1.xlsx")) as config_file:
-            with as_file(files(res).joinpath("Flange1.csv")) as actions_file:
-                config = FlangeAssessmentConfig.from_excel(
-                    config_file, actions_file, fatigue=True
-                )
-        return FlangeAssessment(geometries, config, fatigue=True)
-
     def test_init(self, flange_assessment: FlangeAssessment):
         assert isinstance(flange_assessment, FlangeAssessment)
         assert (
