@@ -125,5 +125,12 @@ def test_CuCrZr_Tr_B_SDC_IC():
     # assert material.Su_min(300, 1) == 994e6
 
 
+def test_SS316LNIG_RCCMRx():
+    with as_file(MAT_FOLDER.joinpath("SS316L(N)-IG_RCC-MRx.yaml")) as mat_path:
+        material = Material(mat_path)
+    
+    assert pytest.approx(material.E(550, 1), rel=5e-3) == 155e9
+
+
 def test_read_materials():
     read_materials(MAT_FOLDER)
