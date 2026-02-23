@@ -4,7 +4,7 @@
 
 # CASSY
 
-![alt image](/imgs/full_logo.png)
+<img src="imgs/full_logo.png" width="500"/>
 
 CASSY is an automated tool for stress assessment following design codes.
 
