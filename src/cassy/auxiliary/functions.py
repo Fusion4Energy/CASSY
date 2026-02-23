@@ -1,7 +1,7 @@
 import logging
 
 import pandas as pd
-import xlwings as xw
+# import xlwings as xw
 
 
 # helper func for sort
@@ -15,17 +15,17 @@ def stripfunc(string: str) -> str:
     return string.strip("$")
 
 
-def is_excel_installed() -> bool:
-    # check if excel is installed
-    try:
-        xw.App(visible=False).quit()
-        return True
-    except xw.XlwingsError:
-        logging.warning("Excel is not installed on this system.")
-        return False
-    except AttributeError:
-        logging.warning("No active engine of excel.")
-        return False
+# def is_excel_installed() -> bool:
+#     # check if excel is installed
+#     try:
+#         xw.App(visible=False).quit()
+#         return True
+#     except xw.XlwingsError:
+#         logging.warning("Excel is not installed on this system.")
+#         return False
+#     except AttributeError:
+#         logging.warning("No active engine of excel.")
+#         return False
 
 
 def cleanNA(df: pd.DataFrame, column_id: str = "ID") -> pd.DataFrame:
