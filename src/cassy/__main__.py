@@ -1,6 +1,7 @@
 import os
 from argparse import ArgumentParser
 
+from cassy.auxiliary.init_folders import init_bolts_assessment, init_paths_assessment
 from cassy.runners.run_bolts import run_bolts
 from cassy.runners.run_paths import run_paths
 
@@ -34,10 +35,21 @@ def main():
         default=True,
         action="store_false",
     )
+    parser.add_argument(
+        "--init",
+        help="Initialize the assessment paths",
+        choices=["bolts", "paths"],
+        default=None,
+    )
     args = parser.parse_args()
     print_recap = not args.norecap
 
-    if args.assess == "bolts":
+    if args.init is not None:
+        if args.init == "bolts":
+            init_bolts_assessment(args.root)
+        elif args.init == "paths":
+            init_paths_assessment(args.root)
+    elif args.assess == "bolts":
         run_bolts(
             args.root,
             args.fatigue,
