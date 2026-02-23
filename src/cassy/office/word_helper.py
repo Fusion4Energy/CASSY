@@ -302,7 +302,14 @@ class WordOutput:
         caption: str,
     ):
         """insert a split dataframe into a table."""
-        df = df[table.table_type.col_order]
+        # always ensure that it is a dataframe. If series, convert to dataframe of
+        # length 1
+        try:
+            df = df[table.table_type.col_order]
+        except KeyError:
+            # if the columns are not found it may be a series problem
+            df = df.set_index("index").T.reset_index()
+            df = df[table.table_type.col_order]
         REs = df[table.table_type.block_identifier].unique()
         min_row = len(table.tbl.rows)
         for re_id in REs:
