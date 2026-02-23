@@ -3,6 +3,9 @@
 ![Latest release](https://eng-gitlab.f4e.europa.eu/f4e-projects/cassy/-/badges/release.svg)
 
 # CASSY
+
+![alt image](/imgs/full_logo.png)
+
 CASSY is an automated tool for stress assessment following design codes.
 
 Authors: F4E engineering analyses unit
