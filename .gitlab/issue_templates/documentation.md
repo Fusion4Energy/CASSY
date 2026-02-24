@@ -1,0 +1,10 @@
+## What were you looking for?
+Please try to describe concisely what kind of information you were looking for and where you were looking.
+
+## Is the information available in the doc but not where you would expect?
+let us know if you ended up finding the information you were looking for in another (unexpected) section of the doc.
+
+## Additional context
+You can use this space to give any other additional information that you think would be useful to solve the issue.
+
+/label ~Doumentation

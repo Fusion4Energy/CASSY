@@ -1,0 +1,22 @@
+## Describe the bug
+A clear and concise description of what the bug is.
+
+## To Reproduce
+Steps to reproduce the behavior:
+for example:
+1. use function XXX
+2. insert this argument
+3. See error
+
+## Screenshots
+If applicable, add screenshots to help explain your problem.
+
+## System details:
+ - OS: [e.g. Linux or Windows]
+ - CASSY version
+ - Python version
+
+## Additional context
+Add any other context about the problem here.
+
+/label ~Bug
