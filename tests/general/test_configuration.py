@@ -3,7 +3,7 @@ from importlib.resources import as_file, files
 import pandas as pd
 import pytest
 
-from cassy.general.configuration import Configuration
+from cassy.paths.paths_config import Configuration
 from tests.paths import res
 
 

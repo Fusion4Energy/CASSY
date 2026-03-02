@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import os
-
+from enum import Enum
 import pandas as pd
-
+import numpy as np
 from cassy.auxiliary.custom_errors import TensorInputError
 from cassy.auxiliary.types import PathLike
+from cassy.auxiliary.custom_errors import ConfigError
+from dataclasses import dataclass
 
 
 class Configuration:
@@ -179,6 +181,128 @@ class Configuration:
 class AssessmentConfiguration:
     def __init__(self) -> None:
         pass
+
+
+STRESS_ORDER = ["Sx", "Sy", "Sz", "Sxy", "Sxz", "Syz"]
+
+
+class StressClassification(Enum):
+    PRIMARY = "P"
+    SECONDARY = "Q"
+
+
+class LoadType(Enum):
+    VOLUMETRIC = "Volumetric"
+    INERTIAL = "Inertial"
+
+
+class PathType(Enum):
+    NORMAL = "normal"
+    FILLET = "fillet"
+
+
+class SpatialRecMethod(Enum):
+    SRSS = "srss"
+    ALGEBRAIC = "algebraic"
+    ABS = "abs"
+
+
+@dataclass
+class LinStressConfig:
+    """Stores the configuration of the single load
+
+    name : str
+        identifier of the stress. The default is None
+    unit : str, optional
+        Either 'MPa', 'KPa' or 'Pa'. The default is 'Pa'.
+    stress_classification : StressClassification
+        Stress classification of the single load (i.e., primary or secondary).
+    load_type : LoadType
+        Either volumetric or inertial
+    isPD : bool
+        if True the stress is a Plasma disruption induced stress.
+    isCyclic : bool
+        if True the stress should be considered cyclic
+    scale : float
+        scale factor for the stresses
+    spatial_rec_method : SpatialRecMethod
+        method to use for spatial recombination.
+    ptype : PathType
+        type of the path where the linstress is computed.
+    isPressure : bool
+        if True is a sustained loads. This causes different handling if
+        the stress is evaluated in a "fillet" path.
+    Welding_n : float
+        Welded Joint coefficient of the path where the linstress is
+        computed.
+    Welding_f : float
+        Fatigue Strength Reduction Factor f where the linstress is
+        computed.
+    isOccasional : bool
+        if True is an Occasional load according to ASME B31.3.
+    """
+
+    name: str
+    stress_classification: StressClassification
+    load_type: LoadType
+    unit: str = "Pa"
+    isPD: bool = False
+    isCyclic: bool = False
+    scale: float = 1
+    spatial_rec_method: SpatialRecMethod = SpatialRecMethod.ALGEBRAIC
+    ptype: PathType = PathType.NORMAL
+    isPressure: bool = False
+    Welding_n: float = 1
+    Welding_f: float = 1
+    isShortOverstress: bool = False
+
+    def __post_init__(self):
+        if (
+            self.stress_classification == StressClassification.SECONDARY
+            and self.load_type == LoadType.INERTIAL
+        ):
+            raise ValueError("Inertial loads cannot be secondary")
+
+    @classmethod
+    def from_dict(cls, dic: dict | pd.Series) -> "LinStressConfig":
+        rec = dic.get("Spatial Recombination", SpatialRecMethod.ALGEBRAIC)
+        if isinstance(rec, str) and not rec == "":
+            recombine = SpatialRecMethod(rec)
+        elif np.isnan(rec) or rec == "" or rec is None:
+            recombine = SpatialRecMethod.ALGEBRAIC
+        else:
+            raise ConfigError(f"Invalid spatial recombination method: {rec}")
+
+        return cls(
+            name=dic["name"],
+            stress_classification=StressClassification(dic["Stress Type"]),
+            load_type=LoadType(dic["Load Type"]),
+            unit=dic["Unit"],
+            isPD=dic.get("Derives from Plasma Disruption", False),
+            isCyclic=dic["Is Cyclic"],
+            scale=dic["Scale"],
+            spatial_rec_method=recombine,
+            ptype=PathType(dic["ptype"]),
+            isPressure=dic["Is Pressure"],
+            Welding_n=dic["Welding_n"],
+            Welding_f=dic["Welding_f"],
+            isShortOverstress=dic["Is Short Overstress"],
+        )
+
+
+@dataclass
+class ReferenceEventConfig:
+    service_lvl: str
+    re_ID: str
+    T: float  # °C
+    dpa: float = 0
+    oc: str = "N/A"
+    ie: str = "N/A"
+    ce: str = "N/A"
+    load_ctg: str = "N/A"
+    ncycles: int | None = None
+    welding_n: float = 1
+    welding_f: float = 1
 
 
 def parse_cfg_files(

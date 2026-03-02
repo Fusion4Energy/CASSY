@@ -6,8 +6,8 @@ from cassy.paths.linstress import ReferenceEvent
 
 
 class RCC_MR(Code):
-    def __init__(self, failure_modes=None):
-        super().__init__(failure_modes=failure_modes, name="RCC-MR")
+    def __init__(self):
+        super().__init__(name="RCC-MR")
         # --- Initiate all elastic rules, negligible creep ---
         # P-Type and S-Type
         rules = {
@@ -19,9 +19,7 @@ class RCC_MR(Code):
         self.damage_types = ("Immediate", "Ratcheting")
         self.fatigue = True
 
-    def computeVj(
-        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
-    ):
+    def computeVj(self, refEvent: ReferenceEvent, material: Material):
         """
         Asses the Rule
         Parameters
@@ -30,18 +28,18 @@ class RCC_MR(Code):
             reference event to assess.
         material : material.Material
             Material data.
-        T : float
-            Temperature of the path.
         Returns
         -------
         dictionary containing de1, de2, de3, de4, , N allowable,
         ID rule and sigma tot
         """
+        T = refEvent.config.T
+        dpa = refEvent.config.dpa
         # ds is the total stress of the considered reference event
         name = "RCCMR-3261.123"
         # Fatigue Strength Reduction Factor defined in RB 3292.112:
         # ds is multiplied by f which depends on the type of joint
-        f = refEvent.f_welding
+        f = refEvent.config.welding_f
         ds = f * refEvent.PQF
         T_ds = (T, ds)
         # de calculation
@@ -97,9 +95,7 @@ class RB_3251_11(Rule):
         self.ref = "RB 3251.11"
         self.description = ["Primary membrane", "Primary Membrane plus Bending"]
 
-    def assess(
-        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
-    ):
+    def assess(self, refEvent: ReferenceEvent, material: Material):
         """
         Assess the rule
 
@@ -109,8 +105,6 @@ class RB_3251_11(Rule):
             reference event to assess.
         material : material.Material
             Material data.
-        T : float
-            Temperature of the path.
 
         Returns
         -------
@@ -119,8 +113,10 @@ class RB_3251_11(Rule):
             is of the type (stress, allowable).
 
         """
-        n = refEvent.n_welding
-        service_lvl = refEvent.service_lvl
+        T = refEvent.config.T
+        dpa = refEvent.config.dpa
+        n = refEvent.config.welding_n
+        service_lvl = refEvent.config.service_lvl
         T_dpa = (T, 0)  # dpa is set to zero in RCC_MR
         # select allowable
         if service_lvl == "A":
@@ -151,8 +147,6 @@ class RB_3261_116(Rule):
         self,
         refEvent: ReferenceEvent,
         material: Material,
-        T: float,
-        dpa: float,
         K: float = 1.5,
     ):
         """
@@ -164,10 +158,6 @@ class RB_3261_116(Rule):
             Recombined linear stress to assess.
         material : material.Material
             Material data.
-        T : float
-            Temperature of the path.
-        dpa : float
-            Displacement per atom value in the path.
 
         Returns
         -------
@@ -176,8 +166,10 @@ class RB_3261_116(Rule):
             is of the type (stress, allowable).
 
         """
-        # n = refEvent.n_welding ( base metal properties for ratcheting)
-        service_lvl = refEvent.service_lvl
+        T = refEvent.config.T
+        dpa = refEvent.config.dpa
+        # n = refEvent.config.welding_n ( base metal properties for ratcheting)
+        service_lvl = refEvent.config.service_lvl
         T_dpa = (T, dpa)
 
         # select allowable
@@ -190,7 +182,7 @@ class RB_3261_116(Rule):
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
 
-        stress1 = refEvent.Sm3_stress_RCCMR
+        stress1 = refEvent.PmPb + refEvent.dQ
 
         # Operating period with secondary membrane stress
         # thermal loads are considered mandatory for ratcheting
@@ -223,7 +215,7 @@ class RB_3261_116(Rule):
             sigma_mb = 0.5 * (refEvent.PmPb + sigma_nmb)
             sigma_m = 0.5 * (refEvent.Pm + sigma_nm)
 
-        dq = refEvent.dq  # secondary stress range
+        dq = refEvent.dQ + refEvent.PmPbs  # secondary stress range
 
         # seconday ratio ( relative variation in secondary stress in relation)
         # to the primary stress considered IC 3131.1.1.3)

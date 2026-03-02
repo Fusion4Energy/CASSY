@@ -7,8 +7,8 @@ from cassy.paths.linstress import ReferenceEvent
 
 
 class SDC_IC(Code):
-    def __init__(self, failure_modes: list = None):
-        super().__init__(failure_modes=failure_modes, name="SDC-IC")
+    def __init__(self):
+        super().__init__(name="SDC-IC")
         # --- Initiate all elastic rules, negligible creep ---
         # M-Type
         rules = {
@@ -21,9 +21,7 @@ class SDC_IC(Code):
         self.damage_types = ("Immediate", "Ratcheting")
         self.fatigue = True
 
-    def computeVj(
-        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
-    ) -> dict:
+    def computeVj(self, refEvent: ReferenceEvent, material: Material) -> dict:
         """
         Asses the Rule
         Parameters
@@ -32,21 +30,19 @@ class SDC_IC(Code):
             reference event to assess.
         material : material.Material
             Material data.
-        T : float
-            Temperature of the path.
-        dpa : float
-            Displacement per atom value in the path.
 
         Returns
         -------
         dictionary containing de1, de2, de3, de4, , N allowable,
         ID rule and sigma tot
         """
+        T = refEvent.config.T
+        dpa = refEvent.config.dpa
         # ds is the total stress of the considered reference event
         name = "IC 3132.3.1"
         # Fatigue Strength Reduction Factor defined in RB 3292.112:
         # ds is multiplied by f which depends on the type of joint
-        f = refEvent.f_welding
+        f = refEvent.config.welding_f
         ds = f * refEvent.PQF
         T_ds = (T, ds)
         # de calculation
@@ -107,8 +103,6 @@ class IC3121_1_1_2a(Rule):
         self,
         refEvent: ReferenceEvent,
         material: Material,
-        T: float,
-        dpa: float,
         K: float = 1.5,
     ) -> list:
         """
@@ -120,10 +114,6 @@ class IC3121_1_1_2a(Rule):
             reference event to assess.
         material : material.Material
             Material data.
-        T : float
-            Temperature of the path.
-        dpa : float
-            Displacement per atom value in the path.
         K : float
             Bending Section shape factor. The default is 1.5
 
@@ -134,9 +124,11 @@ class IC3121_1_1_2a(Rule):
             is of the type (stress, allowable).
 
         """
-        service_lvl = refEvent.service_lvl
+        T = refEvent.config.T
+        dpa = refEvent.config.dpa
+        service_lvl = refEvent.config.service_lvl
         T_dpa = (T, dpa)
-        n = refEvent.n_welding
+        n = refEvent.config.welding_n
         # select allowable
         if service_lvl == "A":
             allowable1 = n * material.Sm(T_dpa)
@@ -161,9 +153,7 @@ class IC3121_2_1(Rule):
         self.description = ["Primary plus secondary membrane stress"]
         # self.equation = '$$A_{b}$$ (P_L+ P_b ) ̅≤〖K_eff S〗_m (〖T_m,Φt〗_m)'
 
-    def assess(
-        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
-    ) -> list:
+    def assess(self, refEvent: ReferenceEvent, material: Material) -> list:
         """
         Assess the rule
 
@@ -173,10 +163,6 @@ class IC3121_2_1(Rule):
             Recombined linear stress to assess.
         material : material.Material
             Material data.
-        T : float
-            Temperature of the path.
-        dpa : float
-            Displacement per atom value in the path.
 
         Returns
         -------
@@ -185,8 +171,10 @@ class IC3121_2_1(Rule):
             is of the type (stress, allowable).
 
         """
+        T = refEvent.config.T
+        dpa = refEvent.config.dpa
         # n = refEvent.n_welding
-        service_lvl = refEvent.service_lvl
+        service_lvl = refEvent.config.service_lvl
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A":
@@ -213,9 +201,7 @@ class IC3121_3_1(Rule):
         ]
         # self.equation = '$$A_{b}$$ (P_L+ P_b ) ̅≤〖K_eff S〗_m (〖T_m,Φt〗_m)'
 
-    def assess(
-        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
-    ) -> list:
+    def assess(self, refEvent: ReferenceEvent, material: Material) -> list:
         """
         Assess the rule
 
@@ -225,10 +211,6 @@ class IC3121_3_1(Rule):
             Recombined linear stress to assess.
         material : material.Material
             Material data.
-        T : float
-            Temperature of the path.
-        dpa : float
-            Displacement per atom value in the path.
         K : float
             Bending Section shape factor. The default is 1.5
 
@@ -239,9 +221,9 @@ class IC3121_3_1(Rule):
             is of the type (stress, allowable).
 
         """
-        n = refEvent.n_welding
-        service_lvl = refEvent.service_lvl
-        T_dpa = (T, dpa)
+        n = refEvent.config.welding_n
+        service_lvl = refEvent.config.service_lvl
+        T_dpa = (refEvent.config.T, refEvent.config.dpa)
         # select allowable
         if service_lvl == "A":
             allowable1 = material.Sd(T_dpa)
@@ -272,8 +254,6 @@ class IC3131_1_2(Rule):
         self,
         refEvent: ReferenceEvent,
         material: Material,
-        T: float,
-        dpa: float,
         K: float = 1.5,
     ) -> list:
         """
@@ -285,10 +265,6 @@ class IC3131_1_2(Rule):
             Recombined linear stress to assess.
         material : material.Material
             Material data.
-        T : float
-            Temperature of the path.
-        dpa : float
-            Displacement per atom value in the path.
 
         Returns
         -------
@@ -297,8 +273,10 @@ class IC3131_1_2(Rule):
             is of the type (stress, allowable).
 
         """
+        T = refEvent.config.T
+        dpa = refEvent.config.dpa
         # n = refEvent.n_welding ( base metal properties for ratcheting)
-        service_lvl = refEvent.service_lvl
+        service_lvl = refEvent.config.service_lvl
         T_dpa = (T, dpa)
         # ------IC 3131.1.2 '3Sm Rule'-------#
         # select allowable
@@ -311,7 +289,7 @@ class IC3131_1_2(Rule):
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
 
-        stress1 = refEvent.Sm3_stress
+        stress1 = refEvent.ratcheting3Sm_SDCIC
 
         # -----IC 3131.1.1 'Efficiency Index Diagram'------#
         # Operating period with secondary membrane stress
@@ -325,7 +303,8 @@ class IC3131_1_2(Rule):
         Em = material.compute_tangent_young(sigma_nm, T, dpa=dpa)
         Emb = material.compute_tangent_young(sigma_nmb, T, dpa=dpa)
 
-        try:
+        # short duration overstress
+        if refEvent.Pms > 1e-6 or refEvent.PmPbs > 1e-6:
             sigma_mb = (
                 0.5 * (refEvent.PmPb_ns + sigma_nmb)
                 + (3 * material.E(T, dpa) / Emb) * refEvent.PmPbs
@@ -335,7 +314,7 @@ class IC3131_1_2(Rule):
                 + (3 * material.E(T, dpa) / Em) * refEvent.Pms
             )
 
-        except TypeError:  # no overstress of short duration
+        else:  # no overstress of short duration
             sigma_nm = material.compute_delta_sigma_Neuber(
                 T, refEvent.PmQm, 1, dpa=dpa, monotonic=True
             )
@@ -345,7 +324,7 @@ class IC3131_1_2(Rule):
             sigma_mb = 0.5 * (refEvent.PmPb + sigma_nmb)
             sigma_m = 0.5 * (refEvent.Pm + sigma_nm)
 
-        dq = refEvent.dq  # secondary stress range
+        dq = refEvent.dQ + refEvent.PmPbs  # secondary stress range
 
         # seconday ratio ( relative variation in secondary stress in relation)
         # to the primary stress considered IC 3131.1.1.3)

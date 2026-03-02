@@ -17,7 +17,7 @@ classifiers = [
     "License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)",
 ]
 dependencies = [
-    "pandas",
+    "pandas>=3.0.0",
     "scipy",
     "shapely",
     "python-docx",

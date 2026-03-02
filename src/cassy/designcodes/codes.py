@@ -1,46 +1,53 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
     from cassy.bolts.code_assessor import BoltActionAssessor
+    from cassy.paths.linstress import ReferenceEvent
 from cassy.general.material import Material
 
 
+class Rule(ABC):
+    def __init__(self):
+        self.ref = None
+        self.description: list[str] = []
+        self.damage_type = None
+        super().__init__()
+
+    @abstractmethod
+    def assess(self, *args, **kwargs) -> list[tuple[float, float]]:
+        # The returned object has to be a list as follows
+        # (stress, allowable)
+        pass
+
+
 class Code:
-    def __init__(self, failure_modes=None, name=None):
+    def __init__(self, name: str | None = None):
         """
         Abstract class for a design code
 
-        Parameters
-        ----------
-        failure_modes : pd.DataFrame
-            columns are: ID, Description, Mechanical Damages.
-        name : str
-            name of the code
-
-        Returns
-            None
-
         """
-        self.service_lvls = ["A", "C", "D"]  # Service levels
-        self.failure_modes = failure_modes
         self.name = name
+        self.service_lvls = ["A", "C", "D"]  # Service levels
         self.custom_rules = {}  # No custom rules by default
+        self.rules: dict[str, dict[str, Rule]] = {}  # No rules by default
 
-    def assess(self, combined_stress, material, T=None, dpa=None, selection="All"):
+    def assess(
+        self,
+        combined_stress,
+        material: Material,
+        selection: str | dict | None = "All",
+    ) -> dict[str, tuple[tuple[float, float], Rule]]:
         """
         Assess a reference event according to code
 
         Parameters
         ----------
-        combined_stress : linstress.ReferenceEvent
+        combined_stress : linstress.ReferenceEvent | BoltActionAssessor
             event to assess.
         material : material.Material
             material to assess.
-        T : float
-            temperature for the assessment.
-        dpa : float
-            displacement per atom to use for assessment.
         selection : dic, optional
             {<rule set>: <list of rules>}. The default is 'All'. other string
             can be passed, they are used to check in the custom_rule dictionary
@@ -48,9 +55,7 @@ class Code:
 
         Returns
         -------
-        assessments : {rulename: (assessed, rule)}
-            assesed: [(allowable1, stress1), ...])
-            rule: code.Rule
+        dict[str, tuple[tuple[float, float], Rule]]
 
         """
         rules2assess = {}
@@ -78,33 +83,14 @@ class Code:
                 # This means that this is still not a rule
                 assessments[rule_name] = {}
                 for rule_name2, rule2 in rule.items():
-                    if T is None:
-                        assessed = rule2.assess(combined_stress, material)
-                    else:
-                        assessed = rule2.assess(combined_stress, material, T, dpa)
+                    assessed = rule2.assess(combined_stress, material)
                     assessments[rule_name][rule_name2] = (assessed, rule2)
             else:
-                if T is None:
-                    assessed = rule.assess(combined_stress, material)
-                else:
-                    assessed = rule.assess(combined_stress, material, T, dpa)
+                assessed = rule.assess(combined_stress, material)
+
                 assessments[rule_name] = (assessed, rule)
 
         return assessments
-
-
-class Rule(ABC):
-    def __init__(self):
-        self.ref = None
-        self.description = None
-        self.damage_type = None
-        super().__init__()
-
-    @abstractmethod
-    def assess(self):
-        # The returned object has to be a list as follows
-        # (stress, allowable)
-        pass
 
 
 class BoltCode(Code):
@@ -117,7 +103,7 @@ class BoltCode(Code):
         Parameters
         ----------
         bolt_assessor : BoltActionAssessor
-            Assessor for the bolt actions, geometry, ref event etc.
+            Assessor for the bolt
         material : Material
             Material to be used during the assessment.
 

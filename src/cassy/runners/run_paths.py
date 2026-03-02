@@ -10,7 +10,7 @@ import pandas as pd
 from cassy.additional_data import templates
 from cassy.auxiliary.types import PathLike
 from cassy.designcodes.map import PATH_CODES as CODES
-from cassy.general.configuration import parse_cfg_files
+from cassy.paths.paths_config import parse_cfg_files
 from cassy.general.folder_tree import PathsFolderTree
 from cassy.office.word_helper import WordOutput
 from cassy.paths.submodel import Submodel

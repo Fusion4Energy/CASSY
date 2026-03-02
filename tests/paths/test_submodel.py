@@ -7,7 +7,7 @@ from cassy.designcodes.codes import Code
 from cassy.designcodes.rccmr import RCC_MR
 from cassy.designcodes.rccmrx import RCC_MRx
 from cassy.designcodes.sdcic import SDC_IC
-from cassy.general.configuration import Configuration
+from cassy.paths.paths_config import Configuration
 from cassy.general.material import Material
 from cassy.paths.submodel import Submodel
 from tests.paths import res
