@@ -1,13 +1,9 @@
 from importlib.resources import as_file, files
 
 import numpy as np
-import pandas as pd
 import pytest
 
 from cassy.additional_data import materials as mat_folder
-from cassy.bolts.bolt_config import BoltReferenceEvent, BoltReferenceEventFatigue
-from cassy.bolts.code_assessor import BoltActionAssessor
-from cassy.bolts.geometry import BoltGeom
 from cassy.designcodes.sdcic import (
     SDC_IC,
     IC3121_1_1_2a,
@@ -16,8 +12,8 @@ from cassy.designcodes.sdcic import (
     IC3131_1_2,
 )
 from cassy.general.material import Material
-from cassy.paths.linstress import ReferenceEvent
 from tests.designcodes import res
+from cassy.paths.linstress import ReferenceEvent
 
 RES = files(res)
 
@@ -38,8 +34,8 @@ def material_ss316():
 # Fixture for a real ReferenceEvent from path_stresses.csv and path_config_recomb.xlsx
 # Fixture for a real ReferenceEvent from path_stresses.csv and path_config_recomb.xlsx using from_recombination
 @pytest.fixture
-def ref_event():
-    from cassy.general.configuration import parse_cfg_files
+def ref_event() -> ReferenceEvent:
+    from cassy.paths.paths_config import parse_cfg_files
     from cassy.paths.submodel import Submodel
 
     # Prepare file paths
@@ -72,7 +68,6 @@ def ref_event():
 
 
 class TestSDCICPaths:
-
     @pytest.mark.parametrize(
         "material_fixture, T, dpa, expected_Sm, expected_Se, expected_symin, expected_sumin, expected_keff",
         [
@@ -84,7 +79,7 @@ class TestSDCICPaths:
     @pytest.mark.parametrize("service_lvl", ["A", "C", "D"])
     def test_ic3121_1_1_2a_assess_levels(
         self,
-        ref_event,
+        ref_event: ReferenceEvent,
         request,
         material_fixture,
         T,
@@ -98,15 +93,17 @@ class TestSDCICPaths:
     ):
         material = request.getfixturevalue(material_fixture)
         rule = IC3121_1_1_2a()
-        ref_event.service_lvl = service_lvl
-        n = ref_event.n_welding
+        ref_event.config.service_lvl = service_lvl
+        ref_event.config.T = T
+        ref_event.config.dpa = dpa
+        n = ref_event.config.welding_n
         if service_lvl == "A":
             allowable1 = n * expected_Sm
         elif service_lvl == "C":
             allowable1 = min(1.2 * n * expected_Sm, expected_symin)
         elif service_lvl == "D":
             allowable1 = min(2.4 * n * expected_Sm, 0.7 * expected_sumin)
-        results = rule.assess(ref_event, material, T=T, dpa=dpa)
+        results = rule.assess(ref_event, material)
         assert isinstance(results, list)
         assert len(results) == 2
         stress1, test_allowable1 = results[0]
@@ -132,12 +129,20 @@ class TestSDCICPaths:
         ],
     )
     def test_ic3121_2_1_assess_levels(
-        self, ref_event, request, material_fixture, expected_Se, service_lvl, factor
+        self,
+        ref_event: ReferenceEvent,
+        request,
+        material_fixture,
+        expected_Se,
+        service_lvl,
+        factor,
     ):
         material = request.getfixturevalue(material_fixture)
         rule = IC3121_2_1()
-        ref_event.service_lvl = service_lvl
-        results = rule.assess(ref_event, material, T=300, dpa=0.1)
+        ref_event.config.service_lvl = service_lvl
+        ref_event.config.T = 300
+        ref_event.config.dpa = 0.1
+        results = rule.assess(ref_event, material)
         assert isinstance(results, list)
         assert len(results) == 1
         stress, allowable = results[0]
@@ -164,7 +169,7 @@ class TestSDCICPaths:
     )
     def test_ic3121_3_1_assess_levels(
         self,
-        ref_event,
+        ref_event: ReferenceEvent,
         request,
         material_fixture,
         expected_Sd,
@@ -175,10 +180,10 @@ class TestSDCICPaths:
     ):
         material = request.getfixturevalue(material_fixture)
         rule = IC3121_3_1()
-        ref_event.service_lvl = service_lvl
-        T = temperature
-        dpa = 5
-        results = rule.assess(ref_event, material, T=T, dpa=dpa)
+        ref_event.config.service_lvl = service_lvl
+        ref_event.config.T = temperature
+        ref_event.config.dpa = 5
+        results = rule.assess(ref_event, material)
         assert isinstance(results, list)
         assert len(results) == 2
         stress1, allowable1 = results[0]
@@ -197,24 +202,37 @@ class TestSDCICPaths:
     )
     @pytest.mark.parametrize("service_lvl", ["A", "C", "D"])
     def test_ic3131_1_2_assess_levels(
-        self, ref_event, request, material_fixture, T, dpa, expected_Sm, service_lvl
+        self,
+        ref_event: ReferenceEvent,
+        request,
+        material_fixture,
+        T,
+        dpa,
+        expected_Sm,
+        service_lvl,
     ):
         material = request.getfixturevalue(material_fixture)
         rule = IC3131_1_2()
-        ref_event.service_lvl = service_lvl
-        result = rule.assess(ref_event, material, T=T, dpa=dpa)
+        ref_event.config.service_lvl = service_lvl
+        ref_event.config.T = T
+        ref_event.config.dpa = dpa
+        result = rule.assess(ref_event, material)
         if service_lvl == "D":
             assert result is None
         else:
             assert isinstance(result, list)
-            assert result[0][0] == ref_event.Sm3_stress
+            assert result[0][0] == ref_event.ratcheting3Sm_SDCIC
             assert pytest.approx(result[0][1], rel=1e-6) == 3 * expected_Sm
 
     @pytest.mark.parametrize("material_fixture", ["material_cucrzr", "material_ss316"])
-    def test_sdc_ic_computeVj(self, ref_event, request, material_fixture):
+    def test_sdc_ic_computeVj(
+        self, ref_event: ReferenceEvent, request, material_fixture
+    ):
         code = SDC_IC()
         material = request.getfixturevalue(material_fixture)
-        result = code.computeVj(ref_event, material, T=300, dpa=0.1)
+        ref_event.config.T = 300
+        ref_event.config.dpa = 0.1
+        result = code.computeVj(ref_event, material)
         assert "de1" in result
         assert "de2" in result
         assert "de3" in result

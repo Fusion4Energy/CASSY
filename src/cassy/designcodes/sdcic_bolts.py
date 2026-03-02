@@ -13,8 +13,10 @@ ASSESSMENTS = {
 
 
 class SDC_IC_Bolts(BoltCode):
-    def __init__(self, failure_modes: Any = None):
-        super().__init__(failure_modes=failure_modes, name="SDC-IC (Bolts)")
+    def __init__(
+        self,
+    ):
+        super().__init__(name="SDC-IC (Bolts)")
         # Minimum bolt cross-sectional area for bolted flanged joints which do
         # not have to satisfy leaktightness
         primary = {"Primary Stress": IC6113()}

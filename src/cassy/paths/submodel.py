@@ -7,9 +7,14 @@ from tqdm import tqdm
 
 from cassy.auxiliary.types import PathLike
 from cassy.designcodes.codes import Code
-from cassy.general.configuration import Configuration
+from cassy.paths.paths_config import Configuration
 from cassy.general.material import Material
-from cassy.paths.linstress import LinStress, ReferenceEvent
+from cassy.paths.linstress import (
+    LinStress,
+    ReferenceEvent,
+    ReferenceEventConfig,
+    LinStressConfig,
+)
 
 
 class Path:
@@ -86,7 +91,7 @@ class Path:
         self.ass_beg = None
         self.ass_end = None
 
-    def add_RE(self, RE, pos, fatigue=False):
+    def add_RE(self, RE: ReferenceEvent, pos: str, fatigue: bool = False) -> None:
         """
         Add a ReferenceEvent to the path. Differentiate if it is a fatigue RE
 
@@ -125,7 +130,7 @@ class Path:
 
         self._update_loads()
 
-    def assess(self, code):
+    def assess(self, code: Code) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Assess all reference events in path
 
@@ -136,10 +141,9 @@ class Path:
 
         Returns
         -------
-        self.ass_beg, self.ass_end
+        self.ass_beg, self.ass_end : tuple[pd.DataFrame, pd.DataFrame]
             pd.DataFrames containing the assessments of the begin and end
             position of the path
-
         """
         dfs_beg = []
         dfs_end = []
@@ -156,7 +160,7 @@ class Path:
 
         return self.ass_beg, self.ass_end
 
-    def assess_fatigue(self, code: Code):
+    def assess_fatigue(self, code: Code) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Assess all fatigue reference events in path
 
@@ -167,7 +171,7 @@ class Path:
 
         Returns
         -------
-        self.ass_beg, self.ass_end
+        self.ass_fatigue_beg, self.ass_fatigue_end : tuple[pd.DataFrame, pd.DataFrame]
             pd.DataFrames containing the assessments of the begin and end
             position of the path
 
@@ -187,7 +191,7 @@ class Path:
 
         return self.ass_fatigue_beg, self.ass_fatigue_end
 
-    def _get_basic_loads_df(self, pos):
+    def _get_basic_loads_df(self, pos: str) -> pd.DataFrame:
         """
         build a DF from all the stress matrix of the single loads acting
         on the path
@@ -213,9 +217,9 @@ class Path:
             # get it in MPa
             mtrx = linstress.original_mtrx.copy() * 1e-6
             # reorder the index
-            mtrx = mtrx.loc[["Pm", "Pb", "F"]]
+            mtrx = mtrx.loc[["M", "B", "F"]]
             stress_mtrx = mtrx.reset_index()
-            stress_mtrx["Load Condition"] = linstress.name
+            stress_mtrx["Load Condition"] = linstress.config.name
             stress_mtrx["Stress breakdown"] = stress_names
             dfs.append(stress_mtrx)
 
@@ -224,7 +228,7 @@ class Path:
 
         return df
 
-    def _update_loads(self):
+    def _update_loads(self) -> dict[str, list[LinStress]]:
         """
         Adjourn the loads conditions for instance when a RE is added.
         If the reference events of the fatigue are changed this does not
@@ -233,25 +237,23 @@ class Path:
 
         Returns
         -------
-        basic_loads : dic
+        basic_loads : dict[str, list[LinStress]]
             load conditions.
 
         """
         basic_loads = {"begin": [], "end": []}
         basic_loads_names = []
         for RE_beg, RE_end in zip(self.REs_beg, self.REs_end):
-            for beg_stress, end_stress in zip(
-                RE_beg.lin_stress_list, RE_end.lin_stress_list
-            ):
-                if beg_stress.name not in basic_loads_names:
-                    basic_loads_names.append(beg_stress.name)
+            for beg_stress, end_stress in zip(RE_beg.stresses, RE_end.stresses):
+                if beg_stress.config.name not in basic_loads_names:
+                    basic_loads_names.append(beg_stress.config.name)
                     basic_loads["begin"].append(beg_stress)
                     basic_loads["end"].append(end_stress)
         self.basic_loads = basic_loads
         return basic_loads
 
 
-def _round_ass_df(df):
+def _round_ass_df(df: pd.DataFrame) -> pd.DataFrame:
     dic = {"Applied [MPa]": 0, "Allowable [MPa]": 0, "Safety Margin": 2}
     df = df.round(dic)
     return df
@@ -282,7 +284,7 @@ class Submodel:
         self.mat_dict = mat_dict
 
         # Initialize all paths
-        paths = {}
+        paths: dict[int, Path] = {}
         for idx, row in config["Paths"].iterrows():
             pnum = int(idx)
             ptype = row["Type"]
@@ -300,7 +302,7 @@ class Submodel:
         self.recap_rows = {}
         self.images = {}
 
-    def assess(self, code: Code, fatigue: bool = True):
+    def assess(self, code: Code, fatigue: bool = True) -> None:
         """
         Assess all paths in the submodel
 
@@ -529,7 +531,7 @@ class Submodel:
 
         return recap_rows
 
-    def build_REs(self, fatigue: bool = False):
+    def build_REs(self, fatigue: bool = False) -> None:
         """Build all the reference events for all paths in the submodel.
 
         Parameters
@@ -548,7 +550,7 @@ class Submodel:
                 for re in re_list_fatigue:
                     self._build_RE(pathnum, re, fatigue=True)
 
-    def _build_RE(self, pathnum: int, re_ID: str, fatigue: bool = False):
+    def _build_RE(self, pathnum: int, re_ID: str, fatigue: bool = False) -> None:
         """
         build a reference event to assign to a specific path and submodel
 
@@ -629,18 +631,18 @@ class Submodel:
             for load in load_names:
                 linstress = self._build_linearized_stress(load, pathnum, pos)
                 stresses.append(linstress)
-            RE = ReferenceEvent.from_recombination(
-                stresses,
-                service_lvl,
-                re_ID,
-                T,
-                dpa,
+            config = ReferenceEventConfig(
+                service_lvl=service_lvl,
+                re_ID=re_ID,
+                T=T,
+                dpa=dpa,
                 oc=oc,
                 ie=ie,
                 ce=ce,
                 load_ctg=load_ctg,
                 ncycles=ncycles,
             )
+            RE = ReferenceEvent(stresses, config)
             # Add the reference event to the correct path
             self.paths[pathnum].add_RE(RE, pos, fatigue=fatigue)
 
@@ -662,16 +664,18 @@ class Submodel:
         LinStress
             Linearized Stress object.
         """
-        tensor = self.config.get_stress_tensor(load, pathnum, pos)
         ptype = self.config["Paths"].loc[pathnum, "Type"]
         welding_n = self.config["Paths"].loc[pathnum, "Welding-n"]
         welding_f = self.config["Paths"].loc[pathnum, "Welding-f"]
-        stress = LinStress.from_config(
-            load,
-            tensor,
-            self.config["Stresses"].loc[load],
-            ptype,
-            welding_n,
-            welding_f,
-        )
+
+        data = self.config["Stresses"].loc[load]
+        data["name"] = load
+        data["ptype"] = ptype
+        data["Welding_n"] = welding_n
+        data["Welding_f"] = welding_f
+
+        tensor = self.config.get_stress_tensor(load, pathnum, pos)
+
+        config = LinStressConfig.from_dict(data)
+        stress = LinStress(tensor, config)
         return stress

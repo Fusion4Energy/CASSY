@@ -6,8 +6,8 @@ from cassy.paths.linstress import ReferenceEvent
 
 
 class SDC_IC_ML(Code):
-    def __init__(self, failure_modes=None):
-        super().__init__(failure_modes=failure_modes, name="SDC-IC multilayer")
+    def __init__(self):
+        super().__init__(name="SDC-IC multilayer")
         # --- Initiate all elastic rules, negligible creep ---
         # M-Type
         rules = {
@@ -19,7 +19,7 @@ class SDC_IC_ML(Code):
         self.fatigue = True
 
     def computeVj(
-        self, refEvent: ReferenceEvent, material: Material, T: float, dpa: float
+        self, refEvent: ReferenceEvent, material: Material
     ):
         """
         Asses the Rule
@@ -29,21 +29,19 @@ class SDC_IC_ML(Code):
             reference event to assess.
         material : material.Material
             Material data.
-        T : float
-            Temperature of the path.
-        dpa : float
-            Displacement per atom value in the path.
 
         Returns
         -------
         dictionary containing de1, de2, de3, de4, , N allowable,
         ID rule and sigma tot
         """
+        T = refEvent.config.T
+        dpa = refEvent.config.dpa
         # ds is the total stress of the considered reference event
         name = "IC 3132.3.1"
         # Fatigue Strength Reduction Factor defined in RB 3292.112:
         # ds is multiplied by f which depends on the type of joint
-        f = refEvent.f_welding
+        f = refEvent.config.welding_f
         ds = f * refEvent.PQF
         T_ds = (T, ds)
         # de calculation
@@ -98,7 +96,7 @@ class IC7121_3_1(Rule):
             "Elastic analysis (Local fracture)-excluding peak",
         ]
 
-    def assess(self, refEvent, material, T, dpa, K=1.5):
+    def assess(self, refEvent, material, K=1.5):
         """
         Assess the rule
 
@@ -108,10 +106,6 @@ class IC7121_3_1(Rule):
             reference event to assess.
         material : material.Material
             Material data.
-        T : float
-            Temperature of the path.
-        dpa : float
-            Displacement per atom value in the path.
         K : float
             Bending Section shape factor. The default is 1.5
 
@@ -122,8 +116,10 @@ class IC7121_3_1(Rule):
             is of the type (stress, allowable).
 
         """
-        # n = refEvent.n_welding
-        service_lvl = refEvent.service_lvl
+        T = refEvent.config.T
+        dpa = refEvent.config.dpa
+        # n = refEvent.config.welding_n
+        service_lvl = refEvent.config.service_lvl
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A":
@@ -152,7 +148,7 @@ class IC7131_1_1(Rule):
         self.description = ["3Sm rule", "Efficiency Index", "Efficiency Index"]
         # self.equation = '$$A_{b}$$ (P_L+ P_b ) ̅≤〖K_eff S〗_m (〖T_m,Φt〗_m)'
 
-    def assess(self, refEvent, material, T, dpa):
+    def assess(self, refEvent, material):
         """
         Assess the rule
 
@@ -162,10 +158,6 @@ class IC7131_1_1(Rule):
             Recombined linear stress to assess.
         material : material.Material
             Material data.
-        T : float
-            Temperature of the path.
-        dpa : float
-            Displacement per atom value in the path.
 
         Returns
         -------
@@ -174,8 +166,10 @@ class IC7131_1_1(Rule):
             is of the type (stress, allowable).
 
         """
-        # n = refEvent.n_welding ( base metal properties for ratcheting)
-        service_lvl = refEvent.service_lvl
+        T = refEvent.config.T
+        dpa = refEvent.config.dpa
+        # n = refEvent.config.welding_n ( base metal properties for ratcheting)
+        service_lvl = refEvent.config.service_lvl
         T_dpa = (T, dpa)
         # select allowable
         if service_lvl == "A" or service_lvl == "C":

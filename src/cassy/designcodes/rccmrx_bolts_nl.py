@@ -15,8 +15,8 @@ ASSESSMENTS = {
 
 
 class RCCMRx_Bolts(BoltCode):
-    def __init__(self, failure_modes=None):
-        super().__init__(failure_modes=failure_modes, name="RCC-MRx (Bolts)")
+    def __init__(self):
+        super().__init__(name="RCC-MRx (Bolts)")
 
         core = {"Mean stress": RB3284_1112(), "Max stress": RB3284_1113()}
         threads_heads = {"Shear stress": RB3284_1211(), "Bearing stress": RB3284_1213()}
