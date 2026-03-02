@@ -140,6 +140,10 @@ def run_bolts(
             for key, table in tables.items():
                 # compute the banner
                 banner = complete_banner.copy()
+                # material needs to be updated as it may differ
+                banner["material"] = list(
+                    flange_assessment.insert_assessments[boltID].values()
+                )[0].poa.material.name
                 banner["assessment"] = f"{key}, base material"
                 caption = f"Base material {boltID}{EXCELS_CAPTION}{key}"
                 outp.add_table(banner, table, "immediate bolts", caption, merge=merge)
