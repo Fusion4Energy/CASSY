@@ -18,6 +18,10 @@ class TestMaterial:
             material = Material(config_file)
         return material
 
+    def test_edge_with_null(self, material: Material):
+        assert material.Se(50, 5) == 846e6
+        assert np.isclose(material.Se(50.001, 4.5), 936e6)
+
     def test_properties(self, material: Material):
         assert material.nu() == 0.3
         assert material.E(500, 100) == 159260000000.0
@@ -128,7 +132,7 @@ def test_CuCrZr_Tr_B_SDC_IC():
 def test_SS316LNIG_RCCMRx():
     with as_file(MAT_FOLDER.joinpath("SS316L(N)-IG_RCC-MRx.yaml")) as mat_path:
         material = Material(mat_path)
-    
+
     assert pytest.approx(material.E(550, 1), rel=5e-3) == 155e9
 
 
