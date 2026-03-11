@@ -1,0 +1,129 @@
+name: SS660
+description: From Appendix A3.10S of RCC-MRx 2022, Section III, Tome I, Subsection Z (X6NiCrTiMoVB25-15-2)
+properties:
+  Poisson Ratio:
+    type: constant
+    value: 0.3
+  Young Modulus:
+    type: table2D
+    scale_result: 1e9 # to convert GPa to Pa
+    values:
+      x: [20, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600]
+      y: [0, 100]
+      vals: [
+        [211, 211],
+        [206, 206],
+        [203, 203],
+        [200, 200],
+        [196, 196],
+        [192, 192],
+        [187, 187],
+        [183, 183],
+        [178, 178],
+        [173, 173],
+        [168, 168],
+        [162, 162]
+      ]
+  Min Yield Strength: # Irradiated data is not supplied
+    type: table2D
+    scale_result: 1e6 # to convert MPa to Pa
+    values:
+      x: [20, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650]
+      y: [0, 100]
+      vals: [
+        [600, 600], [592, 592], [580, 580], [570, 570], [560, 560], [550, 550], 
+        [540, 540], [530, 530], [520, 520], [510, 510], [490, 490], [460, 460], 
+        [430, 430], [380, 380]
+      ]
+  #
+  Min Tensile Strength: # Irradiated data is not supplied
+    type: table2D
+    scale_result: 1e6 # to convert MPa to Pa
+    values:
+      x: [20, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600]
+      y: [0, 100]
+      vals: [
+        [900, 900], [886, 886], [862, 862], [838, 838], [815, 815], [793, 793], 
+        [767, 767], [744, 744], [720, 720], [710, 710], [700, 700], [690, 690], 
+        [670, 670]
+      ]
+  #
+  Sm: # Irradiated data is not supplied
+    type: table2D
+    scale_result: 1e6 # to convert MPa to Pa
+    values:
+      x: [20, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600]
+      y: [0, 100]
+      vals: [
+        [300, 300], [300, 300], [300, 300], [300, 300], [300, 300], [293, 293], 
+        [284, 284], [275, 275], [267, 267], [263, 263], [259, 259], [256, 256], 
+        [248, 248]
+      ]
+  #
+  Smb: # Irradiated data is not supplied
+    type: table2D
+    scale_result: 1e6 # to convert MPa to Pa
+    values:
+      x: [20, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650]
+      y: [0, 100]
+      vals: [
+        [200, 200], [197, 197], [193, 193], [190, 190], [187, 187], [183, 183], 
+        [180, 180], [177, 177], [173, 173], [170, 170], [163, 163], [153, 153], 
+        [143, 143], [127, 127]
+      ]
+  #
+  K:
+    type: table1D
+    values:
+      x: [20, 600] # degrees Celsius
+      y: [2917, 2917] # Values of K in MPa
+  #
+  m:
+    type: table1D
+    values:
+      x: [20, 600] # degrees Celsius
+      y: [0.122, 0.122] # Values of m
+  #
+  Keps:
+    type: table2D
+    values:
+      # if sigma < 100 MPa set Keps = 1
+      x: [20, 600] # degrees Celsius
+      y: [0, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400, 2500] # d_sigma MPa
+      vals: [
+          [1.00, 1.00, 1.00, 1.00, 1.00, 1.01, 1.01, 1.01, 1.02, 1.02, 1.03, 1.04, 1.05, 1.06, 1.08],
+          [1.00, 1.00, 1.00, 1.00, 1.00, 1.01, 1.01, 1.01, 1.02, 1.02, 1.03, 1.04, 1.05, 1.06, 1.08]
+      ]
+    scale_y: 1e-6 # inputs to interpolate are in Pa, to be converted to MPa
+  Kmu:
+    type: table2D
+    values:
+      # if sigma < 100 MPa set Kmu = 1
+      x: [20, 600] # degrees Celsius
+      y: [0, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400, 2500] # d_sigma MPa  
+      vals: [
+        [1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.01, 1.01, 1.01, 1.02, 1.02, 1.03, 1.04, 1.04, 1.05],
+        [1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.01, 1.01, 1.01, 1.02, 1.02, 1.03, 1.04, 1.04, 1.05]
+      ]
+    scale_y: 1e-6 # inputs to interpolate are in Pa, to be converted to MPa
+  Fatigue:
+    type: fatigue
+    ftype: strain
+    scale_y: 1e2 # to from relative to percent
+    values:
+      T: [20, 600] # degrees Celsius
+      N_cycles: [10, 30, 100, 300, 1000, 3000, 1e4, 3e4, 1e5, 3e5, 1e6, 1e8] # DPA
+      y: [
+          [1.042, 1.042],
+          [0.7882, 0.7882],
+          [0.6372, 0.6372],
+          [0.4636, 0.4636],
+          [0.357, 0.357],
+          [0.3, 0.3],
+          [0.255, 0.255],
+          [0.222, 0.222],
+          [0.1915, 0.1915],
+          [0.1678, 0.1678],
+          [0.1452, 0.1452],
+          [0, 0]
+        ] # in %
