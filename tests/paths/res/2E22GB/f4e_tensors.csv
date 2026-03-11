@@ -1,0 +1,37 @@
+path,analysis,loadstep,pathpoint,stress_type,Sx,Sy,Sz,Sxy,Sxz,Syz
+1,thermal,1,begin,Pm,0.4,-139.1,-210.3,0,1.8,0
+1,thermal,1,end,Pm,0.4,-139.1,-210.3,0,1.8,0
+1,thermal,1,begin,PmPb,0.2, -37.5, -126.6, 0.0, 2.3, 0.0
+1,thermal,1,end,PmPb,0.7, -240.6, -294.0, 0.0, 1.2, 0.0
+1,thermal,1,begin,total,0.0, -0.1, -108.7, 0.0, 0.0, 0.0
+1,thermal,1,end,total,-0.1, -209.0, -276.8, 0.0, 0.0, 0.0
+1,pressure,1,begin,Pm,-6.1, -4.6, 6.3, 0.0, 0.0, 0.0
+1,pressure,1,end,Pm,-6.1, -4.6, 6.3, 0.0, 0.0, 0.0
+1,pressure,1,begin,PmPb,-12.9, -5.1, 3.0, 0.0, 0.0, 0.0
+1,pressure,1,end,PmPb,0.7, -4.0, 9.6, 0.0, 0.0, 0.0
+1,pressure,1,begin,total,-12.1, -6.5, -2.7, 0.0, 0.0, 0.0
+1,pressure,1,end,total,-0.6, -4.6, 9.0, 0.0, 0.0, 0.0
+2,thermal,1,begin,Pm,0,-95.1,5.9,0,-4.8,0
+2,thermal,1,end,Pm,0,-95.1,5.9,0,-4.8,0
+2,thermal,1,begin,PmPb,75.2, -19.8, 5.9, 0.0, 0.3, 0.0
+2,thermal,1,end,PmPb,-75.2, -170.4, 6.0, 0.0, -10.0, 0.0
+2,thermal,1,begin,total,99.7, 10.5, -0.3, 0.0, 0.2, 0.0
+2,thermal,1,end,total,-52.0, -141.9, -0.1, 0.0, -0.3, 0.0
+2,pressure,1,begin,Pm,20.7, 1.3, -12.3, 0.0, 0.0, 0.0
+2,pressure,1,end,Pm,20.7, 1.3, -12.3, 0.0, 0.0, 0.0
+2,pressure,1,begin,PmPb,20.8, 1.3, -12.3, 0.0, -0.1, 0.0
+2,pressure,1,end,PmPb,20.5, 1.2, -12.3, 0.0, 0.1, 0.0
+2,pressure,1,begin,total,19.2, 0.9, -12.0, 0.0, 0.0, 0.0
+2,pressure,1,end,total,19.0, 0.9, -12.0, 0.0, 0.0, 0.0
+3,thermal,1,begin,Pm,0.1, -273.6, -351.5, 0.0, -1.7, 0.0
+3,thermal,1,end,Pm,0.1, -273.6, -351.5, 0.0, -1.7, 0.0
+3,thermal,1,begin,PmPb,0.1, -587.7, -672.6, 0.0, -0.4, 0.0
+3,thermal,1,end,PmPb,0.1, 40.5, -30.5, 0.0, -3.0, 0.0
+3,thermal,1,begin,total,0.2, -334.0, -426.7, 0.0, 0.0, 0.0
+3,thermal,1,end,total,0.0, 796.3, 702.8, 0.0, -2.7, 0.0
+3,pressure,1,begin,Pm,-9.5, -3.1, -2.5, 0.0, 0.0, 0.0
+3,pressure,1,end,Pm,-9.5, -3.1, -2.5, 0.0, 0.0, 0.0
+3,pressure,1,begin,PmPb,-13.1, -8.6, -14.4, 0.0, 0.0, 0.0
+3,pressure,1,end,PmPb,-6.0, 2.3, 9.4, 0.0, 0.0, 0.0
+3,pressure,1,begin,total,-12.2, -8.5, -15.4, 0.0, 0.0, 0.0
+3,pressure,1,end,total,-5.2, 3.3, 10.8, 0.0, 0.0, 0.0

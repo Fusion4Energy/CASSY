@@ -149,7 +149,6 @@ class RB_3261_111(Rule):
         self,
         refEvent: ReferenceEvent,
         material: Material,
-        K: float = 1.5,
     ):
         """
         Assess the rule
@@ -164,7 +163,7 @@ class RB_3261_111(Rule):
         Returns
         -------
         list
-            Each item in the list represents an equation result, eache equation
+            Each item in the list represents an equation result, each equation
             is of the type (stress, allowable).
 
         """

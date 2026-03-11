@@ -356,9 +356,11 @@ class ReferenceEvent:
             vol = []
             inertial = []
             for matrix in self.volumetric:
-                vol.append(matrix.primary.loc["tresca"].values)
+                if matrix.config.isCyclic:
+                    vol.append(matrix.primary.loc["tresca"].values)
             for matrix in self.inertial:
-                inertial.append(matrix.primary.loc["tresca"].values)
+                if matrix.config.isCyclic:
+                    inertial.append(matrix.primary.loc["tresca"].values)
 
             self._cache["tresca"] = self._get_final_VM(vol, inertial)
         return self._cache["tresca"]
