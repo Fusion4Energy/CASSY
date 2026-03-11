@@ -136,5 +136,31 @@ def test_SS316LNIG_RCCMRx():
     assert pytest.approx(material.E(550, 1), rel=5e-3) == 155e9
 
 
+def test_S660_SDC_IC():
+    with as_file(MAT_FOLDER.joinpath("SS660 (non leak-tight)_SDC-IC.yaml")) as mat_path:
+        material = Material(mat_path)
+
+    assert pytest.approx(material.E(200, 1), rel=2e-3) == 189e9
+    assert pytest.approx(material.Sy_min(200, 10), rel=1e-3) == 558e6
+    assert pytest.approx(material.Sy_moy(200, 10), rel=1e-3) == 652e6
+    assert pytest.approx(material.Su_min(200, 0.1), rel=1e-3) == 817e6
+    assert pytest.approx(material.Sm(200, 0.1), rel=1e-3) == 299e6
+    assert pytest.approx(material.Smb(200, 0.1), rel=1e-3) == 299e6
+    assert pytest.approx(material.N(100, 338e6), rel=1e-3) == 5e3
+    assert (
+        pytest.approx(material.monotonic_min_stress_strain(351e6, 250, 50), rel=1e-3)
+        == 0.189e-2
+    )
+
+
+def test_S660_RCCMRx():
+    with as_file(MAT_FOLDER.joinpath("SS660_RCC-MRx.yaml")) as mat_path:
+        material = Material(mat_path)
+
+    assert (
+        pytest.approx(material.cyclic_stress_strain(600, 3000e6), rel=2e-3) == 2.86e-2
+    )
+
+
 def test_read_materials():
     read_materials(MAT_FOLDER)
