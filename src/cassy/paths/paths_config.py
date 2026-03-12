@@ -8,6 +8,7 @@ from cassy.auxiliary.custom_errors import TensorInputError
 from cassy.auxiliary.types import PathLike
 from cassy.auxiliary.custom_errors import ConfigError
 from dataclasses import dataclass
+import re
 
 
 class Configuration:
@@ -85,7 +86,28 @@ class Configuration:
         # Get the analysis and loadstep
         analysis = self.sheets["Load Steps"].loc[load]["Analysis Name"]
         timestep = self.sheets["Load Steps"].loc[load]["Time Step"]
-        tensor = self.stress_tensors.loc[pathnum, analysis, timestep, pathpoint]
+        # timestep could be an int or a linear combination
+        if isinstance(timestep, str):
+            if len(timestep) == 1:
+                tensor = self.stress_tensors.loc[pathnum, analysis, timestep, pathpoint]
+            else:
+                timestep = parse_linear_combination(timestep)
+                for i, (sign, step) in enumerate(timestep):
+                    new_tensor = self.stress_tensors.loc[
+                        pathnum, analysis, step, pathpoint
+                    ]
+                    if sign == "+":
+                        if i == 0:
+                            tensor = new_tensor
+                        else:
+                            tensor = tensor + new_tensor
+                    elif sign == "-":
+                        if i == 0:
+                            tensor = new_tensor
+                        else:
+                            tensor = tensor - new_tensor
+        else:
+            tensor = self.stress_tensors.loc[pathnum, analysis, timestep, pathpoint]
 
         # perform some consistency checks
         try:
@@ -332,3 +354,21 @@ def parse_cfg_files(
         tensors_file = os.path.join(tensors_files, submodel + ".csv")
         config[submodel] = Configuration(submodel, confpath, tensors_file)
     return config
+
+
+TOKENS = re.compile(r"[+-]*\d+")
+
+
+def parse_linear_combination(expr: str) -> list[tuple[str, int]]:
+    # Returns list of (sign, loadstep) tuples, e.g. [('+', 7), ('-', 5), ...]
+    bits = TOKENS.findall(expr.replace(" ", ""))
+    to_combine = []
+    for bit in bits:
+        if bit.startswith(("+", "-")):
+            sign = bit[0]
+            step = int(bit[1:])
+        else:
+            sign = "+"
+            step = int(bit)
+        to_combine.append((sign, step))
+    return to_combine

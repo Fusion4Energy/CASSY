@@ -21,6 +21,12 @@ class TestConfiguration:
         assert isinstance(stress_tensor, pd.DataFrame)
         assert stress_tensor.shape == (3, 6)
 
+        stress_tensor = config_fixture.get_stress_tensor("combination", 1, "begin")
+        assert isinstance(stress_tensor, pd.DataFrame)
+        assert stress_tensor.shape == (3, 6)
+        # assert all values are zero
+        assert (stress_tensor == 0).all().all()
+
         with pytest.raises(ValueError):
             config_fixture.get_stress_tensor("SustainedLoads", 1, "begi")
 
