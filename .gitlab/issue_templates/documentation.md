@@ -7,4 +7,4 @@ let us know if you ended up finding the information you were looking for in anot
 ## Additional context
 You can use this space to give any other additional information that you think would be useful to solve the issue.
 
-/label ~Doumentation
+/label ~Documentation
