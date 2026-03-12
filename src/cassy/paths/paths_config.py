@@ -325,6 +325,8 @@ def parse_cfg_files(
     """
     config = {}
     for conf_file in os.listdir(cfg_root):
+        if not conf_file.endswith(".xlsx"):
+            continue  # skip non excel files
         submodel = conf_file.split(".")[0]
         confpath = os.path.join(cfg_root, conf_file)
         tensors_file = os.path.join(tensors_files, submodel + ".csv")
