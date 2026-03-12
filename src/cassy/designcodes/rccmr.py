@@ -195,7 +195,8 @@ class RB_3261_116(Rule):
         Em = material.compute_tangent_young(sigma_nm, T, dpa=dpa)
         Emb = material.compute_tangent_young(sigma_nmb, T, dpa=dpa)
 
-        try:
+        # short duration overstress
+        if refEvent.Pms > 1e-6 or refEvent.PmPbs > 1e-6:
             sigma_mb = (
                 0.5 * (refEvent.PmPb_ns + sigma_nmb)
                 + (3 * material.E(T, dpa) / Emb) * refEvent.PmPbs
@@ -205,7 +206,7 @@ class RB_3261_116(Rule):
                 + (3 * material.E(T, dpa) / Em) * refEvent.Pms
             )
 
-        except TypeError:  # no overstress of short duration
+        else:  # no overstress of short duration
             sigma_nm = material.compute_delta_sigma_Neuber(
                 T, refEvent.PmQm, 1, dpa=dpa, monotonic=True
             )
