@@ -1,4 +1,5 @@
 from importlib.resources import files
+import os
 
 from cassy.additional_data import materials
 from cassy.auxiliary.types import PathLike
@@ -23,6 +24,11 @@ def build_material_library(
         material library
     """
     materials = read_materials(MATERIALS_PATH)
+    # by default also adds custom materials in the default additional folde
+    default_additional = os.path.join(os.getcwd(), "additional_materials")
+    if os.path.exists(default_additional):
+        additional_materials = read_materials(default_additional)
+        materials.update(additional_materials)
     if custom_path is not None:
         additional_materials = read_materials(custom_path)
         materials.update(additional_materials)
