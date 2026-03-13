@@ -348,7 +348,7 @@ def parse_cfg_files(
     """
     config = {}
     for conf_file in os.listdir(cfg_root):
-        if not conf_file.endswith(".xlsx"):
+        if not conf_file.endswith(".xlsx") and not conf_file.startswith("~"):
             continue  # skip non excel files
         submodel = conf_file.split(".")[0]
         confpath = os.path.join(cfg_root, conf_file)
