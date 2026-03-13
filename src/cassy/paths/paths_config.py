@@ -9,6 +9,7 @@ from cassy.auxiliary.types import PathLike
 from cassy.auxiliary.custom_errors import ConfigError
 from dataclasses import dataclass
 import re
+import logging
 
 
 class Configuration:
@@ -352,7 +353,12 @@ def parse_cfg_files(
         submodel = conf_file.split(".")[0]
         confpath = os.path.join(cfg_root, conf_file)
         tensors_file = os.path.join(tensors_files, submodel + ".csv")
-        config[submodel] = Configuration(submodel, confpath, tensors_file)
+        try:
+            config[submodel] = Configuration(submodel, confpath, tensors_file)
+        except ValueError as e:
+            logging.error(f"Error parsing {confpath}")
+            raise e
+
     return config
 
 
