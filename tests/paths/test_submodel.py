@@ -40,6 +40,18 @@ class TestSubmodel:
         submodel.build_REs(fatigue=True)
         submodel.assess(code, fatigue=True)
 
+    def test_assess_stress_fatigue(self):
+        with as_file(files(res).joinpath("submodel.xlsx")) as file:
+            with as_file(files(res).joinpath("submodel_tensors.csv")) as tensors_file:
+                config = Configuration("Model_A", file, tensors_file)
+        with as_file(RES.joinpath("XM-19 SS_SDC-IC.yaml")) as mat_path:
+            xm = Material(mat_path)
+
+        submodel = Submodel("Model", config, {"SS316L(N)-IG": xm})
+        # Test the build_RE method
+        submodel.build_REs(fatigue=True)
+        submodel.assess(SDC_IC(), fatigue=True)
+
     def test_get_recap(self, submodel: Submodel):
         # Test the get_recap method
         submodel.build_REs(fatigue=True)

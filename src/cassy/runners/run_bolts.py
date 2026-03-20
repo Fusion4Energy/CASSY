@@ -74,11 +74,9 @@ def run_bolts(
             shutil.rmtree(assessment_folder)
         os.mkdir(assessment_folder)
 
-        if not print_recap:
-            # if no recap is requested, just save the global df
-            flange_assessment.print_global_df(assessment_folder)
-            flange_assessment.print_global_df(assessment_folder, insert=True)
-            continue
+        flange_assessment.print_global_df(assessment_folder)
+        flange_assessment.print_global_df(assessment_folder, insert=True)
+
     if not print_recap:
         print("No word recap requested. Assessment completed")
         return  # Exit here if no word recap is requested

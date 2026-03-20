@@ -45,39 +45,52 @@ class SDC_IC(Code):
         f = refEvent.config.welding_f
         ds = f * refEvent.PQF
         T_ds = (T, ds)
-        # de calculation
-        de1 = 2 / 3 * (1 + material.nu()) * (ds / material.E(T, dpa))
-        if refEvent.tresca is not None:
-            # tresca for shells Pm+0.67*(Pb+Pl-Pm)
-            tresca = refEvent.tresca
-            # de2 represents the "plastic" increase in strain due to the primary
-            # stress range at the point examined, equal to tresca for shells
-            # cyclic_stress_strain looks like it returns strain in [-], not %, so not change it
-            try:
-                de2 = material.cyclic_stress_strain(T, tresca) - 2 / 3 * (
-                    1 + material.nu()
-                ) * (tresca / material.E(T, dpa))
-            except NotImplementedError as e:
-                de2 = 0
-                logging.warning(f"Cyclic stress-strain curves not implemented, de2=0")
-        else:
-            # there is no primary stress
-            de2 = 0
 
-        # de3 is derived as the intersection point of the cyclic curve and the
-        # hyperbola ds*de = costant
-        de3 = (de1 + de2) * (material.Keps(T_ds) - 1)
-        de4 = de1 * (material.Kmu(T_ds) - 1)
-        detot = de1 + de2 + de3 + de4
-        # the fatigue curve of the welded joint is obatined dividing the
-        # ordinates (epsilon) by f factor
-        detot = detot / f
-        # total allowable cycles calculation
+        # --- split in case of stress or strain based fatigue curve ---
         if material.N.ftype == "strain":
+            # de calculation
+            de1 = 2 / 3 * (1 + material.nu()) * (ds / material.E(T, dpa))
+            if refEvent.tresca is not None:
+                # tresca for shells Pm+0.67*(Pb+Pl-Pm)
+                tresca = refEvent.tresca
+                # de2 represents the "plastic" increase in strain due to the primary
+                # stress range at the point examined, equal to tresca for shells
+                # cyclic_stress_strain looks like it returns strain in [-], not %, so not change it
+                try:
+                    de2 = material.cyclic_stress_strain(T, tresca) - 2 / 3 * (
+                        1 + material.nu()
+                    ) * (tresca / material.E(T, dpa))
+                except NotImplementedError as e:
+                    de2 = 0
+                    logging.warning(
+                        f"Cyclic stress-strain curves not implemented, de2=0"
+                    )
+            else:
+                # there is no primary stress
+                de2 = 0
+
+            # de3 is derived as the intersection point of the cyclic curve and the
+            # hyperbola ds*de = costant
+            de3 = (de1 + de2) * (material.Keps(T_ds) - 1)
+            de4 = de1 * (material.Kmu(T_ds) - 1)
+            detot = de1 + de2 + de3 + de4
+            # the fatigue curve of the welded joint is obatined dividing the
+            # ordinates (epsilon) by f factor
+            detot = detot / f
             N_all = material.N((T, detot))
+
         elif material.N.ftype == "stress":
-            # TODO not implemented yet!
-            raise ValueError("stress based curves need to be implemented")
+            SA = ds / 2
+            N_all = material.N(
+                T, SA * 1e-6
+            )  # convention is MPa for stress based curves
+            de1 = None
+            de2 = None
+            de3 = None
+            de4 = None
+            detot = None
+        else:
+            raise ValueError("Unknown fatigue curve type: " + material.N.ftype)
 
         assessment = {
             "de1": de1,
@@ -294,12 +307,18 @@ class IC3131_1_2(Rule):
         # -----IC 3131.1.1 'Efficiency Index Diagram'------#
         # Operating period with secondary membrane stress
         # thermal loads are considered mandatory for ratcheting
-        sigma_nm = material.compute_delta_sigma_Neuber(
-            T, refEvent.PmQm_ns, 1, dpa=dpa, monotonic=True
-        )
-        sigma_nmb = material.compute_delta_sigma_Neuber(
-            T, refEvent.PmPbQm_ns, 1, dpa=dpa, monotonic=True
-        )
+        try:
+            sigma_nm = material.compute_delta_sigma_Neuber(
+                T, refEvent.PmQm_ns, 1, dpa=dpa, monotonic=True
+            )
+            sigma_nmb = material.compute_delta_sigma_Neuber(
+                T, refEvent.PmPbQm_ns, 1, dpa=dpa, monotonic=True
+            )
+        except NotImplementedError as e:
+            logging.warning(e)
+            logging.warning("Efficiency index cannot be computed")
+            return [(stress1, allowable1), (None, None), (None, None)]
+
         Em = material.compute_tangent_young(sigma_nm, T, dpa=dpa)
         Emb = material.compute_tangent_young(sigma_nmb, T, dpa=dpa)
 
