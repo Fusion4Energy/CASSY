@@ -451,9 +451,9 @@ class ReferenceEvent:
                     allowable = round(allowable * 1e-6)
                 except ValueError:
                     # it means is NaN
-                    allowable = allowable.item()
+                    allowable = allowable
                 except TypeError:
-                    allowable = allowable.item()
+                    allowable = allowable
 
                 if np.isnan(allowable):
                     allowable = "No Limit"
@@ -564,7 +564,6 @@ def _combine_linstresses(
 def _combine_inertial_stresses(
     lin_stress_list: list[LinStress],
 ) -> list[LinStress]:
-
     groups: dict[str, list[LinStress]] = {}
     # group same inertial by name
     for lin_stress in lin_stress_list:
@@ -585,9 +584,9 @@ def _combine_inertial_stresses(
         secondary_list = [lin_stress.secondary.values for lin_stress in lin_stresses]
 
         for matrix_list in [primary_list, secondary_list]:
-            assert len(matrix_list) == 3, (
-                f"Issue in {main_name}. There should be 3 components for each inertial load (X, Y and Z)"
-            )
+            assert (
+                len(matrix_list) == 3
+            ), f"Issue in {main_name}. There should be 3 components for each inertial load (X, Y and Z)"
 
         new_primary = _combine_linstresses(primary_list, combination_type=rec_meth)
         new_secondary = _combine_linstresses(secondary_list, combination_type=rec_meth)

@@ -72,10 +72,7 @@ def run_paths(
         os.mkdir(ass_path)
 
         submodels.append(submodel)
-
-        if not print_recap:
-            submodel.print_global_df(ass_path)
-            continue  # skip printing the excel assessments
+        submodel.print_global_df(ass_path)
 
     if not print_recap:
         print("No word recap requested. Assessment completed")

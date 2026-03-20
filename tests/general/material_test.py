@@ -162,5 +162,16 @@ def test_S660_RCCMRx():
     )
 
 
+def test_XM19_SDC_IC():
+    with as_file(MAT_FOLDER.joinpath("XM-19 SS_SDC-IC.yaml")) as mat_path:
+        material = Material(mat_path)
+
+    assert pytest.approx(material.E(200, 1), rel=1e-2) == 183e9
+    assert (
+        pytest.approx(material.monotonic_min_stress_strain(400e6, 200, 1), rel=1e-3)
+        == 5.118e-4
+    )
+
+
 def test_read_materials():
     read_materials(MAT_FOLDER)

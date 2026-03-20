@@ -650,7 +650,11 @@ class Material:
     def get_Keff(self, T: float, dpa: float, K: float) -> float:
         """Compute the effective K value for the material at given temperature and dpa."""
         # To check if it is the same for all materials
-        k_rect = self.Keff_rec(T, dpa)
+        try:
+            k_rect = self.Keff_rec(T, dpa)
+        except NotImplementedError:
+            # If data is not available assume
+            k_rect = 1.5
         return 1 + 2 * (K - 1) * (k_rect - 1)
 
     def compute_tangent_young(self, sigma: float, T: float, dpa: float = 0) -> float:
