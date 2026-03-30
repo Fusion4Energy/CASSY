@@ -239,7 +239,7 @@ class RB3284_1113:
 class RB3284_1211(Rule):
     def __init__(self):
         self.damage_type = "P"
-        self.ref = "RB 3284.1211"
+        self.ref = "RB 3284.1211/1212"
         self.description = [
             "Avg shear stress in threads, primary loads",
             "Avg shear stress in head, primary loads",
@@ -312,7 +312,7 @@ class RB3284_1211(Rule):
 class RB3284_1211_insert(Rule):
     def __init__(self):
         self.damage_type = "P"
-        self.ref = "RB 3284.1211 (base material)"
+        self.ref = "RB 3284.1211/1212 (base material/part)"
         self.description = [
             "Avg shear stress in threads, primary loads",
             "Avg shear stress in the threads, all loads",
@@ -341,10 +341,16 @@ class RB3284_1211_insert(Rule):
         service_lvl = boltaction.ref_event.service_lvl
         T_dpa = (boltaction.ref_event.temp, boltaction.ref_event.dpa)
         # select allowable
-        if service_lvl == "A" or service_lvl == "C":
-            allowable1 = 0.6 * material.Smb(T_dpa)
+        if service_lvl == "A":
+            allowable1 = 0.3 * material.Sm(T_dpa)
             allowable2 = 0.6 * material.Sy_min(T_dpa)
-
+        elif service_lvl == "C":
+            if material.Su_min(T_dpa) >= 700e6:
+                allowable1 = 0.3 * material.Sm(T_dpa)
+                allowable2 = 0.6 * material.Sy_min(T_dpa)
+            else:
+                allowable1 = "No limit"
+                allowable2 = "No limit"
         elif service_lvl == "D":
             allowable1 = "No limit"
             allowable2 = "No limit"
@@ -354,7 +360,6 @@ class RB3284_1211_insert(Rule):
 
         primary = boltaction.applicable_stresses["primary"]
         stress1 = primary["Avg shear stress in threads"]
-
         _all = boltaction.applicable_stresses["all"]
         stress2 = _all["Avg shear stress in threads"]
 
