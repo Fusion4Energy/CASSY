@@ -1,7 +1,7 @@
 import math
 import os
 from abc import ABC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -49,16 +49,26 @@ class BoltLikeGeom(ABC):
     name: str
     material: Material
 
-    p: float
-    d: float
-    dn: float
-    df: float
-    D: float
-    Le: float
-    f: float
-    d_vh: float
+    p: float = 0
+    d: float = 0
+    Le: float = 0
+    d_vh: float = 0
+    f: float = 0.15
+
+    # either computed or provided but guaranteed to be not None after __post_init__
+    dn: float = None
+    df: float = None
+    D: float = None
 
     def __post_init__(self):
+        # compute if not provided
+        if not self.dn or pd.isna(self.dn):
+            self.dn = self.d - 1.22687 * self.p
+        if not self.df or pd.isna(self.df):
+            self.df = self.d - 0.64952 * self.p
+        if not self.D or pd.isna(self.D):
+            self.D = self.d - 1.08253 * self.p
+
         # --- Additional geometrical feature ---
         # length for shear calculation
         self.Le_shear = min(0.8 * self.d, self.Le)
@@ -85,6 +95,13 @@ class BoltLikeGeom(ABC):
             An instance of BoltLikeGeom with the provided data.
         """
         df = pd.read_excel(excel_data, skiprows=1)
+        # Find the first row where all values are NA
+        first_all_na = (
+            df.isna().all(axis=1).idxmax() if df.isna().all(axis=1).any() else len(df)
+        )
+        # Keep only rows before the first all-NA row
+        df = df.iloc[:first_all_na]
+
         df.set_index("SYMBOL", inplace=True)
         geom_data = df["VALUE"].to_dict()
         geom_data["material"] = material_list[geom_data["material"]]
@@ -177,15 +194,35 @@ class BoltGeom(BoltLikeGeom):
         friction coefficient under head.
     """
 
-    d1: float
-    Dm: float
-    Dp: float
-    f_prime: float
-    H: float
-    a: float
-    B: float
-    C: float
+    f_prime: float = 0.15
+    B: float = 0
+    C: float = 0
     KF: float = 4
+
+    # guaranteed to be not None after __post_init__
+    d1: float = None
+    H: float = None
+    a: float = None
+    Dm: float = None
+    Dp: float = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        # --- Additional geometrical feature ---
+        # diameter of head
+        if not self.a or pd.isna(self.a):
+            self.a = 1.5 * self.d
+        if not self.H or pd.isna(self.H):
+            self.H = 0.625 * self.d
+        if not self.d1 or pd.isna(self.d1):
+            self.d1 = self.d
+        if not self.Dm or pd.isna(self.Dm):
+            if self.B > 0:
+                self.Dm = (self.B + self.a) / 2
+            else:
+                self.Dm = 0.8 * self.a
+        if not self.Dp or pd.isna(self.Dp):
+            self.Dp = self.d * 1.1
 
 
 def read_geometries(
