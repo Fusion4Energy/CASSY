@@ -104,7 +104,13 @@ class BoltLikeGeom(ABC):
 
         df.set_index("SYMBOL", inplace=True)
         geom_data = df["VALUE"].to_dict()
-        geom_data["material"] = material_list[geom_data["material"]]
+        try:
+            geom_data["material"] = material_list[geom_data["material"]]
+        except KeyError:
+            raise ValueError(
+                f"Material '{geom_data['material']}' not found in material list.",
+                "Available materials: " + ", ".join(material_list.keys()),
+            )
         geom_data["name"] = os.path.basename(excel_data).split(".")[0]
         return cls(**geom_data)
 
