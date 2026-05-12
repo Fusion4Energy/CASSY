@@ -41,6 +41,12 @@ def main():
         choices=["bolts", "paths"],
         default=None,
     )
+    parser.add_argument(
+        "--onlybolts",
+        help="Whether to assess only the bolts and skip the inserts in the bolts assessment",
+        default=False,
+        action="store_true",
+    )
     args = parser.parse_args()
     print_recap = not args.norecap
 
@@ -56,6 +62,7 @@ def main():
             matlib=args.matlib,
             print_recap=print_recap,
             merge=args.nomerge,
+            only_bolts=args.onlybolts,
         )
     elif args.assess == "paths":
         run_paths(args.root, args.fatigue, matlib=args.matlib, print_recap=print_recap)

@@ -211,6 +211,10 @@ class FlangeAssessmentConfig:
         self.REs = REs
         self.REs_fatigue = REs_fatigue
         self.name = name
+        if "insert" in bolts_spec["Geom type"].values:
+            self.has_insert = True
+        else:
+            self.has_insert = False
 
     @classmethod
     def from_excel(

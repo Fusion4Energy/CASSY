@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING, Any
+import numpy as np
 
 if TYPE_CHECKING:
     from cassy.bolts.code_assessor import BoltActionAssessor
@@ -514,15 +515,18 @@ class IC6122_1_1(Rule):
         dpa = boltaction.ref_event.dpa
         T_dpa = (T, dpa)
 
-        # select allowable
-        if service_lvl == "A":
-            allowable1 = material.Se(T_dpa)
-        elif service_lvl == "C":
-            allowable1 = 1.2 * material.Se(T_dpa)
-        elif service_lvl == "D":
-            allowable1 = 2 * material.Se(T_dpa)
+        if dpa < 0.1:
+            allowable1 = np.nan
         else:
-            raise KeyError(service_lvl + " is not an admissible service level")
+            # select allowable
+            if service_lvl == "A":
+                allowable1 = material.Se(T_dpa)
+            elif service_lvl == "C":
+                allowable1 = 1.2 * material.Se(T_dpa)
+            elif service_lvl == "D":
+                allowable1 = 2 * material.Se(T_dpa)
+            else:
+                raise KeyError(service_lvl + " is not an admissible service level")
 
         stress1 = boltaction.applicable_stresses["all"]["Mean stress"]
 
@@ -564,15 +568,19 @@ class IC6122_1_2(Rule):
         T = boltaction.ref_event.temp
         dpa = boltaction.ref_event.dpa
         T_dpa = (T, dpa)
-        # select allowable
-        if service_lvl == "A":
-            allowable1 = allowable2 = material.Sd(T_dpa)
-        elif service_lvl == "C":
-            allowable1 = allowable2 = 1.2 * material.Sd(T_dpa)
-        elif service_lvl == "D":
-            allowable1 = allowable2 = 1.35 * material.Sd(T_dpa)
+        if dpa < 0.1:
+            allowable1 = np.nan
+            allowable2 = np.nan
         else:
-            raise KeyError(service_lvl + " is not an admissible service level")
+            # select allowable
+            if service_lvl == "A":
+                allowable1 = allowable2 = material.Sd(T_dpa)
+            elif service_lvl == "C":
+                allowable1 = allowable2 = 1.2 * material.Sd(T_dpa)
+            elif service_lvl == "D":
+                allowable1 = allowable2 = 1.35 * material.Sd(T_dpa)
+            else:
+                raise KeyError(service_lvl + " is not an admissible service level")
 
         stress1 = boltaction.applicable_stresses["all"]["Max stress"]
         stress2 = stress1 * boltaction.poa.KF  # THIS NEEDS TO BE DOUBLE-CHECKED

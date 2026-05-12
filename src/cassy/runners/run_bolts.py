@@ -39,6 +39,7 @@ def run_bolts(
     matlib: PathLike | None = None,
     print_recap: bool = True,
     merge: bool = True,
+    only_bolts: bool = False,
 ) -> None:
     folder_tree = BoltsFolderTree(root)
 
@@ -62,8 +63,14 @@ def run_bolts(
 
         # perform the assessment
         flange_assessment = FlangeAssessment(geometries, flange_config, fatigue=fatigue)
+
+        # override insert assessment if only bolts are requested
+        if only_bolts:
+            flange_assessment.config.has_insert = False
+
         flange_assessment.assess()
-        flange_assessment.assess(insert=True)
+        if flange_assessment.config.has_insert:
+            flange_assessment.assess(insert=True)
 
         # print the assessment
         assessment_folder = Path(folder_tree.assessment_folder, connection_name)
@@ -75,7 +82,8 @@ def run_bolts(
         os.mkdir(assessment_folder)
 
         flange_assessment.print_global_df(assessment_folder)
-        flange_assessment.print_global_df(assessment_folder, insert=True)
+        if flange_assessment.config.has_insert:
+            flange_assessment.print_global_df(assessment_folder, insert=True)
 
     if not print_recap:
         print("No word recap requested. Assessment completed")
