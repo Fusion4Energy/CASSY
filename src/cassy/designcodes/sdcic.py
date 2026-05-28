@@ -305,6 +305,10 @@ class IC3131_1_2(Rule):
 
         stress1 = refEvent.ratcheting3Sm_SDCIC
 
+        # Perform efficiency index only if 3Sm is not passed
+        if stress1 <= allowable1:
+            return [(stress1, allowable1), (None, None), (None, None)]
+
         # -----IC 3131.1.1 'Efficiency Index Diagram'------#
         # Operating period with secondary membrane stress
         # thermal loads are considered mandatory for ratcheting
