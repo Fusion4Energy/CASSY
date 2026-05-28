@@ -97,23 +97,6 @@ class Configuration:
         analysis = self.sheets["Load Steps"].loc[load]["Analysis Name"]
         timestep = self.sheets["Load Steps"].loc[load]["Time Step"]
 
-        # Debug: print what we're looking for and what exists
-        print(f"\nDEBUG get_stress_tensor:")
-        print(
-            f"  Looking for: pathnum={pathnum} ({type(pathnum)}), analysis={repr(analysis)} ({type(analysis)}), timestep={timestep} ({type(timestep)}), pathpoint={repr(pathpoint)}"
-        )
-        print(f"  Available index values at these levels:")
-        subset = self.stress_tensors.loc[pathnum]
-        print(f"    After pathnum: {subset.index.names}")
-        print(
-            f"    Unique analyses: {subset.index.get_level_values('analysis').unique().tolist()}"
-        )
-        subset2 = self.stress_tensors.loc[pathnum, analysis]
-        print(f"    After analysis: {subset2.index.names}")
-        print(
-            f"    Unique timesteps: {subset2.index.get_level_values('loadstep').unique().tolist()}"
-        )
-
         # timestep could be an int or a linear combination
         if isinstance(timestep, str):
             if len(timestep) == 1:
