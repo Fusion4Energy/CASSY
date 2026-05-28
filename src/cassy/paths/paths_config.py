@@ -61,6 +61,15 @@ class Configuration:
             .sort_index()
         )
 
+        # Perform some consistency checks on the tensors file
+        to_check = self.stress_tensors.reset_index()
+        assert set(to_check["pathpoint"].unique().tolist()) == {"begin", "end"}
+        assert set(to_check["stress_type"].unique().tolist()) == {"Pm", "Pb", "F"}
+        for col in ["Sx", "Sy", "Sz", "Sxy", "Sxz", "Syz"]:
+            assert to_check[col].dtype in [np.float64, np.int64], (
+                f"Column {col} must be numeric"
+            )
+
     def get_stress_tensor(
         self, load: str, pathnum: int, pathpoint: str
     ) -> pd.DataFrame:
@@ -87,15 +96,35 @@ class Configuration:
         # Get the analysis and loadstep
         analysis = self.sheets["Load Steps"].loc[load]["Analysis Name"]
         timestep = self.sheets["Load Steps"].loc[load]["Time Step"]
+
+        # Debug: print what we're looking for and what exists
+        print(f"\nDEBUG get_stress_tensor:")
+        print(
+            f"  Looking for: pathnum={pathnum} ({type(pathnum)}), analysis={repr(analysis)} ({type(analysis)}), timestep={timestep} ({type(timestep)}), pathpoint={repr(pathpoint)}"
+        )
+        print(f"  Available index values at these levels:")
+        subset = self.stress_tensors.loc[pathnum]
+        print(f"    After pathnum: {subset.index.names}")
+        print(
+            f"    Unique analyses: {subset.index.get_level_values('analysis').unique().tolist()}"
+        )
+        subset2 = self.stress_tensors.loc[pathnum, analysis]
+        print(f"    After analysis: {subset2.index.names}")
+        print(
+            f"    Unique timesteps: {subset2.index.get_level_values('loadstep').unique().tolist()}"
+        )
+
         # timestep could be an int or a linear combination
         if isinstance(timestep, str):
             if len(timestep) == 1:
-                tensor = self.stress_tensors.loc[pathnum, analysis, timestep, pathpoint]
+                tensor = self.stress_tensors.loc[
+                    (pathnum, analysis, int(timestep), pathpoint), :
+                ]
             else:
                 timestep = parse_linear_combination(timestep)
                 for i, (sign, step) in enumerate(timestep):
                     new_tensor = self.stress_tensors.loc[
-                        pathnum, analysis, step, pathpoint
+                        (pathnum, analysis, step, pathpoint), :
                     ]
                     if sign == "+":
                         if i == 0:
@@ -108,7 +137,9 @@ class Configuration:
                         else:
                             tensor = tensor - new_tensor
         else:
-            tensor = self.stress_tensors.loc[pathnum, analysis, timestep, pathpoint]
+            tensor = self.stress_tensors.loc[
+                (pathnum, analysis, timestep, pathpoint), :
+            ]
 
         # perform some consistency checks
         try:

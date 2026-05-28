@@ -34,3 +34,11 @@ class TestConfiguration:
         # Test the get_REloads method
         re_loads = config_fixture.get_REloads(1, "NOS-II.1")
         assert len(re_loads) == 5
+
+    def test_get_stress_tensor_launcher(self):
+        with as_file(files(res).joinpath("launcher_bug/EC_UL.xlsx")) as config_file:
+            with as_file(files(res).joinpath("launcher_bug/EC_UL.csv")) as tensors_file:
+                config = Configuration("Model_A", config_file, tensors_file)
+        stress_tensor = config.get_stress_tensor("SustainedLoads", 1, "begin")
+        assert isinstance(stress_tensor, pd.DataFrame)
+        assert stress_tensor.shape == (3, 6)
