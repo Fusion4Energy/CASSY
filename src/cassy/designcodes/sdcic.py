@@ -4,6 +4,7 @@ import logging
 from cassy.designcodes.codes import Code, Rule
 from cassy.general.material import Material
 from cassy.paths.linstress import ReferenceEvent
+from cassy.auxiliary.custom_errors import OutOfBoundsError
 
 
 class SDC_IC(Code):
@@ -314,7 +315,7 @@ class IC3131_1_2(Rule):
             sigma_nmb = material.compute_delta_sigma_Neuber(
                 T, refEvent.PmPbQm_ns, 1, dpa=dpa, monotonic=True
             )
-        except NotImplementedError as e:
+        except (NotImplementedError, OutOfBoundsError) as e:
             logging.warning(e)
             logging.warning("Efficiency index cannot be computed")
             return [(stress1, allowable1), (None, None), (None, None)]

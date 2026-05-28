@@ -40,7 +40,9 @@ class Configuration:
         for sheet in self._config_sheets:
             df = pd.read_excel(config_file, sheet_name=sheet)
             if sheet in ["Reference Event", "Reference Event Fatigue"]:
+                df["Path N"] = df["Path N"].astype(int)
                 df.set_index(["Path N", "ID"], inplace=True)
+                df.sort_index(inplace=True)  # Sort MultiIndex for efficient access
             else:
                 df.set_index(df.columns[0], inplace=True)
             sheets[sheet] = df
@@ -55,11 +57,12 @@ class Configuration:
         self.code = str(gp.loc["Design Code", "Value"])
 
         # Load the stress tensors
-        self.stress_tensors = (
-            pd.read_csv(tensors_file)
-            .set_index(["path", "analysis", "loadstep", "pathpoint", "stress_type"])
-            .sort_index()
-        )
+        stress_tensors = pd.read_csv(tensors_file)
+        stress_tensors["loadstep"] = stress_tensors["loadstep"].astype(int)
+        stress_tensors["path"] = stress_tensors["path"].astype(int)
+        self.stress_tensors = stress_tensors.set_index(
+            ["path", "analysis", "loadstep", "pathpoint", "stress_type"]
+        ).sort_index()
 
         # Perform some consistency checks on the tensors file
         to_check = self.stress_tensors.reset_index()
