@@ -6,6 +6,9 @@ import logging
 
 from cassy.designcodes.codes import BoltCode, Rule
 from cassy.general.material import Material
+from cassy.general.material import FatigueInconelRCCMRx
+from cassy.auxiliary.custom_errors import OutOfBoundsError
+import numpy as np
 
 ASSESSMENTS = {
     "core": "Rules for the screw core",
@@ -63,8 +66,7 @@ class RCCMRx_Bolts(BoltCode):
 
         # delta epsilon calculation
         de1 = (
-            100
-            * 2
+            2
             / 3
             * (1 + material.nu())
             * (ds_tot / material.E(ref_event.temp, ref_event.dpa))
@@ -86,7 +88,22 @@ class RCCMRx_Bolts(BoltCode):
         detot = de1 + de2 + de3 + de4
 
         if material.N.ftype == "strain":
-            N = material.N((ref_event.temp, detot))
+            if isinstance(material.N, FatigueInconelRCCMRx):
+                try:
+                    N = material.N(
+                        (
+                            ref_event.temp,
+                            detot,
+                            material.Sm((ref_event.temp, ref_event.dpa)),
+                            material.Smb((ref_event.temp, ref_event.dpa)),
+                            ds_n,
+                        )
+                    )
+                except OutOfBoundsError as e:
+                    logging.warning(str(e))
+                    N = np.nan
+            else:
+                N = material.N((ref_event.temp, detot))
         elif material.N.ftype == "stress":
             logging.warning(
                 "stress based fatigue in RCC-MRx is not orthodox, check results carefully"
@@ -97,9 +114,9 @@ class RCCMRx_Bolts(BoltCode):
                 ds_tens = boltAction.applicable_stresses["all"]["Primary stress"]
                 s_pre = s_tens_sust + ds_tens
                 # Sigma pre is used as max mean stress
-                N = material.N(ref_event.temp, SA, s_pre)
+                N = material.N(ref_event.temp, SA * 1e-6, s_pre)  # MPa
             else:
-                T_s = (ref_event.temp, ds_tot / 2)  # use the amplitude
+                T_s = (ref_event.temp, ds_tot / 2 * 1e-6)  # use the amplitude
                 N = material.N(T_s)
 
         return {

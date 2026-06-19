@@ -392,6 +392,65 @@ class Fatigue(Property):
         return interpolator(x * self.scale_x, y * self.scale_y)
 
 
+class FatigueInconelRCCMRx(Fatigue):
+    def __init__(self, data: dict, name: str, material_name: str) -> None:
+        """
+        Initialize the FatigueInconelRCCMRx property with a table of values.
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary containing fatigue data.
+        name : str
+            Name of the property.
+        material_name : str
+            Name of the material this property belongs to.
+        """
+        super().__init__(data, name, material_name)
+        # add no limits for Sm, Smb, and dstot as they are not used in the
+        # interpolation itself
+        self.lower_bound.extend([None, None])  # first one added already for mean stress
+        self.upper_bound.extend([None, None])  # first one added already for mean stress
+
+    def _function_to_call(
+        self, x: float, y: float, Sm: float, Smb: float, ds_tot: float
+    ) -> float:
+        """Return the value from the table at a given point.
+
+        Parameters
+        ----------
+        x : float
+            x value to look up in the table.
+        y : float
+            y value to look up in the table.
+        Sm : float
+            Sm allowable
+        Smb : float
+            Smb allowable
+        ds_tot : float
+            Total stress range
+        Returns
+        -------
+        float
+            Value from the table at (x, y).
+        """
+        # Use the All table for this specific fatigue property
+        if ds_tot < 2.7 * Sm or ds_tot < 2.7 * Smb:
+            curve = "Curve1"
+        elif (ds_tot < 3 * Sm and ds_tot >= 2.7 * Sm) or (
+            ds_tot < 3.0 * Smb and ds_tot >= 2.7 * Smb
+        ):
+            curve = "Curve2"
+        else:
+            raise OutOfBoundsError(
+                f"Total stress range {ds_tot} is above the maximum defined in the "
+                f"fatigue table."
+            )
+        interpolator = self.interpolators[curve]
+
+        return interpolator(x * self.scale_x, y * self.scale_y)
+
+
 class PolynomialProperty(Property):
     def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
@@ -610,7 +669,10 @@ class Material:
         data = config["properties"]
         self.nu = PropertyFactory.create_property(data, "Poisson Ratio", self.name)
         self.E = PropertyFactory.create_property(data, "Young Modulus", self.name)
-        self.N = PropertyFactory.create_property(data, "Fatigue", self.name)
+        if data["Fatigue"].get("rccmrx_inconel", False):
+            self.N = FatigueInconelRCCMRx(data["Fatigue"], "Fatigue", self.name)
+        else:
+            self.N = PropertyFactory.create_property(data, "Fatigue", self.name)
         self.Sy_min = PropertyFactory.create_property(
             data, "Min Yield Strength", self.name
         )
@@ -635,6 +697,31 @@ class Material:
         self.monotonic_min_stress_strain = PropertyFactory.create_property(
             data, "Monotonic Min True Stress Strain", self.name
         )
+
+        self.type: str | None = config.get("type", None)
+
+    def ft_star(self, T: float) -> float:
+        """Compute ft_star according to EN13445 part 3, 18.10.6.2. Min temperature is
+        conservatively assumed to be room T= 25 celsius"""
+
+        if self.type is None:
+            raise NotImplementedError(
+                f"Property ft_star not implemented for {self.name}"
+            )
+        T_min = 25  # Celsius, fix the min temperature conservatively
+        T_star = 0.75 * T + 0.25 * T_min
+        if T_star < 100:
+            return 1
+        if self.type == "ferritic":
+            res = 1.03 - 1.5e-4 * T_star - 1.5e-6 * T_star**2
+        elif self.type == "austenitic":
+            res = 1.043 - 4.3e-4 * T_star
+        else:
+            raise ConfigError(
+                f"Material type '{self.type}' is not recognized. (used in EN13445 fatigue)"
+                f"Valid types are: 'ferritic', 'austenitic'. See part 3, 18.10.6.2"
+            )
+        return res
 
     def cyclic_stress_strain(self, T: float, ds: float, dpa: float = 0) -> float:
         """returns the plastic cyclic de_strain given a d_sigma (Pa) and T"""

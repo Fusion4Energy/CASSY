@@ -1,4 +1,5 @@
 name: SS660 (non leak-tight)
+type: austenitic
 description: From Appendix A.S04 of the SDC-IC (non leak-tight)
 properties:
   Poisson Ratio:

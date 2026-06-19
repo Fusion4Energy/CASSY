@@ -173,5 +173,12 @@ def test_XM19_SDC_IC():
     )
 
 
+def test_Inconel_RCCMRx():
+    with as_file(MAT_FOLDER.joinpath("Inconel 718 RCC-MRx.yaml")) as mat_path:
+        material = Material(mat_path)
+
+    assert material.N((150, 0, 500e6, 350e6, 250e6)) > 0
+
+
 def test_read_materials():
     read_materials(MAT_FOLDER)

@@ -76,10 +76,12 @@ class SDC_IC_Bolts(BoltCode):
         # sigma pre and the all loads for the stress intensity range
         s_tens_sust = boltAction.sigma_tensile
         ds_tens = boltAction.applicable_stresses["all"]["Primary stress"]
-        s_pre = s_tens_sust + ds_tens
+        s_pre = (s_tens_sust + ds_tens) * 1e6  # Pa
 
         # Nominal stress intensity range
-        ds_n = boltAction.applicable_stresses["all"]["Stress intensity range"]
+        ds_n = (
+            boltAction.applicable_stresses["all"]["Stress intensity range"] * 1e6
+        )  # Pa
         # --- Nominal elastic strain range (IC 6131.2.1.1) ---
         de_n = ds_n / material.E(ref_event.temp, 0)  # No DPA dependent prop
 
@@ -103,9 +105,7 @@ class SDC_IC_Bolts(BoltCode):
         Sy = material.Sy_min(T_dpa)
         # maximum average tensile stress in bolt during cycle
         # Sigma m
-        s_m = min(
-            Sy, boltAction.poa.KF * s_pre * 1e6
-        )  # sigma_pre needs to be brought in Pa
+        s_m = min(Sy, boltAction.poa.KF * s_pre)
         # equivalent stress range at zero mean stress
         ds_bar = ds / (1 - s_m / Su)
 
@@ -115,25 +115,25 @@ class SDC_IC_Bolts(BoltCode):
         elif material.N.ftype == "stress":
             de_bar = "-"
             if material.N.mean_stress:
-                SA = ds / 2
+                SA = ds / 2 * 1e-6  # convert to MPa
                 # Sigma pre is used as max mean stress
-                N = material.N(ref_event.temp, SA, s_pre)
+                N = material.N(ref_event.temp, SA, s_pre * 1e-6)  # MPa
                 # update ds_bar as it will be the one displayed
                 ds_bar = ds
             else:
-                T_s = (ref_event.temp, ds_bar / 2)  # use the amplitude
+                T_s = (ref_event.temp, ds_bar / 2 * 1e-6)  # use the amplitude (MPa)
                 N = material.N(T_s)
 
         return {
-            "sigma bar": ds_bar,
+            "sigma bar": ds_bar * 1e-6,  # convert to MPa
             "epsilon bar": de_bar,
             "N": float(N),
             "Rule ID": ruleID,
             "epsilon plasticity": de,
-            "sigma plasticity": ds,
-            "sigma pre": s_pre,
+            "sigma plasticity": ds * 1e-6,  # convert to MPa
+            "sigma pre": s_pre * 1e-6,  # convert to MPa
             "epsilon N": de_n,
-            "sigma N": ds_n,
+            "sigma N": ds_n * 1e-6,  # convert to MPa
         }
 
 

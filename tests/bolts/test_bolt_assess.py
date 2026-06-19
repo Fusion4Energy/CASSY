@@ -7,6 +7,7 @@ from cassy.bolts.bolt_assess import FlangeAssessment
 from cassy.bolts.bolt_config import FlangeAssessmentConfig
 from cassy.bolts.geometry import BoltGeom, BoltLikeGeom, InsertGeom
 from cassy.designcodes.rccmrx_bolts_nl import RCCMRx_Bolts
+from cassy.designcodes.EN13445_bolts import EN_13445_Bolts
 from cassy.designcodes.sdcic_bolts import SDC_IC_Bolts
 from cassy.general.material import Material
 from tests.bolts import res
@@ -57,9 +58,18 @@ class TestFlangeAssessment:
         actions = flange_assessment.bolts_assessments[1]["Lift"].primary
         assert actions["N"] == 4
 
-    @pytest.mark.parametrize("code", [SDC_IC_Bolts(), RCCMRx_Bolts()])
-    def test_assess(self, flange_assessment: FlangeAssessment, code):
+    @pytest.mark.parametrize(
+        "code",
+        [
+            SDC_IC_Bolts(),
+            RCCMRx_Bolts(),
+            EN_13445_Bolts(),
+        ],
+    )
+    def test_assess(self, flange_assessment: FlangeAssessment, code, tmp_path):
         # Check that the assessments can run without errors
         flange_assessment.config.code = code
         assessments = flange_assessment.assess()
         assessments = flange_assessment.assess(insert=True)
+        flange_assessment.print_global_df(tmp_path)
+        flange_assessment.get_recap(fatigue=True)
