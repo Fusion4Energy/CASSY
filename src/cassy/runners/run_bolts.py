@@ -13,6 +13,7 @@ from cassy.bolts.bolt_assess import FlangeAssessment
 from cassy.bolts.bolt_config import FlangeAssessmentConfig
 from cassy.bolts.geometry import read_geometries
 from cassy.designcodes.sdcic_bolts import SDC_IC_Bolts
+from cassy.designcodes.EN13445_bolts import EN_13445_Bolts
 from cassy.general.folder_tree import BoltsFolderTree
 from cassy.office.word_helper import WordOutput
 from cassy.runners.run_common import build_material_library
@@ -91,8 +92,9 @@ def run_bolts(
 
     for _, flange_assessment in connections.items():
         recap_immediate, recap_fatigue = flange_assessment.get_recap(fatigue=fatigue)
-        recaps["Immediate"].append(recap_immediate)
-        if fatigue:
+        if recap_immediate is not None:
+            recaps["Immediate"].append(recap_immediate)
+        if fatigue and recap_fatigue is not None:
             recaps["Fatigue"].append(recap_fatigue)
 
     print("Assessing Completed")
@@ -100,7 +102,10 @@ def run_bolts(
     print("Generating Word Recap")
     # Create Recaps from the collected infos during printing
     wordrecaps = {}
-    wordrecaps["Immediate"] = pd.concat(recaps["Immediate"])
+    immediate = False
+    if recaps["Immediate"]:
+        wordrecaps["Immediate"] = pd.concat(recaps["Immediate"])
+        immediate = True
     if fatigue:
         wordrecaps["Fatigue"] = pd.concat(recaps["Fatigue"])
 
@@ -110,49 +115,56 @@ def run_bolts(
     outp.set_orientation("portrait")
 
     # --- Add the Immediate damage section ---
-    outp.doc.add_heading("Immediate damage", level=1)
-    # Insert the recap
-    outp.doc.add_heading(RECAP_TITLE, level=2)
-    caption = RECAP_CAPTION + "Immediate damage"
-    outp.add_table(None, wordrecaps["Immediate"], "damage recap", caption, merge=False)
+    if immediate:
+        outp.doc.add_heading("Immediate damage", level=1)
+        # Insert the recap
+        outp.doc.add_heading(RECAP_TITLE, level=2)
+        caption = RECAP_CAPTION + "Immediate damage"
+        outp.add_table(
+            None, wordrecaps["Immediate"], "damage recap", caption, merge=False
+        )
 
-    # Insert the detailed assessments in landscape
-    outp.set_orientation("landscape")
-    outp.doc.add_heading(EXCELS_TITLE, level=2)
-    for name, flange_assessment in connections.items():
-        # Immediate damage assessements
-        outp.doc.add_heading(name, level=3)
-        for boltID, assessment in flange_assessment.bolt_results.items():
-            outp.doc.add_heading(f"Bolt {boltID}", level=4)
-            complete_banner = flange_assessment.compute_banner(
-                boltID,
-                complete=True,
-            )
-            # add a table for each rule set
-            tables = flange_assessment.get_assessment_tables(boltID, "Immediate")
-            for key, table in tables.items():
-                # compute the banner
-                banner = complete_banner.copy()
-                banner["assessment"] = f"{key}, bolts"
-                caption = f"Bolt {boltID}{EXCELS_CAPTION}{key}"
-                outp.add_table(banner, table, "immediate bolts", caption, merge=merge)
-            # try to get the insert assessment too if present
-            try:
-                tables = flange_assessment.get_assessment_tables(
-                    boltID, "Immediate", insert=True
+        # Insert the detailed assessments in landscape
+        outp.set_orientation("landscape")
+        outp.doc.add_heading(EXCELS_TITLE, level=2)
+        for name, flange_assessment in connections.items():
+            # Immediate damage assessements
+            outp.doc.add_heading(name, level=3)
+            for boltID, assessment in flange_assessment.bolt_results.items():
+                outp.doc.add_heading(f"Bolt {boltID}", level=4)
+                complete_banner = flange_assessment.compute_banner(
+                    boltID,
+                    complete=True,
                 )
-            except ValueError:
-                continue
-            for key, table in tables.items():
-                # compute the banner
-                banner = complete_banner.copy()
-                # material needs to be updated as it may differ
-                banner["material"] = list(
-                    flange_assessment.insert_assessments[boltID].values()
-                )[0].poa.material.name
-                banner["assessment"] = f"{key}, base material"
-                caption = f"Base material {boltID}{EXCELS_CAPTION}{key}"
-                outp.add_table(banner, table, "immediate bolts", caption, merge=merge)
+                # add a table for each rule set
+                tables = flange_assessment.get_assessment_tables(boltID, "Immediate")
+                for key, table in tables.items():
+                    # compute the banner
+                    banner = complete_banner.copy()
+                    banner["assessment"] = f"{key}, bolts"
+                    caption = f"Bolt {boltID}{EXCELS_CAPTION}{key}"
+                    outp.add_table(
+                        banner, table, "immediate bolts", caption, merge=merge
+                    )
+                # try to get the insert assessment too if present
+                try:
+                    tables = flange_assessment.get_assessment_tables(
+                        boltID, "Immediate", insert=True
+                    )
+                except ValueError:
+                    continue
+                for key, table in tables.items():
+                    # compute the banner
+                    banner = complete_banner.copy()
+                    # material needs to be updated as it may differ
+                    banner["material"] = list(
+                        flange_assessment.insert_assessments[boltID].values()
+                    )[0].poa.material.name
+                    banner["assessment"] = f"{key}, base material"
+                    caption = f"Base material {boltID}{EXCELS_CAPTION}{key}"
+                    outp.add_table(
+                        banner, table, "immediate bolts", caption, merge=merge
+                    )
 
     if fatigue:
         outp.set_orientation("portrait")
@@ -185,6 +197,8 @@ def run_bolts(
                 # select the correct table style
                 if isinstance(flange_assessment.config.code, SDC_IC_Bolts):
                     table_type = "fatigue SDCIC bolts"
+                elif isinstance(flange_assessment.config.code, EN_13445_Bolts):
+                    table_type = "fatigue EN13445 bolts"
                 else:
                     table_type = "fatigue bolts"
                 table = outp.add_table(

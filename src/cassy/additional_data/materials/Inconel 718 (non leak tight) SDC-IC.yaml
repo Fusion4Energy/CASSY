@@ -1,5 +1,6 @@
 name: Inconel 718
 description: From Appendix A of the SDC-IC
+type: austenitic
 properties:
   Poisson Ratio:
     type: constant

@@ -180,6 +180,42 @@ bolt_fatigue_table = TableFormatting(
     max_col_merge=0,
 )
 
+bolt_fatigue_EN13445_table = TableFormatting(
+    name="fatigue EN13445 bolts",
+    col_order=[
+        "ID",
+        "Operating conditions",
+        "Range",
+        "ctg",
+        "lvl",
+        "T",
+        "dpa",
+        "delta sigma",
+        "Rm",
+        "fe",
+        "ft_star",
+        "fb",
+        "n",
+        "-",
+        "N",
+        "Vj",
+    ],
+    formats={
+        5: "{:.0f}",
+        6: "{:.1e}",
+        7: "{:.0f}",
+        8: "{:.0f}",
+        9: "{:.2e}",
+        10: "{:.2e}",
+        11: "{:.2e}",
+        12: "{:.0f}",
+        14: "{:.2e}",
+        15: "{:.2%}",
+    },
+    block_identifier="Load Condition",
+    max_col_merge=0,
+)
+
 TABLES_LOCATION: dict[int, TableFormatting] = {
     0: damage_recap_table,
     1: fatigue_recap_table,
@@ -188,4 +224,5 @@ TABLES_LOCATION: dict[int, TableFormatting] = {
     4: bolt_immediate_table,
     5: bolt_fatigue_table,
     6: bolt_fatigue_sdcic_table,
+    7: bolt_fatigue_EN13445_table,
 }

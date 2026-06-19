@@ -10,6 +10,7 @@ from cassy.bolts.bolt_config import (
 from cassy.bolts.code_assessor import BoltActionAssessor
 from cassy.bolts.geometry import BoltLikeGeom
 from cassy.designcodes.codes import BoltCode
+import logging
 
 
 class FlangeAssessment:
@@ -116,9 +117,9 @@ class FlangeAssessment:
     def _build_fatigue_assessors(
         self, row: pd.Series, boltID: str
     ) -> dict[str, BoltActionAssessor]:
-        assert (
-            self.config.REs_fatigue is not None
-        ), "Fatigue reference events are not defined in the configuration."
+        assert self.config.REs_fatigue is not None, (
+            "Fatigue reference events are not defined in the configuration."
+        )
         geom_data = self.geometries[f"{row['Geom data']}_{row['Geom type']}"]
         preload = row["Preload [N]"]
         ref_events = self.config.REs_fatigue[str(boltID)]
@@ -176,9 +177,9 @@ class FlangeAssessment:
         # Assess bolts
         results = {}
         code = self.config.code
-        assert isinstance(
-            code, BoltCode
-        ), f"The code must be a code specific for bolts, not {code.name}"
+        assert isinstance(code, BoltCode), (
+            f"The code must be a code specific for bolts, not {code.name}"
+        )
         if insert:
             assessors = self.insert_assessments
         else:
@@ -249,12 +250,16 @@ class FlangeAssessment:
             immediate = assessment["Immediate"]
             fatigue = assessment["Fatigue"]
             for df, list_df in zip([immediate, fatigue], [dfs, fatigue_dfs]):
-                if df is not None:
+                if df is not None and not df.empty:
                     df["Bolt ID"] = bolt_id
                     list_df.append(df)
 
-        df = pd.concat(dfs, ignore_index=True).set_index(["Bolt ID", "ID"])
-        df.to_excel(os.path.join(mainfolder, f"{self.name}_{tag}_immediate.xlsx"))
+        if len(dfs) == 0:
+            logging.warning("No immediate assessment results to print.")
+            return
+        else:
+            df = pd.concat(dfs, ignore_index=True).set_index(["Bolt ID", "ID"])
+            df.to_excel(os.path.join(mainfolder, f"{self.name}_{tag}_immediate.xlsx"))
 
         if fatigue_dfs:
             fatigue_df = pd.concat(fatigue_dfs, ignore_index=True).set_index(
@@ -266,7 +271,7 @@ class FlangeAssessment:
 
     def get_recap(
         self, fatigue: bool = False
-    ) -> tuple[pd.DataFrame, pd.DataFrame | None]:
+    ) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
         """get recap dataframes for the assessments
 
         Parameters
@@ -276,7 +281,7 @@ class FlangeAssessment:
 
         Returns
         -------
-        tuple[pd.DataFrame, pd.DataFrame | None]
+        tuple[pd.DataFrame | None, pd.DataFrame | None]
             Immediate and fatigue recap dataframes
         """
         recaps = {"Fatigue": [], "Immediate": []}
@@ -286,11 +291,15 @@ class FlangeAssessment:
             row, fatigue_row = self._collect_recap_data(
                 assessment, boltID, fatigue=fatigue
             )
-            recaps["Immediate"].append(row)
+            if row is not None:
+                recaps["Immediate"].append(row)
             if fatigue_row is not None:
                 recaps["Fatigue"].append(fatigue_row)
 
-        immediate_recap = pd.DataFrame(recaps["Immediate"])
+        if len(recaps["Immediate"]) == 0:
+            immediate_recap = None
+        else:
+            immediate_recap = pd.DataFrame(recaps["Immediate"])
         if fatigue:
             fatigue_recap = pd.DataFrame(recaps["Fatigue"])
         else:
@@ -303,7 +312,7 @@ class FlangeAssessment:
         assessment: dict[str, pd.DataFrame],
         boltID: str,
         fatigue: bool = False,
-    ) -> tuple[dict[str, str], dict[str, str] | None]:
+    ) -> tuple[dict[str, str] | None, dict[str, str] | None]:
         # Collect and store data for recap tables
         # check if the assessment was good
         # adjust index
@@ -313,48 +322,51 @@ class FlangeAssessment:
         else:
             df = assessment["Immediate"]
 
-        df.reset_index(inplace=True)
-        # first check if the assessment was successful
-        if len(df[df["Result"] == "FAILED"]) > 0:
-            ass = "NOK"
+        if df.empty:
+            row = None
         else:
-            ass = "OK"
+            df.reset_index(inplace=True)
+            # first check if the assessment was successful
+            if len(df[df["Result"] == "FAILED"]) > 0:
+                ass = "NOK"
+            else:
+                ass = "OK"
 
-        # --- Individuate design driver ---
-        # take out the > 10 and assessment not required
-        df1 = df[df["Safety Margin"] != "> 10"]
-        df1 = df1[df1["Result"] != "Assessment not required"]
-        # it may be now that there are no rows left, no driver
-        if len(df1) == 0:
-            # No driver found
-            re = "No driver"
-            sm = ""
-            slvl = ""
-            rule = ""
-        else:
-            margins = df1["Safety Margin"].astype(float).values
-            idx = np.argmin(margins)
+            # --- Individuate design driver ---
+            # take out the > 10 and assessment not required
+            df1 = df[df["Safety Margin"] != "> 10"]
+            df1 = df1[df1["Result"] != "Assessment not required"]
+            # it may be now that there are no rows left, no driver
+            if len(df1) == 0:
+                # No driver found
+                re = "No driver"
+                sm = ""
+                slvl = ""
+                rule = ""
+            else:
+                margins = df1["Safety Margin"].astype(float).values
+                idx = np.argmin(margins)
 
-            sm = margins[idx]
-            re = df1.iloc[idx]["ID"]
-            slvl = df1.iloc[idx]["Service Level"]
-            rule = df1.iloc[idx]["Sub-Rule"]
+                sm = margins[idx]
+                re = df1.iloc[idx]["ID"]
+                slvl = df1.iloc[idx]["Service Level"]
+                rule = df1.iloc[idx]["Sub-Rule"]
 
-        # recover the bolt geometry
-        geom = self.config.bolts_spec.loc[boltID, "Geom data"]
-        if isinstance(geom, pd.DataFrame) or isinstance(geom, pd.Series):
-            geom = geom.values[0]
+            # recover the bolt geometry
+            geom = self.config.bolts_spec.loc[boltID, "Geom data"]
+            if isinstance(geom, pd.DataFrame) or isinstance(geom, pd.Series):
+                geom = geom.values[0]
 
-        row = {
-            "Submodel": self.config.name,
-            "Path": str(boltID),
-            "Path Type": str(geom),
-            "Assessment": ass,
-            "Reference Event": re,
-            "Service lvl": slvl,
-            "Rule": rule,
-            "Safety Margin": sm,
-        }
+            row = {
+                "Submodel": self.config.name,
+                "Path": str(boltID),
+                "Path Type": str(geom),
+                "Assessment": ass,
+                "Reference Event": re,
+                "Service lvl": slvl,
+                "Rule": rule,
+                "Safety Margin": sm,
+            }
 
         if fatigue:
             fatigue_table = assessment["Fatigue"]
