@@ -15,6 +15,7 @@ from cassy.general.folder_tree import PathsFolderTree
 from cassy.office.word_helper import WordOutput
 from cassy.paths.submodel import Submodel
 from cassy.runners.run_common import build_material_library
+from cassy.paths.paths_config import Configuration
 
 # #################### User Inputs ############################################
 # local folders and files
@@ -40,13 +41,18 @@ def run_paths(
     matlib: PathLike | None = None,
     print_recap: bool = True,
     merge: bool = True,
+    configs: dict[str, Configuration] | None = None,
 ) -> None:
     folder_tree = PathsFolderTree(root)
     # --- Initializations ---
     materials = build_material_library(matlib)
 
     # --- Load Configuration files ---
-    configs = parse_cfg_files(folder_tree.configurations, folder_tree.stress_tensors)
+    if configs is None:
+        configs = parse_cfg_files(
+            folder_tree.configurations, folder_tree.stress_tensors
+        )
+
     # --- Reorganize and create the LinStresses and Combined ones + Assessment ---
     print("\nAssessing the results...")
     submodels: list[Submodel] = []
