@@ -1,9 +1,12 @@
+import logging
 import os
 from typing import Union
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
 
 from cassy.auxiliary.types import PathLike
 from cassy.designcodes.codes import Code
@@ -445,7 +448,7 @@ class Submodel:
         if self.assessments is None:
             raise ValueError("Please assess the submodel first")
 
-        print("Assessing " + self.name + " with " + self.code.name)
+        logger.info("Assessing %s with %s", self.name, self.code.name)
 
         # Cycling on all paths
         # recap_rows = {'Immediate': [], 'Ratcheting': [], 'Fatigue': []}

@@ -48,4 +48,9 @@ write_to = "src/_version.py"
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
-"cassy" = ["**/*.xlsx", "**/*.txt", "**/*.csv", "**/*.docx"]
+"cassy" = ["**/*.xlsx", "**/*.txt", "**/*.csv", "**/*.docx", "**/*.png"]
+
+[tool.coverage.run]
+omit = [
+    "*/cassy/gui/*",
+]

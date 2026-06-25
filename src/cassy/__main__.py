@@ -47,6 +47,12 @@ def main():
         default=False,
         action="store_true",
     )
+    parser.add_argument(
+        "--pathsgui",
+        help="Run the GUI for paths assessment",
+        action="store_true",
+        default=False,
+    )
     args = parser.parse_args()
     print_recap = not args.norecap
 
@@ -55,6 +61,11 @@ def main():
             init_bolts_assessment(args.root)
         elif args.init == "paths":
             init_paths_assessment(args.root)
+    elif args.pathsgui:
+        from cassy.gui.paths_gui import main as run_paths_gui
+
+        run_paths_gui()
+
     elif args.assess == "bolts":
         run_bolts(
             args.root,

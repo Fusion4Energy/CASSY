@@ -1,0 +1,5 @@
+submodel,path,event,T,DPA
+SM1,1,RE-A,350,0.1
+SM1,1,RE-B,400,0.2
+SM1,2,RE-A,320,0.05
+SM2,1,RE-A,500,1.0

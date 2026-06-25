@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 from importlib.resources import files
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 
@@ -99,7 +102,7 @@ def run_bolts(
             flange_assessment.print_global_df(assessment_folder, insert=True)
 
     if not print_recap:
-        print("No word recap requested. Assessment completed")
+        logger.info("No word recap requested. Assessment completed")
         return  # Exit here if no word recap is requested
 
     for _, flange_assessment in connections.items():
@@ -109,9 +112,9 @@ def run_bolts(
         if fatigue and recap_fatigue is not None:
             recaps["Fatigue"].append(recap_fatigue)
 
-    print("Assessing Completed")
+    logger.info("Assessing Completed")
 
-    print("Generating Word Recap")
+    logger.info("Generating Word Recap")
     # Create Recaps from the collected infos during printing
     wordrecaps = {}
     immediate = False
@@ -234,4 +237,4 @@ def run_bolts(
 
     outp.save(folder_tree.out_word)
 
-    print("All done!")
+    logger.info("All done!")
