@@ -71,7 +71,7 @@ class LinStress:
         # Convert Unit to Pa
         if unit == "MPa":
             df = df * 1e6
-        elif unit == "KPa":
+        elif unit == "kPa":
             df = df * 1e3
         elif unit == "Pa":
             pass
@@ -584,9 +584,9 @@ def _combine_inertial_stresses(
         secondary_list = [lin_stress.secondary.values for lin_stress in lin_stresses]
 
         for matrix_list in [primary_list, secondary_list]:
-            assert (
-                len(matrix_list) == 3
-            ), f"Issue in {main_name}. There should be 3 components for each inertial load (X, Y and Z)"
+            assert len(matrix_list) == 3, (
+                f"Issue in {main_name}. There should be 3 components for each inertial load (X, Y and Z)"
+            )
 
         new_primary = _combine_linstresses(primary_list, combination_type=rec_meth)
         new_secondary = _combine_linstresses(secondary_list, combination_type=rec_meth)

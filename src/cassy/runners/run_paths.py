@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
 from importlib.resources import files
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 
@@ -54,7 +57,7 @@ def run_paths(
         )
 
     # --- Reorganize and create the LinStresses and Combined ones + Assessment ---
-    print("\nAssessing the results...")
+    logger.info("Assessing the results...")
     submodels: list[Submodel] = []
     recap_rows = {}
     for submodel_name, conf in configs.items():
@@ -81,7 +84,7 @@ def run_paths(
         submodel.print_global_df(ass_path)
 
     if not print_recap:
-        print("No word recap requested. Assessment completed")
+        logger.info("No word recap requested. Assessment completed")
         return  # Exit here if no word recap is requested
 
     for submodel in submodels:
@@ -90,9 +93,9 @@ def run_paths(
             if key not in recap_rows:
                 recap_rows[key] = []
             recap_rows[key].extend(item)
-    print("Assessing Completed")
+    logger.info("Assessing Completed")
 
-    print("Generating Word Recap")
+    logger.info("Generating Word Recap")
     # Create Recaps from the collected infos during printing
     recaps = {}
 
@@ -165,4 +168,4 @@ def run_paths(
 
     outp.save(folder_tree.out_word)
 
-    print("All done!")
+    logger.info("All done!")
