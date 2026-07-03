@@ -26,6 +26,14 @@ import csv
 import logging
 import threading
 
+from cassy.designcodes.map import PATH_CODES as _PATH_CODES
+from cassy.paths.paths_config import (
+    LoadType,
+    PathType,
+    SpatialRecMethod,
+    StressClassification,
+)
+
 # ── Icon helper ───────────────────────────────────────────────────────────────
 
 _ICON_PATH = os.path.join(os.path.dirname(__file__), "icon.png")
@@ -50,14 +58,6 @@ def _set_icon(window: tk.Wm) -> None:
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-
-from cassy.designcodes.map import PATH_CODES as _PATH_CODES
-from cassy.paths.paths_config import (
-    LoadType,
-    PathType,
-    SpatialRecMethod,
-    StressClassification,
-)
 
 DESIGN_CODES: list[str] = list(_PATH_CODES.keys())
 STRESS_TYPES: list[str] = [e.value for e in StressClassification]

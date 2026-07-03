@@ -36,6 +36,7 @@ test_linux:
       - PYTHON_VERSION:
         - "3.11"
         - "3.12"
+        - "3.14"
   rules:
     # Run on pushes to main or developing
     - if: '$CI_COMMIT_BRANCH == "main"'
@@ -52,7 +53,6 @@ test_windows:
     python: ${PYTHON_VERSION}
   before_script:
     - py.exe -0 # list available Python versions for debugging
-    - py.exe -3.11 --version
     - py.exe -$env:python --version # For debugging
     - py.exe -$env:python -m pip --version  # For debugging
     - py.exe -$env:python -m pip install virtualenv
@@ -68,6 +68,8 @@ test_windows:
       - PYTHON_VERSION:
         - "3.11"
         - "3.12"
+        - "3.13"
+        - "3.14"
   rules:
     # Run on pushes to main or developing
     - if: '$CI_COMMIT_BRANCH == "main"'
