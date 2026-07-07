@@ -160,20 +160,18 @@ def _project() -> dict:
             "bolts_spec": [_bolt_entry("B3")],
         },
     ]
-    p["reference_events"] = {
-        "F1": [_re_dict("RE-01"), _re_dict("RE-02")],
-        "F2": [_re_dict("RE-01")],
-    }
-    p["fatigue_reference_events"] = {
-        "F1": [_fat_re_dict("FRE-01")],
-    }
+    p["reference_events"] = [_re_dict("RE-01"), _re_dict("RE-02")]
+    p["fatigue_reference_events"] = [_fat_re_dict("FRE-01")]
     p["tdpa"] = [
-        {"flange": "F1", "re_id": "RE-01", "T": 100.0, "dpa": 0.0},
-        {"flange": "F1", "re_id": "RE-02", "T": 120.0, "dpa": 0.1},
-        {"flange": "F2", "re_id": "RE-01", "T": 80.0, "dpa": 0.0},
+        {"flange": "F1", "bolt_id": "B1", "re_id": "RE-01", "T": 100.0, "dpa": 0.0},
+        {"flange": "F1", "bolt_id": "B1", "re_id": "RE-02", "T": 120.0, "dpa": 0.1},
+        {"flange": "F1", "bolt_id": "B2", "re_id": "RE-01", "T": 100.0, "dpa": 0.0},
+        {"flange": "F1", "bolt_id": "B2", "re_id": "RE-02", "T": 120.0, "dpa": 0.1},
+        {"flange": "F2", "bolt_id": "B3", "re_id": "RE-01", "T": 80.0, "dpa": 0.0},
     ]
     p["tdpa_fatigue"] = [
-        {"flange": "F1", "re_id": "FRE-01", "T": 100.0, "dpa": 0.0},
+        {"flange": "F1", "bolt_id": "B1", "re_id": "FRE-01", "T": 100.0, "dpa": 0.0},
+        {"flange": "F1", "bolt_id": "B2", "re_id": "FRE-01", "T": 100.0, "dpa": 0.0},
     ]
     return p
 
@@ -205,8 +203,8 @@ class TestFreshProject:
         p = _fresh_project()
         assert p["geometries"] == []
         assert p["flanges"] == []
-        assert p["reference_events"] == {}
-        assert p["fatigue_reference_events"] == {}
+        assert p["reference_events"] == []
+        assert p["fatigue_reference_events"] == []
         assert p["tdpa"] == []
         assert p["tdpa_fatigue"] == []
 
@@ -750,24 +748,16 @@ class TestFlangesTab:
                 "bolts_spec": [],
             }
         )
-        proj["reference_events"].setdefault("F1", [])
-        proj["fatigue_reference_events"].setdefault("F1", [])
         tab.refresh()
         assert len(proj["flanges"]) == 1
-        assert "F1" in proj["reference_events"]
-        assert "F1" in proj["fatigue_reference_events"]
 
     def test_delete_flange_cascades_re_data(self, root):
         proj = _project()
         nb = tk.ttk.Notebook(root)
         tab = FlangesTab(nb, proj)
         tab.refresh()
-        # Remove F1 and its RE data directly (simulates _delete logic)
+        # Remove F1 directly (simulates _delete logic); REs are now shared
         proj["flanges"] = [f for f in proj["flanges"] if f["name"] != "F1"]
-        proj["reference_events"].pop("F1", None)
-        proj["fatigue_reference_events"].pop("F1", None)
-        assert "F1" not in proj["reference_events"]
-        assert "F1" not in proj["fatigue_reference_events"]
         assert len(proj["flanges"]) == 1
 
     def test_refresh_shows_all_flanges(self, root):
@@ -835,21 +825,18 @@ class TestBoltSpecsTab:
 
 
 class TestBoltREsTab:
-    def test_refresh_populates_flange_combo(self, root):
+    def test_refresh_populates_table(self, root):
         proj = _project()
         nb = tk.ttk.Notebook(root)
         tab = BoltREsTab(nb, proj)
         tab.refresh()
-        assert "F1" in tab._fl_combo["values"]
-        assert "F2" in tab._fl_combo["values"]
+        assert len(tab._tree.get_children()) == 2  # RE-01 and RE-02
 
     def test_refresh_table_shows_correct_res(self, root):
         proj = _project()
         nb = tk.ttk.Notebook(root)
         tab = BoltREsTab(nb, proj)
         tab.refresh()
-        tab._fl_var.set("F1")
-        tab._refresh_table()
         assert len(tab._tree.get_children()) == 2  # RE-01 and RE-02
 
     def test_delete_re_removes_entry(self, root):
@@ -857,14 +844,12 @@ class TestBoltREsTab:
         nb = tk.ttk.Notebook(root)
         tab = BoltREsTab(nb, proj)
         tab.refresh()
-        tab._fl_var.set("F1")
-        tab._refresh_table()
         rows = tab._tree.get_children()
         tab._tree.selection_set(rows[0])
         with patch("cassy.gui.bolts_gui.messagebox") as mb:
             mb.askyesno.return_value = True
             tab._delete()
-        assert len(proj["reference_events"]["F1"]) == 1
+        assert len(proj["reference_events"]) == 1
 
     def test_row_values_formats_actions(self, root):
         proj = _project()
@@ -880,8 +865,6 @@ class TestBoltREsTab:
         nb = tk.ttk.Notebook(root)
         tab = BoltREsTab(nb, proj)
         tab.refresh()
-        tab._fl_var.set("F1")
-        tab._refresh_table()
         # No item selected
         with patch("cassy.gui.bolts_gui.messagebox") as mb:
             tab._delete()
@@ -1048,9 +1031,11 @@ class TestBuildBoltsFromProject:
                 "bolts_spec": [_bolt_entry("B1")],
             }
         ]
-        proj["reference_events"] = {"F1": [_re_dict()]}
-        proj["fatigue_reference_events"] = {}
-        proj["tdpa"] = [{"flange": "F1", "re_id": "RE-01", "T": 100.0, "dpa": 0.0}]
+        proj["reference_events"] = [_re_dict()]
+        proj["fatigue_reference_events"] = []
+        proj["tdpa"] = [
+            {"flange": "F1", "bolt_id": "B1", "re_id": "RE-01", "T": 100.0, "dpa": 0.0}
+        ]
 
         _configs, _geoms = _build_bolts_from_project(proj)
         bolts_spec = _configs["F1"].bolts_spec
@@ -1076,11 +1061,13 @@ class TestBuildBoltsFromProject:
                 "bolts_spec": [_bolt_entry("B1")],
             }
         ]
-        proj["reference_events"] = {"F1": [_re_dict()]}
-        proj["fatigue_reference_events"] = {"F1": [_fat_re_dict()]}
-        proj["tdpa"] = [{"flange": "F1", "re_id": "RE-01", "T": 100.0, "dpa": 0.0}]
+        proj["reference_events"] = [_re_dict()]
+        proj["fatigue_reference_events"] = [_fat_re_dict()]
+        proj["tdpa"] = [
+            {"flange": "F1", "bolt_id": "B1", "re_id": "RE-01", "T": 100.0, "dpa": 0.0}
+        ]
         proj["tdpa_fatigue"] = [
-            {"flange": "F1", "re_id": "FRE-01", "T": 100.0, "dpa": 0.0}
+            {"flange": "F1", "bolt_id": "B1", "re_id": "FRE-01", "T": 100.0, "dpa": 0.0}
         ]
 
         _configs, _geoms = _build_bolts_from_project(proj)
@@ -1106,9 +1093,11 @@ class TestBuildBoltsFromProject:
                 "bolts_spec": [_bolt_entry("B1")],
             }
         ]
-        proj["reference_events"] = {"F1": [_re_dict()]}
-        proj["fatigue_reference_events"] = {}
-        proj["tdpa"] = [{"flange": "F1", "re_id": "RE-01", "T": 100.0, "dpa": 0.0}]
+        proj["reference_events"] = [_re_dict()]
+        proj["fatigue_reference_events"] = []
+        proj["tdpa"] = [
+            {"flange": "F1", "bolt_id": "B1", "re_id": "RE-01", "T": 100.0, "dpa": 0.0}
+        ]
 
         _configs, _geoms = _build_bolts_from_project(proj)
         assert _configs["F1"].REs_fatigue is None
@@ -1136,11 +1125,13 @@ class TestBuildBoltsFromProject:
                 "bolts_spec": [_bolt_entry("B1")],
             }
         ]
-        proj["reference_events"] = {"F1": [_re_dict()]}
-        proj["fatigue_reference_events"] = {"F1": [fat_re]}
-        proj["tdpa"] = [{"flange": "F1", "re_id": "RE-01", "T": 100.0, "dpa": 0.0}]
+        proj["reference_events"] = [_re_dict()]
+        proj["fatigue_reference_events"] = [fat_re]
+        proj["tdpa"] = [
+            {"flange": "F1", "bolt_id": "B1", "re_id": "RE-01", "T": 100.0, "dpa": 0.0}
+        ]
         proj["tdpa_fatigue"] = [
-            {"flange": "F1", "re_id": "FRE-01", "T": 100.0, "dpa": 0.0}
+            {"flange": "F1", "bolt_id": "B1", "re_id": "FRE-01", "T": 100.0, "dpa": 0.0}
         ]
 
         _configs, _geoms = _build_bolts_from_project(proj)

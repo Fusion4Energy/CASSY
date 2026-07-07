@@ -6,9 +6,9 @@ Workflow (tabs in order):
   3. Flanges          — flange definitions (name, design code, actions CSV)
   4. Bolt Specs       — bolt and insert specifications per flange
                         (insert always defined alongside its bolt)
-  5. Ref. Events      — reference events per flange (shared by all bolts)
-  6. Fat. Ref. Events — fatigue reference events per flange (shared by all bolts)
-  7. T & DPA          — temperature and irradiation table (flange × RE)
+  5. Ref. Events      — reference events shared by all flanges and bolts
+  6. Fat. Ref. Events — fatigue reference events shared by all flanges and bolts
+  7. T & DPA          — temperature and irradiation table (flange × bolt × RE)
   8. T & DPA Fatigue  — same table for fatigue reference events
 
 The project state is saved/loaded as JSON.
@@ -19,6 +19,7 @@ so that a shared bolt geometry library can be maintained across projects.
 from __future__ import annotations
 
 import copy
+import csv
 import json
 import logging
 import os
@@ -99,8 +100,8 @@ EMPTY_BOLT_PROJECT: dict[str, Any] = {
     },
     "geometries": [],
     "flanges": [],
-    "reference_events": {},  # {flange_name: [re_dict, ...]}
-    "fatigue_reference_events": {},  # {flange_name: [fat_re_dict, ...]}
+    "reference_events": [],  # [re_dict, ...] — shared by all flanges
+    "fatigue_reference_events": [],  # [fat_re_dict, ...] — shared by all flanges
     "tdpa": [],  # [{flange, re_id, T, dpa}]
     "tdpa_fatigue": [],  # [{flange, re_id, T, dpa}]
 }
@@ -1247,8 +1248,6 @@ class FlangesTab(_TableTab):
             messagebox.showerror("Duplicate", f"Flange '{name}' already exists.")
             return
         self._project["flanges"].append(dlg.result)
-        self._project["reference_events"].setdefault(name, [])
-        self._project["fatigue_reference_events"].setdefault(name, [])
         self.refresh()
 
     def _edit(self) -> None:
@@ -1271,9 +1270,6 @@ class FlangesTab(_TableTab):
                     "Duplicate", f"Flange '{new_name}' already exists."
                 )
                 return
-            for key in ("reference_events", "fatigue_reference_events"):
-                re_data = self._project[key].pop(old_name, [])
-                self._project[key][new_name] = re_data
             for key in ("tdpa", "tdpa_fatigue"):
                 for entry in self._project.get(key, []):
                     if entry.get("flange") == old_name:
@@ -1292,8 +1288,6 @@ class FlangesTab(_TableTab):
         ):
             return
         self._project["flanges"].pop(idx)
-        self._project["reference_events"].pop(name, None)
-        self._project["fatigue_reference_events"].pop(name, None)
         for key in ("tdpa", "tdpa_fatigue"):
             self._project[key] = [
                 e for e in self._project.get(key, []) if e.get("flange") != name
@@ -1494,10 +1488,9 @@ class BoltSpecsTab(ttk.Frame):
 
 
 class BoltREsTab(ttk.Frame):
-    """Per-flange reference events table.
+    """Reference events table shared across all flanges and bolts.
 
-    Uses a flange selector and a Treeview for the RE list.  The same REs apply
-    to all bolts in that flange.  Subclassed for fatigue REs.
+    Subclassed for fatigue REs.
     """
 
     _RE_KEY = "reference_events"
@@ -1527,29 +1520,14 @@ class BoltREsTab(ttk.Frame):
         self._project = project
         self._build()
 
-    def _current_flange_name(self) -> str | None:
-        return self._fl_var.get() or None
-
     def _current_res(self) -> list:
-        fn = self._current_flange_name()
-        if fn is None:
-            return []
-        return self._project[self._RE_KEY].get(fn, [])
+        return self._project[self._RE_KEY]
 
     def _build(self) -> None:
-        top = ttk.Frame(self)
-        top.pack(fill="x", padx=6, pady=4)
-        ttk.Label(top, text="Flange:").pack(side="left", padx=(0, 4))
-        self._fl_var = tk.StringVar()
-        self._fl_combo = ttk.Combobox(
-            top, textvariable=self._fl_var, state="readonly", width=20
-        )
-        self._fl_combo.pack(side="left", padx=(0, 12))
-        self._fl_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_table())
         self.bind("<Map>", lambda _e: self.refresh())
 
         toolbar = ttk.Frame(self)
-        toolbar.pack(fill="x", padx=6, pady=2)
+        toolbar.pack(fill="x", padx=6, pady=4)
         ttk.Button(toolbar, text="Add", width=7, command=self._add).pack(
             side="left", padx=2
         )
@@ -1600,10 +1578,6 @@ class BoltREsTab(ttk.Frame):
         )
 
     def refresh(self) -> None:
-        fl_names = [f["name"] for f in self._project["flanges"]]
-        self._fl_combo["values"] = fl_names
-        if self._fl_var.get() not in fl_names:
-            self._fl_var.set(fl_names[0] if fl_names else "")
         self._refresh_table()
 
     def _refresh_table(self) -> None:
@@ -1621,47 +1595,37 @@ class BoltREsTab(ttk.Frame):
         return BoltREDialog(parent, existing=existing)
 
     def _add(self) -> None:
-        fn = self._current_flange_name()
-        if not fn:
-            messagebox.showwarning("No selection", "Select a flange first.")
-            return
         dlg = self._make_dialog(self)
         if dlg.result is None:
             return
-        re_list = self._project[self._RE_KEY].setdefault(fn, [])
+        re_list = self._project[self._RE_KEY]
         if any(r["re_id"] == dlg.result["re_id"] for r in re_list):
             messagebox.showerror(
                 "Duplicate",
-                f"RE '{dlg.result['re_id']}' already exists for this flange.",
+                f"RE '{dlg.result['re_id']}' already exists.",
             )
             return
         re_list.append(dlg.result)
         self._refresh_table()
 
     def _edit(self) -> None:
-        fn = self._current_flange_name()
-        if not fn:
-            return
         idx = self._selected_index()
         if idx is None:
             messagebox.showwarning("Selection", "Select a reference event to edit.")
             return
-        re_list = self._project[self._RE_KEY].get(fn, [])
+        re_list = self._project[self._RE_KEY]
         dlg = self._make_dialog(self, existing=re_list[idx])
         if dlg.result:
             re_list[idx] = dlg.result
             self._refresh_table()
 
     def _delete(self) -> None:
-        fn = self._current_flange_name()
-        if not fn:
-            return
         idx = self._selected_index()
         if idx is None:
             messagebox.showwarning("Selection", "Select a reference event to delete.")
             return
         if messagebox.askyesno("Delete", "Delete the selected reference event?"):
-            self._project[self._RE_KEY][fn].pop(idx)
+            self._project[self._RE_KEY].pop(idx)
             self._refresh_table()
 
 
@@ -1739,6 +1703,9 @@ class BoltTDPATab(ttk.Frame):
         ttk.Button(toolbar, text="Import CSV...", command=self._import_csv).pack(
             side="left", padx=2
         )
+        ttk.Button(toolbar, text="Export CSV...", command=self._export_csv).pack(
+            side="left", padx=2
+        )
         ttk.Label(
             toolbar,
             text="CSV columns: flange, bolt, event, T, DPA",
@@ -1773,11 +1740,7 @@ class BoltTDPATab(ttk.Frame):
         flange_bolt_pairs: list[tuple[str, str]] = [
             (f["name"], b["bolt_id"]) for f in flanges for b in f.get("bolts_spec", [])
         ]
-        re_ids = [
-            r["re_id"]
-            for flange_res in self._project.get(self._RE_KEY, {}).values()
-            for r in flange_res
-        ]
+        re_ids = [r["re_id"] for r in self._project.get(self._RE_KEY, [])]
         # Deduplicate while preserving order
         seen: set[str] = set()
         unique_re_ids: list[str] = []
@@ -1910,6 +1873,34 @@ class BoltTDPATab(ttk.Frame):
             if len(errors) > 20:
                 summary += f"\n… and {len(errors) - 20} more"
         messagebox.showinfo("Import complete", summary)
+
+    def _export_csv(self) -> None:
+        if not self._cell_vars:
+            messagebox.showwarning(
+                "Empty grid", "No data to export (build the grid first)."
+            )
+            return
+        path = filedialog.asksaveasfilename(
+            title="Export T & DPA to CSV",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", newline="", encoding="utf-8") as fh:
+                writer = csv.writer(fh)
+                writer.writerow(["flange", "bolt", "event", "T", "DPA"])
+                for (flange_name, bolt_id, re_id), (
+                    t_var,
+                    dpa_var,
+                ) in self._cell_vars.items():
+                    writer.writerow(
+                        [flange_name, bolt_id, re_id, t_var.get(), dpa_var.get()]
+                    )
+            messagebox.showinfo("Export complete", f"T & DPA data saved to:\n{path}")
+        except Exception as exc:
+            messagebox.showerror("Export Error", str(exc))
 
     def sync(self) -> list[str]:
         """Read cells into project[_PROJECT_KEY]; return validation errors."""
@@ -2132,7 +2123,7 @@ def _build_bolts_from_project(
             for e in project.get("tdpa", [])
             if "bolt_id" in e
         }
-        shared_res = project.get("reference_events", {}).get(flange_name, [])
+        shared_res = project.get("reference_events", [])
         REs: dict = {}
         for bolt_entry in flange.get("bolts_spec", []):
             bid = str(bolt_entry["bolt_id"])
@@ -2163,9 +2154,7 @@ def _build_bolts_from_project(
                 for e in project.get("tdpa_fatigue", [])
                 if "bolt_id" in e
             }
-            shared_fat_res = project.get("fatigue_reference_events", {}).get(
-                flange_name, []
-            )
+            shared_fat_res = project.get("fatigue_reference_events", [])
             REs_fatigue = {}
             for bolt_entry in flange.get("bolts_spec", []):
                 bid = str(bolt_entry["bolt_id"])
