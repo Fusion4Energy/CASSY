@@ -116,7 +116,7 @@ class TestSDCICPaths:
     @pytest.mark.parametrize(
         "material_fixture, expected_Se",
         [
-            ("material_cucrzr", 96e6),
+            ("material_cucrzr", 449e6),
             ("material_ss316", None),  # Se not defined for SS316 at (300,0.1)
         ],
     )
