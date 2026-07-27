@@ -436,8 +436,7 @@ class ReferenceEvent:
             rule = vals[1]
             for i, subrulename in enumerate(rule.description):
                 try:
-                    # Rounded at the MPa
-                    applied = round(assessed[i][0] * 1e-6)
+                    applied = assessed[i][0] * 1e-6
                 except TypeError:
                     # The assessment is None, hence the assessment was not
                     # valid. Go the next one
@@ -448,7 +447,7 @@ class ReferenceEvent:
                     allowable = allowable[0]
 
                 try:
-                    allowable = round(allowable * 1e-6)
+                    allowable = allowable * 1e-6
                 except ValueError:
                     # it means is NaN
                     allowable = allowable

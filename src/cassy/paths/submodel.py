@@ -257,7 +257,7 @@ class Path:
 
 
 def _round_ass_df(df: pd.DataFrame) -> pd.DataFrame:
-    dic = {"Applied [MPa]": 0, "Allowable [MPa]": 0, "Safety Margin": 2}
+    dic = {"Safety Margin": 2}
     df = df.round(dic)
     return df
 

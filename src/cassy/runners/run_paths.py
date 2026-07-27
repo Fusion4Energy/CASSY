@@ -144,6 +144,14 @@ def run_paths(
                     banner = submodel.compute_banner(
                         pnum, pos, complete=True, assessment=dtype
                     )
+                    df = df.copy()
+                    for col in ["Applied [MPa]", "Allowable [MPa]"]:
+                        if col in df.columns:
+                            df[col] = df[col].apply(
+                                lambda x: round(x, 0)
+                                if isinstance(x, (int, float))
+                                else x
+                            )
                     table = outp.add_table(
                         banner, df, table_type_assessment, caption, merge=merge
                     )
