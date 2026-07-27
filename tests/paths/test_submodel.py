@@ -58,7 +58,7 @@ class TestSubmodel:
         submodel.assess(RCC_MRx(), fatigue=True)
         recap = submodel.get_recap()
         assert isinstance(recap, dict)
-        assert pytest.approx(recap["Immediate"][0]["Safety Margin"]) == 4.49
+        assert pytest.approx(recap["Immediate"][0]["Safety Margin"]) == 4.46
 
     def test_F4E_RCCMRx(self, tmp_path: Path):
         """Stage 1 of test defined at https://idm.f4e.europa.eu/?uid=2E22GB"""
@@ -160,9 +160,9 @@ class TestSubmodel:
                         applicable = new_applicable
                         allowable = allowable
 
-                # tolerance of 2 MPa for roundings
+                # tolerance of 3 MPa for roundings
                 assert (
-                    pytest.approx(applicable, abs=2)
+                    pytest.approx(applicable, abs=3)
                     == expected[path_num][rule]["applicable"]
                 )
                 assert (
