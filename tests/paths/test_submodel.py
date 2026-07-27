@@ -60,6 +60,99 @@ class TestSubmodel:
         assert isinstance(recap, dict)
         assert pytest.approx(recap["Immediate"][0]["Safety Margin"]) == 4.46
 
+    def test_get_recap_ratcheting_screening(self, submodel: Submodel):
+        """When 3Sm fails but Efficiency Index passes (IC3131_1_2 sequential rule),
+        the recap should report OK and use EI as the design driver, not 3Sm.
+        Regression test for issue #49.
+        """
+        from cassy.designcodes.sdcic import SDC_IC
+
+        # Build a mock assessment df that mirrors the scenario in issue #49:
+        # - 3Sm rule FAILED (Screening=True, because EI rows exist)
+        # - Efficiency Index rows both OK
+        mock_ratcheting_df = pd.DataFrame(
+            [
+                {
+                    "ID": "RE1",
+                    "Operating Conditions": "Normal",
+                    "Initiating Event": None,
+                    "Concatenated Event": None,
+                    "Loading Category": None,
+                    "Service Level": "A",
+                    "Rule Extended Description": "Progressive deformation or ratcheting",
+                    "Rule ID": "IC 3131.1",
+                    "Sub-Rule": "3Sm rule",
+                    "T [°C]": 211,
+                    "DPA": 1e-3,
+                    "Applied [MPa]": 387.0,
+                    "Allowable [MPa]": 383.0,
+                    "Result": "FAILED",
+                    "Safety Margin": 0.99,
+                    "Damage Type": "Ratcheting",
+                    "Screening": True,
+                },
+                {
+                    "ID": "RE1",
+                    "Operating Conditions": "Normal",
+                    "Initiating Event": None,
+                    "Concatenated Event": None,
+                    "Loading Category": None,
+                    "Service Level": "A",
+                    "Rule Extended Description": "Progressive deformation or ratcheting",
+                    "Rule ID": "IC 3131.1",
+                    "Sub-Rule": "Efficiency Index",
+                    "T [°C]": 211,
+                    "DPA": 1e-3,
+                    "Applied [MPa]": 164.0,
+                    "Allowable [MPa]": 166.0,
+                    "Result": "OK",
+                    "Safety Margin": 1.01,
+                    "Damage Type": "Ratcheting",
+                    "Screening": False,
+                },
+                {
+                    "ID": "RE1",
+                    "Operating Conditions": "Normal",
+                    "Initiating Event": None,
+                    "Concatenated Event": None,
+                    "Loading Category": None,
+                    "Service Level": "A",
+                    "Rule Extended Description": "Progressive deformation or ratcheting",
+                    "Rule ID": "IC 3131.1",
+                    "Sub-Rule": "Efficiency Index",
+                    "T [°C]": 211,
+                    "DPA": 1e-3,
+                    "Applied [MPa]": 170.0,
+                    "Allowable [MPa]": 249.0,
+                    "Result": "OK",
+                    "Safety Margin": 1.46,
+                    "Damage Type": "Ratcheting",
+                    "Screening": False,
+                },
+            ]
+        )
+
+        # Inject the mock df into the submodel assessments
+        submodel.assessments = {
+            1: {"begin": mock_ratcheting_df, "end": mock_ratcheting_df}
+        }
+        submodel.code = SDC_IC()
+
+        recap = submodel.get_recap(fatigue=False)
+
+        # Both begin and end should report OK, not NOK
+        ratcheting_recap = recap["Ratcheting"]
+        assert len(ratcheting_recap) == 2
+        for row in ratcheting_recap:
+            assert row["Assessment"] == "OK", (
+                "3Sm failure should be treated as screening when EI passes"
+            )
+            # EI (SM=1.01) is the minimum among EI rows → design driver
+            assert row["Rule"] == "Efficiency Index", (
+                "Design driver should be the EI sub-rule, not 3Sm"
+            )
+            assert pytest.approx(row["Safety Margin"]) == 1.01
+
     def test_F4E_RCCMRx(self, tmp_path: Path):
         """Stage 1 of test defined at https://idm.f4e.europa.eu/?uid=2E22GB"""
         # convert the tensor file to the format expected by the submodel

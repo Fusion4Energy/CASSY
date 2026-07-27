@@ -262,6 +262,9 @@ class IC3131_1_2(Rule):
         self.damage_type = "Ratcheting"
         self.ref = "IC 3131.1"
         self.description = ["3Sm rule", "Efficiency Index", "Efficiency Index"]
+        self.sequential = (
+            True  # 3Sm is a screening check; EI is evaluated only if 3Sm fails
+        )
         # self.equation = '$$A_{b}$$ (P_L+ P_b ) ̅≤〖K_eff S〗_m (〖T_m,Φt〗_m)'
 
     def assess(

@@ -13,6 +13,9 @@ class Rule(ABC):
         self.ref = None
         self.description: list[str] = []
         self.damage_type = None
+        self.sequential = (
+            False  # True when sub-rules are hierarchical (e.g., 3Sm screens EI)
+        )
         super().__init__()
 
     @abstractmethod

@@ -471,15 +471,25 @@ class Submodel:
                     if sheet not in recap_rows.keys():
                         recap_rows[sheet] = []
 
+                    # For sequential rules (e.g., 3Sm screening before EI):
+                    # exclude screening FAILED rows from the verdict.
+                    # The follow-up sub-rules (e.g., EI) are the final determination.
+                    if "Screening" in df.columns and df["Screening"].any():
+                        df_verdict = df[
+                            ~((df["Screening"]) & (df["Result"] == "FAILED"))
+                        ]
+                    else:
+                        df_verdict = df
+
                     # first check if the assessment was successful
-                    if len(df[df["Result"] == "FAILED"]) > 0:
+                    if len(df_verdict[df_verdict["Result"] == "FAILED"]) > 0:
                         ass = "NOK"
                     else:
                         ass = "OK"
 
                     # --- Individuate design driver ---
                     # take out the > 10 and assessment not required
-                    df1 = df[df["Safety Margin"] != "> 10"]
+                    df1 = df_verdict[df_verdict["Safety Margin"] != "> 10"]
                     df1 = df1[df1["Result"] != "Assessment not required"]
                     # it may be now that there are no rows left, no driver
                     if len(df1) == 0:

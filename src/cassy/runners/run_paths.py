@@ -145,12 +145,13 @@ def run_paths(
                         pnum, pos, complete=True, assessment=dtype
                     )
                     df = df.copy()
+                    df = df.drop(columns=["Screening"], errors="ignore")
                     for col in ["Applied [MPa]", "Allowable [MPa]"]:
                         if col in df.columns:
                             df[col] = df[col].apply(
-                                lambda x: round(x, 0)
-                                if isinstance(x, (int, float))
-                                else x
+                                lambda x: (
+                                    round(x, 0) if isinstance(x, (int, float)) else x
+                                )
                             )
                     table = outp.add_table(
                         banner, df, table_type_assessment, caption, merge=merge

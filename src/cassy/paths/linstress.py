@@ -442,6 +442,18 @@ class ReferenceEvent:
                     # valid. Go the next one
                     continue
 
+                # Mark as screening when this is a sequential rule's first
+                # sub-rule AND follow-up sub-rules have actual values.
+                # A screening failure is superseded by the follow-up results.
+                is_screening = (
+                    getattr(rule, "sequential", False)
+                    and i == 0
+                    and any(
+                        assessed[j] is not None and assessed[j][0] is not None
+                        for j in range(1, len(assessed))
+                    )
+                )
+
                 allowable = assessed[i][1]
                 if isinstance(allowable, np.ndarray) and len(allowable) == 1:
                     allowable = allowable[0]
@@ -487,6 +499,7 @@ class ReferenceEvent:
                     "Result": res,
                     "Safety Margin": sm,
                     "Damage Type": rule.damage_type,
+                    "Screening": is_screening,
                 }
                 rows.append(row)
 
