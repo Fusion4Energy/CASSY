@@ -1,15 +1,24 @@
 # CLAUDE.md — CASSY
 
-CASSY automates nuclear structural integrity assessments (SDC-IC, RCC-MR, RCC-MRx, EN 13445) against linearized FEM stress tensors, producing Word/Excel reports. See [README.md](README.md) for the full project description.
+CASSY automates nuclear structural integrity assessments (SDC-IC, RCC-MR, RCC-MRx, EN 13445) against linearized FEM stress tensors, producing Word/Excel reports. See [README.md](README.md) for the full project description and the [wiki](../cassy.wiki/Home.md) for user documentation.
 
 ## Commands
 
 ```bash
-pip install -e .[dev]    # editable install with dev dependencies
-pytest                   # run all tests
-pytest --cov=cassy       # with coverage
-ruff check src/          # lint
+pip install -e .[dev]          # editable install with dev dependencies
+pytest                         # run all tests
+pytest --cov=cassy             # with coverage
+ruff check src/                # lint
+
+python -m cassy --assess paths           # run paths assessment in cwd
+python -m cassy --assess bolts           # run bolts assessment in cwd
+python -m cassy --assess paths --fatigue # include fatigue
+python -m cassy --pathsgui               # launch paths GUI (beta)
+python -m cassy --boltsgui               # launch bolts GUI (beta)
+python -m cassy --init paths             # scaffold input folder structure
 ```
+
+Key optional CLI flags: `--root <dir>`, `--matlib <dir>`, `--norecap` (skip Word, dump df only), `--nomerge` (faster Word, no merged cells), `--onlybolts`.
 
 ## Source Layout
 
@@ -25,6 +34,18 @@ src/cassy/
   additional_data/ # Bundled YAML material files and Word templates
 tests/           # Mirrors src/cassy/; each subdirectory has res/ with fixtures
 ```
+
+## Input Folder Structure (paths assessment)
+
+```
+<root>/
+  config/        # one .xlsx config file per submodel (6 sheets: General, Paths,
+  |              #   Load steps, Stresses, Reference Event, RE fatigue)
+  stresses/      # one .csv per submodel — columns: path, analysis, loadstep,
+                 #   pathpoint (begin/end), stress_type (Pm/Pb/F), Sx, Sy, Sz, Sxy, Sxz, Syz
+```
+
+See [`tests/runners/paths/`](tests/runners/paths/) for complete working examples.
 
 ## Core Abstractions
 
@@ -58,6 +79,24 @@ tests/           # Mirrors src/cassy/; each subdirectory has res/ with fixtures
 **Fatigue is a separate flow** (`computeVj` / `assess_fatigue`), gated by `fatigue=True` in runners and `code.fatigue` attribute.
 
 **Values are stored raw (float) in the assessment DataFrames.** Rounding to integers for display happens only at output time: in `linstress.py` for paths (via `_round_ass_df` for Excel recap, rounding in `run_paths.py` for Word tables) and in `bolt_assess.py` for bolts.
+
+## Design Code Interpretations
+
+These interpretations are baked into the implementations — do not change them without updating the corresponding [wiki page](../cassy.wiki/Theory/code-interpretations.md):
+
+- **Stress intensity** — always computed as Von Mises; for inertial loads (unsigned) the upper-limit formulation is used.
+- **P_L** — always interpreted as the membrane stress Pm.
+- **K = 1.5** — fixed for `IC3121_1_1_2a`; Keff is computed from it.
+- **Fillet vs normal paths** — pressure-induced bending is secondary on fillet paths. Controlled by the `Type` column in the config and the `Is Pressure` flag per load.
+- **EI in ratcheting (SDC-IC)** — only the route with secondary membrane stresses (thermal loads always present) is implemented. Short-duration overstress is handled via the `Is Short Overstress` flag.
+- **Triaxiality factor** — hardcoded to 2 (conservative).
+- **Goodman correction (bolts)** — not applied when the fatigue curve already has mean-stress dependence.
+
+## Known Limitations
+
+- Only linear elastic analysis routes.
+- **Paths**: RCC-MRx, RCC-MR, SDC-IC only. No stress-based fatigue curves. RCC-MRx EI ratcheting rules are commented out. RCC-MRx significant irradiation rules (RB 3251.21) not implemented.
+- **Bolts**: RCC-MRx, SDC-IC, EN 13445 (fatigue only). EN 13445 bolt fatigue: `T_min = 25 °C` is hardcoded for the $f_{t^*}$ parameter.
 
 ## Testing
 
