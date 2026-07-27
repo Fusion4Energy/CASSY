@@ -455,6 +455,11 @@ class FlangeAssessment:
         # add a table for each rule set
         tables = {}
         df = assessment[damage_type].set_index("Rule Set")
+        # round results to integers
+        for col in ["Applied [MPa]", "Allowable [MPa]"]:
+            df[col] = df[col].apply(
+                lambda x: round(x, 0) if isinstance(x, (int, float)) else x
+            )
         sets = set(df.index)
         for rule_set in sets:
             # Select the correct table
