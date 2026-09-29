@@ -18,14 +18,14 @@ conda activate cassy
 2) Install the cassy package from PyPi
 
 ```bash
-pip install cassy
+pip install cassy-f4e
 ```
 
 If cassy is already installed and you simply want to update it to the latest release
 you can use
 
 ```bash
-pip install --upgrade cassy
+pip install --upgrade cassy-f4e
 ```
 
 ## Developer installation

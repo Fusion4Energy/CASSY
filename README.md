@@ -1,7 +1,7 @@
 [![Testing windows](https://github.com/Fusion4Energy/CASSY/actions/workflows/AutomatedTests_win.yml/badge.svg?branch=main)](https://github.com/Fusion4Energy/CASSY/actions/workflows/AutomatedTests_win.yml)
 [![Testing linux](https://github.com/Fusion4Energy/CASSY/actions/workflows/AutomatedTests_linux.yml/badge.svg?branch=main)](https://github.com/Fusion4Energy/CASSY/actions/workflows/AutomatedTests_linux.yml)
-[![PyPi version](https://badgen.net/pypi/v/cassy/)](https://pypi.org/project/cassy)
-[![codecov](https://codecov.io/gh/Fusion4Energy/cassy/graph/badge.svg?token=P4A85K0ACG)](https://codecov.io/gh/Fusion4Energy/cassy)
+[![PyPi version](https://badgen.net/pypi/v/cassy-f4e/)](https://pypi.org/project/cassy-f4e)
+[![codecov](https://codecov.io/gh/Fusion4Energy/CASSY/graph/badge.svg?token=P4A85K0ACG)](https://codecov.io/gh/Fusion4Energy/CASSY)
 <!-- [![Documentation Status](https://readthedocs.org/projects/cassy/badge/?version=latest)](https://cassy.readthedocs.io/en/latest/?badge=latest) -->
 
 # CASSY
