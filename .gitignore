@@ -11,3 +11,4 @@ _version.py
 .coverage
 coverage.xml
 prof/
+site/**
