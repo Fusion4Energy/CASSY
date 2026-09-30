@@ -48,13 +48,13 @@ jobs:
       # Run pytest
       - name: Testing
         run: |
-          pytest --cov=src/f4enix -cov-config=".coveragerc"  --cov-report xml
+          pytest --cov=src/cassy --cov-config=".coveragerc"  --cov-report xml
 
-      # - name: Upload coverage to Codecov
-      #   # do it only once
-      #   if: matrix.python-version == '3.12'
-      #   uses: codecov/codecov-action@v4
-      #   with:
-      #     verbose: true
-      #   env:
-      #     CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload coverage to Codecov
+        # do it only once
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
