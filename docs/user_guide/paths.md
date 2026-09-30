@@ -1,152 +1,105 @@
-!!! warning
+# Paths assessment GUI
 
-    This section is outdated, excel config files are being phased out.
-    Only GUI should be documented.
+CASSY allows to perform the assessment of one or more submodels at the same time. 
+For each submodel one .csv will need to be provided that contains the linearized
+stress trensors that are to be used as inputs for CASSY.
 
-cassy allows to perform the assessment of one or more submodels at the same time. The inputs for the assessment are the linearized stresses in all loading conditions to be assessed and a configuration file for each submodel which contains the instructions to perform the assessment.
+## The linearized stresses file
+Before even starting the configuration of the assessment, one linearized stress file must be generatted as input data for each submodel. This file will contain the linearized stress tensors that can be later combined and assessed in CASSY.
 
-These inputs are organized in a specific [folder structure](#folder-structure) which is described hereafter.
+The columns of the file must be:
+* **path**: number (ID) of the path
+* **analysis**: name of the analysis to which the stress are extracted from
+* **loadstep**: loadstep of the analysis from which the stresses are extracted from
+* **pathpoint**: either "begin" or "end", indicate the position of the stresses in the path.
+* **stress_type**: Either "Pm" (primary), "Pb" (bending) or "F" (peak)
+* **Sx**: Sx component of the stress
+* **Sy**: Sy component of the stress
+* **Sz**: Sz component of the stress
+* **Sxy**: Sxy component of the stress
+* **Sxz**: Sxz component of the stress
+* **Syz**: Syz component of the stress
 
-# Folder structure
-The first step in performing a paths assessment is to create a `<root>` folder for the assessment. This can be located anywhere on your computer. Inside `<root>`, 2 additional directories must be created by the user:
+CASSY if FEM code agnostic, but a collection of script to extract data from different workflows (e.g., APDL, Mechanical, ABAQUS, etc.) in a suitable format ready to be used in CASSY can be found [here](https://github.com/Fusion4Energy/CASSY_support)
 
-* `config`, that contains one configuration file for each submodel to be assessed. See [the configuration file](#the-configuration-file) section for additional details.
-* `stresses`, that contains 1 CSV file for each submodel (named as the correspondent configuration file). See [the linearized stresses](#the-linearized-stresses-file) for additional details.
+## General Tab
+Once the csv files are ready, the GUI can be opened using:
 
-The final input tree should look like this:
-```
-<root>
-    |
-    |------ config
-    |         |------ <model1>.xlsx
-    |         |------ <model2>.xlsx
-    |         |------ ...
-    |
-    |------ stresses
-    |         |------ <model1>.csv
-    |         |------ <model2>.csv
-    |         |------ ...
-
-```
-
-CASSY provides a handy method to initialize this structure directly with:
-
-```
-python -m cassy --init paths
+```python
+python -m cassy --pathsgui
 ```
 
-Examples of this structure (and relative files) can be found on the [cassy tests](https://eng-gitlab.f4e.europa.eu/f4e-projects/cassy/-/tree/main/tests/runners/paths?ref_type=heads)
+The GUI will open on the *General* Tab where the main run options can be set:
 
-# The configuration file
-The configuration file contains the core instructions to perform the assessment. One file needs to be specified for each submodel. The excel is composed by 6 sheets which are described hereafter.
+* **Fatigue assessment**, controls if the fatigue assessment is performed or not
+* **Additional materials folder**, allows the user to point to folder that can contain additional material files that are not included in CASSY default library. These must be in yaml format, see [materials](user_guide/materials).
+* **Output root folder**, browse to a destination folder where to output all CASSY results
 
-## General
-This sheet contains the general parameters for the assesment:
-* **Design Code**, name of the design code. Available design codes can be found [here](/Limitations)
+!!! note
+    Configuration settings can be imported from and exported to .json format. This is done using `File->Open` and `File->Save as` respectively. 
 
-## Paths
-This sheet is related to the definition of the paths parameters. For each path,
-the following data is specified:
-* **Path N**, this is the identification number of the path that identifies it 
-    and that needs to be the same as the one specified in the load excel files;
-* **Type**, this accepts "normal" or "fillet". The distinction is due to the fact that if a path is directed radially through a fillet, bending componenet of pressure induced stress shall be considered secondaryin SDC-IC. See the relevant [code interpretation](/Theory/Code-interpretations#distinction-between-normal-and-fillet-paths) for additional details.
-* **Material**, this specifies the material in which the path is defined. The complete list of default materials available in cassy can be found [here](/Usage/Materials#default-cassy-materials).
-* **Welding-n**, factor to be specified in case of paths on welds. If that is not the case, set equal to 1. This reduces the allowable in immediate damage type.
-* **Welding-f**, factor to be specified in case of paths on welds. If that is not the case, set equal to 1. This increases the applicable stress/strain range in fatigue assessments.
+Once the configuration is complete, the assessment can be launched using the `Run Cassy Assessment` button.
 
-## Load steps
-This sheet is related to the configuration of the single loads. For each load,
-the following data is specified:
-* **Load**, this is the name of the single loads that identify it and that needs
-    to be recalled in loads recombination.
-* **Analysis Name**, this is the name of the analysis that is found in the
-    the *analysis* column of the .csv inputs.
-* **Timestep**, this specifies the timestep of the ANSYS analysis related to this 
-    specific single load (*loadstep* column). It is also possible to define a linear combination
-    of the steps in the same analysis (e.g., 2-3+5).
+## Submodel Tab
+In this tab all the submodels onto which performing the assessment must be defined. For each submodel the GUI will ask for:
 
-## Stresses
-This sheet is related to the configuration of the single loads. For each load,
-the following data is specified:
-* **Load**, this is the name of the single loads that identify it and that needs
-    to be the same as the one specified in the `Load step` sheet.
-* **Unit**, this is the units used for the linearized stress tensors in the excel
-    load files. Typycally MPa or Pa.
+* **Name**, name of the submodel that will be used in the outputs
+* **Design Code**, drop-down menu that allows you to select one of the available design codes.
+* **Stress tensor CSV**, browse to link each submodel with its tensor data input .csv as discussed [above](#the-linearized-stresses-file).
+
+## Loads Tab
+Here all single loads (i.e., their correspondent stress tensors) are classified. For each load the following input is needed:
+
+* **Name**, this is the name of the single loads that identify it.
+* **Analysis name**, the csv can contain multiple analyses with different loadsteps. This identifies the *analysis* column of the .csv inputs.
+* **Time Step**, can be a linear combination of different time steps as per what defined in the input csv. An example is `2-1`.
 * **Stress Type**, this is the type of stress related to the specific load, 
     either P (primary) or Q (secondary).
-* **Load Type**, this is the type of the specific load, either Inertial or Volumetric;
+* **Load Type**, this is the type of the specific load, either Inertial or Volumetric.
+* **Unit**, this is the units used for the linearized stress tensors in the excel
+    load files. Typycally MPa or Pa.
 * **Scale**, factor that scales the stress tensors related to the specific load.
 * **Spatial Recombination**, type of spatial recombination of inertial stresses,
     typically "srss" for inertial loads. Other options are "algebraic" and "abs". Do not specify anything for volumetric load, they are always algebraically combined.
-* **Is Cyclic**, either True or False.
-* **Derives from Plasma Disruption**, either True or False. See [here](/Theory/Code-interpretations#plasma-disruption-derived-stresses) for additional details.
-* **Is Pressure**, either True or False. See [here](/Theory/Code-interpretations#distinction-between-normal-and-fillet-paths) on why this is relevant.
-* **Is Short Overstress**, This is used only in the computation of efficiency index in ratcheting rules. If the load is cyclic and of brief duration it will cause a short-duration overstress that needs to be categorized differently in the rules.
+* **Is Cyclic**, mark if the load is cyclic.
+* **Derives from Plasma Disruption**, mark if the load derives from plasma disruption. See [here](theory/code-interpretations#plasma-disruption-derived-stresses) for additional details.
+* **Is Pressure**, mark if the load is pressure. See [here](theory/code-interpretations#distinction-between-normal-and-fillet-paths) on why this is relevant.
+* **Is Short Overstress**, mark if the load can be considered a short overstress. This is used only in the computation of efficiency index in ratcheting rules. If the load is cyclic and of brief duration it will cause a short-duration overstress that needs to be categorized differently in the rules.
 
-## Reference Event
-This sheet is related to the configuration of the reference events (i.e. load
-combination). For each reference event, the following data is specified:
-* **Path N**, this is the identification number of the path as specified in the 
-    Paths sheet.
-* **ID**, identified for the reference event.
-* **Loads**, list of single loads (separated by commas) that compose the event.
+## Reference Event Tab
+Once the single loads have been defined, Reference Events (i.e. load combinations)
+can be built. For each reference event, the following data is specified:
+
+* **RE ID**, identifier for the reference event.
+* **Service Level**, either "A", "C" or "D".
 * **Operating Conditions**, description of the event, it is not mandatory for 
     the assessment, it will only be used in reporting.
 * **Initiating Event**, description of the event, it is not mandatory for 
     the assessment, it will only be used in reporting.
 * **Concatenated Event**, description of the event, it is not mandatory for 
     the assessment, it will only be used in reporting.
-* **Loading ctg**, either "I", "II", "III" or "IV".
-* **Service Level**, either "A", "C" or "D".
-* **T**, maximum temperature for the specific path during the specific reference
-    event.
-* **DPA**, maximum displacements per atom for the specific path during the
-    specific reference event.
+* **Load Ctg.** loading category for the event (eg. I, II, ...) it is not mandatory for 
+    the assessment, it will only be used in reporting. 
+* **Loads**, select all the single loads that compose the event.
 
-## RE fatigue
-This sheet is related to the configuration of the reference events (i.e. load
-combination) for fatigue. For each reference event, the following data is
-specified:
-* **Path N**, this is the identification number of the path as specified in the 
-    Paths sheet.
-* **ID**, identified for the reference event.
-* **Loads**, list of single loads (separated by commas) that compose the event.
-* **Operating Conditions**, description of the event, it is not mandatory for 
-    the assessment, it will only be used in reporting.
-* **Initiating Event**, description of the event, it is not mandatory for 
-    the assessment, it will only be used in reporting.
-* **Concatenated Event**, description of the event, it is not mandatory for 
-    the assessment, it will only be used in reporting.
-* **Loading ctg**, either "I", "II", "III" or "IV".
-* **Service Level**, either "A", "C" or "D".
-* **N cycles**, number of cycles to be considered for the specific load combination.
-* **T**, maximum temperature for the specific path during the specific reference
-    event.
-* **DPA**, maximum displacements per atom for the specific path during the
-    specific reference event.
+## Fatigue Reference Event Tab
+It is exactly the same as the normal reference event but, in addition, number of cycles
+have to be provided.
 
-# The linearized stresses file
-As specified before, one lin. stress file must be included for each submodel. This file will contain the linearized stress tensors used to create load combinations through the corresponding configuration file.
+## Paths Tab
+For each submodel a number of paths must be defined. For each path,
+the following data is specified:
 
-The columns of the file are:
-* *path*: number (ID) of the path
-* *analysis*: name of the analysis to which the stress are extracted from
-* *loadstep*: loadstep of the analysis from which the stresses are extracted from
-* *pathpoint*: either "begin" or "end", indicate the position of the stresses in the path.
-* *stress_type*: Either "Pm" (primary), "Pb" (bending) or "F" (peak)
-* *Sx*: Sx component of the stress
-* *Sy*: Sy component of the stress
-* *Sz*: Sz component of the stress
-* *Sxy*: Sxy component of the stress
-* *Sxz*: Sxz component of the stress
-* *Syz*: Syz component of the stress
+* **Path number**, this is the identification number of the path that identifies it 
+    and that needs to be the same as the one specified in the csv input file;
+* **Material**, this specifies the material in which the path is defined. The complete list of default materials available in cassy can be found [here](user_guide/materials#default-cassy-materials).
+* **Path Type**, this accepts "normal" or "fillet". The distinction is due to the fact that if a path is directed radially through a fillet, bending componenet of pressure induced stress shall be considered secondary in SDC-IC. See the relevant [code interpretation](theory/code-interpretations#distinction-between-normal-and-fillet-paths) for additional details.
+* **Welding-n**, factor to be specified in case of paths on welds. If that is not the case, set equal to 1. This reduces the allowable in immediate damage type.
+* **Welding-f**, factor to be specified in case of paths on welds. If that is not the case, set equal to 1. This increases the applicable stress/strain range in fatigue assessments.
 
-CASSY if FEM code agnostic, but a collection of script to extract data from different workflows in a suitable format ready to be used in CASSY can be found [here](https://github.com/Fusion4Energy/CASSY_support)
+## T & DPA Tab
+For each combination of Reference Event, submodel and path, a temperature and DPA value must 
+be associated. Once all the previous configurations have been set, click on ``Refresh grid`` to compute the grid that needs to be filled.
 
-# Outputs
-once the input folders have been correctly populated, the code can be run.
-Different outputs will be provided in the `<root>` folder. All subfolders
-are automatically generated.
-
-* `assessment`, filled only if ``--norecap`` option is used. Here are stored the global unformatted assessment dataframes;
-* `Recap.docx`, a word file containing summary tables of the results.
+!!! note
+    The grid can also be completed by importing a .csv whose columns are *submodel*, *path*, *event*, *T*, *DPA*.
