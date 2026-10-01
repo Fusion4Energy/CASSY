@@ -25,3 +25,8 @@ see [Bolts assessment](user_guide/bolts) for further details.
 
     The GUIs are in beta! Expect (and report) bugs
 
+!!! warning
+
+    Old excel configuration files and command line execution is still supported but undocumented as
+    it is being phased out. It is stringly recommended to switch to the new GUI/json configuration
+    As the support for legacy excels may be dropped in the future.
