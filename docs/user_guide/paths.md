@@ -32,7 +32,7 @@ python -m cassy --pathsgui
 The GUI will open on the *General* Tab where the main run options can be set:
 
 * **Fatigue assessment**, controls if the fatigue assessment is performed or not
-* **Additional materials folder**, allows the user to point to folder that can contain additional material files that are not included in CASSY default library. These must be in yaml format, see [materials](user_guide/materials).
+* **Additional materials folder**, allows the user to point to folder that can contain additional material files that are not included in CASSY default library. These must be in yaml format, see [materials](materials).
 * **Output root folder**, browse to a destination folder where to output all CASSY results
 
 !!! note
@@ -62,8 +62,8 @@ Here all single loads (i.e., their correspondent stress tensors) are classified.
 * **Spatial Recombination**, type of spatial recombination of inertial stresses,
     typically "srss" for inertial loads. Other options are "algebraic" and "abs". Do not specify anything for volumetric load, they are always algebraically combined.
 * **Is Cyclic**, mark if the load is cyclic.
-* **Derives from Plasma Disruption**, mark if the load derives from plasma disruption. See [here](theory/code-interpretations#plasma-disruption-derived-stresses) for additional details.
-* **Is Pressure**, mark if the load is pressure. See [here](theory/code-interpretations#distinction-between-normal-and-fillet-paths) on why this is relevant.
+* **Derives from Plasma Disruption**, mark if the load derives from plasma disruption. See [here](../theory/code-interpretations#plasma-disruption-derived-stresses) for additional details.
+* **Is Pressure**, mark if the load is pressure. See [here](../theory/code-interpretations#distinction-between-normal-and-fillet-paths) on why this is relevant.
 * **Is Short Overstress**, mark if the load can be considered a short overstress. This is used only in the computation of efficiency index in ratcheting rules. If the load is cyclic and of brief duration it will cause a short-duration overstress that needs to be categorized differently in the rules.
 
 ## Reference Event Tab
@@ -92,8 +92,8 @@ the following data is specified:
 
 * **Path number**, this is the identification number of the path that identifies it 
     and that needs to be the same as the one specified in the csv input file;
-* **Material**, this specifies the material in which the path is defined. The complete list of default materials available in cassy can be found [here](user_guide/materials#default-cassy-materials).
-* **Path Type**, this accepts "normal" or "fillet". The distinction is due to the fact that if a path is directed radially through a fillet, bending componenet of pressure induced stress shall be considered secondary in SDC-IC. See the relevant [code interpretation](theory/code-interpretations#distinction-between-normal-and-fillet-paths) for additional details.
+* **Material**, this specifies the material in which the path is defined. The complete list of default materials available in cassy can be found [here](materials#default-cassy-materials).
+* **Path Type**, this accepts "normal" or "fillet". The distinction is due to the fact that if a path is directed radially through a fillet, bending componenet of pressure induced stress shall be considered secondary in SDC-IC. See the relevant [code interpretation](../theory/code-interpretations#distinction-between-normal-and-fillet-paths) for additional details.
 * **Welding-n**, factor to be specified in case of paths on welds. If that is not the case, set equal to 1. This reduces the allowable in immediate damage type.
 * **Welding-f**, factor to be specified in case of paths on welds. If that is not the case, set equal to 1. This increases the applicable stress/strain range in fatigue assessments.
 

@@ -1,6 +1,6 @@
 # Run using the GUI
 
-Once the package has been [installed](user_guide/installation), the user should create a folder where a specific assessment will be performed. From now on, such folder is referred as ``<root>``.
+Once the package has been [installed](installation), the user should create a folder where a specific assessment will be performed. From now on, such folder is referred as ``<root>``.
 
 CASSY can now be run also from a GUI interface. These interfaces make it easier (and safer) to configure your
 assessment. Moreover, it allows to import and export entire assessment configurations in .json format.
@@ -11,7 +11,7 @@ To start it, simply run for paths:
 python -m cassy --pathsgui
 ```
 
-see [Paths assessment](user_guide/paths) for further details.
+see [Paths assessment](paths) for further details.
 
 or for bolts:
 
@@ -19,7 +19,7 @@ or for bolts:
 python -m cassy --boltsgui
 ```
 
-see [Bolts assessment](user_guide/bolts) for further details.
+see [Bolts assessment](bolts) for further details.
 
 !!! warning
 

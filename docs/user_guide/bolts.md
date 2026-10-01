@@ -31,7 +31,7 @@ python -m cassy --boltsgui
 The GUI will open on the *General* Tab where the main run options can be set:
 
 * **Fatigue assessment**, controls if the fatigue assessment is performed or not
-* **Additional materials folder**, allows the user to point to folder that can contain additional material files that are not included in CASSY default library. These must be in yaml format, see [materials](user_guide/materials).
+* **Additional materials folder**, allows the user to point to folder that can contain additional material files that are not included in CASSY default library. These must be in yaml format, see [materials](materials).
 * **Output root folder**, browse to a destination folder where to output all CASSY results
 
 !!! note
