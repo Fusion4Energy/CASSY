@@ -43,7 +43,6 @@ from cassy.gui.bolts_gui import (
     GeometriesTab,
     _build_bolts_from_project,
     _fresh_project,
-    _get_analysis_names,
 )
 
 
@@ -607,7 +606,7 @@ class TestGeneralTab:
         nb = tk.ttk.Notebook(root)
         tab = GeneralTab(nb, proj)
         tab._root_dir.set("")
-        with patch("cassy.gui.bolts_gui.messagebox") as mb:
+        with patch("cassy.gui.common.messagebox") as mb:
             tab._run_assessment()
         mb.showwarning.assert_called_once()
 
@@ -616,7 +615,7 @@ class TestGeneralTab:
         nb = tk.ttk.Notebook(root)
         tab = GeneralTab(nb, proj)
         tab._root_dir.set("/some/dir")
-        with patch("cassy.gui.bolts_gui.messagebox") as mb:
+        with patch("cassy.gui.common.messagebox") as mb:
             tab._run_assessment()
         mb.showwarning.assert_called_once()
 
@@ -641,7 +640,7 @@ class TestGeometriesTab:
         tab.refresh()
         children = tab._tree.get_children()
         tab._tree.selection_set(children[0])
-        with patch("cassy.gui.bolts_gui.messagebox") as mb:
+        with patch("cassy.gui.common.messagebox") as mb:
             mb.askyesno.return_value = True
             tab._delete()
         assert len(proj["geometries"]) == 1
@@ -781,7 +780,7 @@ class TestBoltSpecsTab:
         tab = BoltSpecsTab(nb, proj)
         tab.refresh()
         # F1 should be auto-selected (first flange)
-        assert tab._fl_var.get() == "F1"
+        assert tab._group_var.get() == "F1"
         rows = tab._tree.get_children()
         assert len(rows) == 2  # B1 and B2
 
@@ -805,7 +804,7 @@ class TestBoltSpecsTab:
         tab.refresh()
         rows = tab._tree.get_children()
         tab._tree.selection_set(rows[0])  # select B1
-        with patch("cassy.gui.bolts_gui.messagebox") as mb:
+        with patch("cassy.gui.common.messagebox") as mb:
             mb.askyesno.return_value = True
             tab._delete()
         assert not any(b["bolt_id"] == "B1" for b in proj["flanges"][0]["bolts_spec"])
@@ -816,7 +815,7 @@ class TestBoltSpecsTab:
         tab = BoltSpecsTab(nb, proj)
         tab.refresh()
         tab._tree.selection_set(tab._tree.get_children())
-        with patch("cassy.gui.bolts_gui.messagebox") as mb:
+        with patch("cassy.gui.common.messagebox") as mb:
             mb.askyesno.return_value = True
             tab._delete()
         assert proj["flanges"][0]["bolts_spec"] == []
@@ -858,7 +857,7 @@ class TestBoltREsTab:
         tab.refresh()
         rows = tab._tree.get_children()
         tab._tree.selection_set(rows[0])
-        with patch("cassy.gui.bolts_gui.messagebox") as mb:
+        with patch("cassy.gui.common.messagebox") as mb:
             mb.askyesno.return_value = True
             tab._delete()
         assert len(proj["reference_events"]) == 1
@@ -878,7 +877,7 @@ class TestBoltREsTab:
         tab = BoltREsTab(nb, proj)
         tab.refresh()
         # No item selected
-        with patch("cassy.gui.bolts_gui.messagebox") as mb:
+        with patch("cassy.gui.common.messagebox") as mb:
             tab._delete()
         mb.showwarning.assert_called_once()
 
@@ -933,23 +932,6 @@ class TestBoltFatigueREsTab:
 
         src = inspect.getsource(BoltFatigueREsTab._make_dialog)
         assert "BoltFatigueREDialog" in src
-
-
-def test_get_analysis_names_from_actions_files(tmp_path):
-    header = "boltID,analysis,loadstep,Fx,Fy,Fz,Mz,Mx,My\n"
-    f1 = tmp_path / "f1.csv"
-    f1.write_text(header + "1,Thermal,1,0,0,0,0,0,0\n2,Seismic,1,0,0,0,0,0,0\n")
-    f2 = tmp_path / "f2.csv"
-    f2.write_text(header + "1,Thermal,2,0,0,0,0,0,0\n1,Dead,1,0,0,0,0,0,0\n")
-    proj = {
-        "flanges": [
-            {"actions_file": str(f1)},
-            {"actions_file": str(f2)},
-            {"actions_file": str(tmp_path / "missing.csv")},
-            {"actions_file": ""},
-        ]
-    }
-    assert _get_analysis_names(proj) == ["Dead", "Seismic", "Thermal"]
 
 
 # ---------------------------------------------------------------------------
