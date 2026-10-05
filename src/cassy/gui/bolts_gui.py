@@ -1471,16 +1471,19 @@ class BoltSpecsTab(ttk.Frame):
         fl = self._current_flange()
         if fl is None:
             return
-        idx = self._selected_index()
-        if idx is None:
+        indices = sorted(self._tree.index(item) for item in self._tree.selection())
+        if not indices:
             messagebox.showwarning("Selection", "Select a bolt entry to delete.")
             return
-        bolt_id = fl["bolts_spec"][idx]["bolt_id"]
-        if not messagebox.askyesno(
-            "Delete", f"Delete bolt '{bolt_id}' and its reference events?"
-        ):
+        if len(indices) == 1:
+            bolt_id = fl["bolts_spec"][indices[0]]["bolt_id"]
+            prompt = f"Delete bolt '{bolt_id}' and its reference events?"
+        else:
+            prompt = f"Delete {len(indices)} selected bolts and their reference events?"
+        if not messagebox.askyesno("Delete", prompt):
             return
-        fl["bolts_spec"].pop(idx)
+        for idx in reversed(indices):
+            fl["bolts_spec"].pop(idx)
         self._refresh_table()
 
 

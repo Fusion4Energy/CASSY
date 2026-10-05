@@ -809,6 +809,17 @@ class TestBoltSpecsTab:
             tab._delete()
         assert not any(b["bolt_id"] == "B1" for b in proj["flanges"][0]["bolts_spec"])
 
+    def test_delete_multiple_bolts(self, root):
+        proj = _project()
+        nb = tk.ttk.Notebook(root)
+        tab = BoltSpecsTab(nb, proj)
+        tab.refresh()
+        tab._tree.selection_set(tab._tree.get_children())
+        with patch("cassy.gui.bolts_gui.messagebox") as mb:
+            mb.askyesno.return_value = True
+            tab._delete()
+        assert proj["flanges"][0]["bolts_spec"] == []
+
     def test_geom_names_by_type_filters_correctly(self, root):
         proj = _project()
         nb = tk.ttk.Notebook(root)
