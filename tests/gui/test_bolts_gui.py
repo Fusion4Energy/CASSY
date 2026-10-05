@@ -43,6 +43,7 @@ from cassy.gui.bolts_gui import (
     GeometriesTab,
     _build_bolts_from_project,
     _fresh_project,
+    _get_analysis_names,
 )
 
 
@@ -932,6 +933,23 @@ class TestBoltFatigueREsTab:
 
         src = inspect.getsource(BoltFatigueREsTab._make_dialog)
         assert "BoltFatigueREDialog" in src
+
+
+def test_get_analysis_names_from_actions_files(tmp_path):
+    header = "boltID,analysis,loadstep,Fx,Fy,Fz,Mz,Mx,My\n"
+    f1 = tmp_path / "f1.csv"
+    f1.write_text(header + "1,Thermal,1,0,0,0,0,0,0\n2,Seismic,1,0,0,0,0,0,0\n")
+    f2 = tmp_path / "f2.csv"
+    f2.write_text(header + "1,Thermal,2,0,0,0,0,0,0\n1,Dead,1,0,0,0,0,0,0\n")
+    proj = {
+        "flanges": [
+            {"actions_file": str(f1)},
+            {"actions_file": str(f2)},
+            {"actions_file": str(tmp_path / "missing.csv")},
+            {"actions_file": ""},
+        ]
+    }
+    assert _get_analysis_names(proj) == ["Dead", "Seismic", "Thermal"]
 
 
 # ---------------------------------------------------------------------------

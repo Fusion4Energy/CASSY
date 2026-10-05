@@ -117,6 +117,24 @@ def _get_material_names(matlib_path: str = "") -> list[str]:
     return sorted(build_material_library(matlib_path or None).keys())
 
 
+def _get_analysis_names(project: dict) -> list[str]:
+    """Unique analysis names found in the actions CSVs of all flanges."""
+    names: set[str] = set()
+    for flange in project.get("flanges", []):
+        path = flange.get("actions_file", "")
+        if not path or not os.path.isfile(path):
+            continue
+        try:
+            with open(path, newline="", encoding="utf-8-sig") as fh:
+                for row in csv.DictReader(fh):
+                    value = (row.get("analysis") or "").strip()
+                    if value:
+                        names.add(value)
+        except (OSError, csv.Error, UnicodeDecodeError):
+            continue
+    return sorted(names)
+
+
 # ── Base dialog ───────────────────────────────────────────────────────────────
 
 
@@ -211,6 +229,21 @@ class _Dialog(tk.Toplevel):
             frame, textvariable=var, values=values, state="readonly", width=28
         ).grid(row=row, column=1, padx=6, pady=3)
         return var
+
+    def _analysis_field(
+        self,
+        frame,
+        label: str,
+        row: int,
+        analyses: list[str],
+        default: str = "",
+        optional: bool = False,
+    ) -> tk.StringVar:
+        """Dropdown of available analyses; free entry if none could be read."""
+        if not analyses:
+            return self._entry(frame, label, row, default)
+        values = ["", *analyses] if optional else analyses
+        return self._combo(frame, label, row, values, default)
 
     def _check(
         self, frame, label: str, row: int, default: bool = False
@@ -644,8 +677,14 @@ class BoltSpecDialog(_Dialog):
 class BoltREDialog(_Dialog):
     """Dialog for adding/editing a bolt reference event."""
 
-    def __init__(self, parent: tk.Widget, existing: dict | None = None) -> None:
+    def __init__(
+        self,
+        parent: tk.Widget,
+        existing: dict | None = None,
+        analyses: list[str] | None = None,
+    ) -> None:
         self._ex = existing or {}
+        self._analyses = analyses or []
         super().__init__(parent, "Add / Edit Reference Event")
 
     def _configure_window(self) -> None:
@@ -670,8 +709,8 @@ class BoltREDialog(_Dialog):
 
         pri_frm = ttk.LabelFrame(self._body, text="Primary Action")
         pri_frm.pack(fill="x", pady=(4, 0))
-        self._pri_analysis = self._entry(
-            pri_frm, "Analysis *", 0, ex.get("primary_analysis", "")
+        self._pri_analysis = self._analysis_field(
+            pri_frm, "Analysis *", 0, self._analyses, ex.get("primary_analysis", "")
         )
         self._pri_loadstep = self._entry(
             pri_frm, "Loadstep *", 1, ex.get("primary_loadstep", "")
@@ -679,8 +718,8 @@ class BoltREDialog(_Dialog):
 
         all_frm = ttk.LabelFrame(self._body, text="All Loads Action")
         all_frm.pack(fill="x", pady=(4, 0))
-        self._all_analysis = self._entry(
-            all_frm, "Analysis *", 0, ex.get("all_analysis", "")
+        self._all_analysis = self._analysis_field(
+            all_frm, "Analysis *", 0, self._analyses, ex.get("all_analysis", "")
         )
         self._all_loadstep = self._entry(
             all_frm, "Loadstep *", 1, ex.get("all_loadstep", "")
@@ -720,8 +759,14 @@ class BoltREDialog(_Dialog):
 class BoltFatigueREDialog(_Dialog):
     """Dialog for adding/editing a bolt fatigue reference event."""
 
-    def __init__(self, parent: tk.Widget, existing: dict | None = None) -> None:
+    def __init__(
+        self,
+        parent: tk.Widget,
+        existing: dict | None = None,
+        analyses: list[str] | None = None,
+    ) -> None:
         self._ex = existing or {}
+        self._analyses = analyses or []
         super().__init__(parent, "Add / Edit Fatigue Reference Event")
 
     def _configure_window(self) -> None:
@@ -749,8 +794,8 @@ class BoltFatigueREDialog(_Dialog):
             self._body, text="Delta Sigma + (analysis, loadstep)"
         )
         ds_plus_frm.pack(fill="x", pady=(4, 0))
-        self._ds_plus_ana = self._entry(
-            ds_plus_frm, "Analysis *", 0, ex.get("ds_plus_analysis", "")
+        self._ds_plus_ana = self._analysis_field(
+            ds_plus_frm, "Analysis *", 0, self._analyses, ex.get("ds_plus_analysis", "")
         )
         self._ds_plus_ls = self._entry(
             ds_plus_frm, "Loadstep *", 1, ex.get("ds_plus_loadstep", "")
@@ -760,8 +805,12 @@ class BoltFatigueREDialog(_Dialog):
             self._body, text="Delta Sigma − (analysis, loadstep)"
         )
         ds_minus_frm.pack(fill="x", pady=(4, 0))
-        self._ds_minus_ana = self._entry(
-            ds_minus_frm, "Analysis *", 0, ex.get("ds_minus_analysis", "")
+        self._ds_minus_ana = self._analysis_field(
+            ds_minus_frm,
+            "Analysis *",
+            0,
+            self._analyses,
+            ex.get("ds_minus_analysis", ""),
         )
         self._ds_minus_ls = self._entry(
             ds_minus_frm, "Loadstep *", 1, ex.get("ds_minus_loadstep", "")
@@ -769,8 +818,13 @@ class BoltFatigueREDialog(_Dialog):
 
         sus_frm = ttk.LabelFrame(self._body, text="Sigma Sustained (optional)")
         sus_frm.pack(fill="x", pady=(4, 0))
-        self._sus_ana = self._entry(
-            sus_frm, "Analysis", 0, ex.get("sigma_sus_analysis", "")
+        self._sus_ana = self._analysis_field(
+            sus_frm,
+            "Analysis",
+            0,
+            self._analyses,
+            ex.get("sigma_sus_analysis", ""),
+            optional=True,
         )
         self._sus_ls = self._entry(
             sus_frm, "Loadstep", 1, ex.get("sigma_sus_loadstep", "")
@@ -1595,7 +1649,9 @@ class BoltREsTab(ttk.Frame):
         return self._tree.index(sel[0])
 
     def _make_dialog(self, parent: tk.Widget, existing: dict | None = None):
-        return BoltREDialog(parent, existing=existing)
+        return BoltREDialog(
+            parent, existing=existing, analyses=_get_analysis_names(self._project)
+        )
 
     def _add(self) -> None:
         dlg = self._make_dialog(self)
@@ -1657,7 +1713,9 @@ class BoltFatigueREsTab(BoltREsTab):
     }
 
     def _make_dialog(self, parent: tk.Widget, existing: dict | None = None):
-        return BoltFatigueREDialog(parent, existing=existing)
+        return BoltFatigueREDialog(
+            parent, existing=existing, analyses=_get_analysis_names(self._project)
+        )
 
     def _row_values(self, item: dict) -> tuple:
         ds_plus = (
