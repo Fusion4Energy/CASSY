@@ -430,8 +430,8 @@ class TestTDPATabImportCSV:
 
         csv_path = str(RES / "tdpa_import.csv")
         with (
-            patch("cassy.gui.paths_gui.filedialog") as fd,
-            patch("cassy.gui.paths_gui.messagebox"),
+            patch("cassy.gui.common.filedialog") as fd,
+            patch("cassy.gui.common.messagebox"),
         ):
             fd.askopenfilename.return_value = csv_path
             tab._import_csv()
@@ -453,8 +453,8 @@ class TestTDPATabImportCSV:
         csv_file.write_text("submodel,path,event,T,DPA\nNOPE,999,NOPE,100,0\n")
 
         with (
-            patch("cassy.gui.paths_gui.filedialog") as fd,
-            patch("cassy.gui.paths_gui.messagebox") as mb,
+            patch("cassy.gui.common.filedialog") as fd,
+            patch("cassy.gui.common.messagebox") as mb,
         ):
             fd.askopenfilename.return_value = str(csv_file)
             tab._import_csv()
@@ -467,7 +467,7 @@ class TestTDPATabImportCSV:
         nb = tk.ttk.Notebook(root)
         tab = TDPATab(nb, proj)
         tab.rebuild_grid()
-        with patch("cassy.gui.paths_gui.filedialog") as fd:
+        with patch("cassy.gui.common.filedialog") as fd:
             fd.askopenfilename.return_value = ""
             # Should return silently with no error
             tab._import_csv()

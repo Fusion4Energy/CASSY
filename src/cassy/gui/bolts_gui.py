@@ -19,39 +19,26 @@ so that a shared bolt geometry library can be maintained across projects.
 from __future__ import annotations
 
 import copy
-import csv
 import json
-import logging
-import os
-import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from typing import Any
-from cassy.designcodes.map import BOLT_CODES as _BOLT_CODES
+from typing import Callable
 
-# ── Icon helper ───────────────────────────────────────────────────────────────
+from cassy.gui.bolts_model import (  # noqa: F401  (re-exported)
+    BOLT_DESIGN_CODES,
+    EMPTY_BOLT_PROJECT,
+    LOAD_CATEGORIES,
+    SERVICE_LEVELS,
+)
+from cassy.gui.bolts_model import build_bolts_from_project as _build_bolts_from_project
+from cassy.gui.bolts_model import fresh_project as _fresh_project
+from cassy.gui.bolts_model import get_analysis_names as _get_analysis_names
+from cassy.gui.bolts_model import get_material_names as _get_material_names
+from cassy.gui.common import BG, GroupedTableTab, ProjectApp, RunTab, TDPAGridTab
+from cassy.gui.common import Dialog as _Dialog
+from cassy.gui.common import TableTab as _TableTab
 
-_ICON_PATH = os.path.join(os.path.dirname(__file__), "icon.png")
-
-
-def _set_icon(window: tk.Wm) -> None:
-    try:
-        from PIL import Image, ImageTk  # type: ignore
-
-        img = Image.open(_ICON_PATH)
-        _set_icon._photo = ImageTk.PhotoImage(img)
-        window.iconphoto(True, _set_icon._photo)
-    except Exception:
-        pass
-
-
-# ── Constants ─────────────────────────────────────────────────────────────────
-
-
-BOLT_DESIGN_CODES: list[str] = list(_BOLT_CODES.keys())
-GEOM_TYPES: list[str] = ["bolt", "insert"]
-SERVICE_LEVELS: list[str] = ["A", "C", "D"]
-LOAD_CATEGORIES: list[str] = ["I", "II", "III", "IV"]
+# ── Geometry field definitions ────────────────────────────────────────────────
 
 # Bolt geometry field definitions: (key, label, default)
 _BOLT_REQ_FIELDS = [
@@ -92,160 +79,6 @@ _INSERT_AUTO_FIELDS = [
 ]
 _INSERT_REQUIRED = {"p", "d", "Le"}
 
-EMPTY_BOLT_PROJECT: dict[str, Any] = {
-    "run_options": {
-        "fatigue": False,
-        "matlib_path": "",
-        "root_dir": "",
-    },
-    "geometries": [],
-    "flanges": [],
-    "reference_events": [],  # [re_dict, ...] — shared by all flanges
-    "fatigue_reference_events": [],  # [fat_re_dict, ...] — shared by all flanges
-    "tdpa": [],  # [{flange, re_id, T, dpa}]
-    "tdpa_fatigue": [],  # [{flange, re_id, T, dpa}]
-}
-
-
-def _bool_label(v: bool) -> str:
-    return "Yes" if v else "No"
-
-
-def _get_material_names(matlib_path: str = "") -> list[str]:
-    from cassy.runners.run_common import build_material_library
-
-    return sorted(build_material_library(matlib_path or None).keys())
-
-
-# ── Base dialog ───────────────────────────────────────────────────────────────
-
-
-class _Dialog(tk.Toplevel):
-    """Modal dialog base class."""
-
-    def __init__(self, parent: tk.Widget, title: str) -> None:
-        super().__init__(parent)
-        self.title(title)
-        self.resizable(False, False)
-        self.result: dict | None = None
-        self.transient(parent)
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
-        self._configure_window()
-        self._body = ttk.Frame(self)
-        self._body.pack(padx=12, pady=(12, 4), fill="both", expand=True)
-        self._build()
-        self._add_buttons()
-        self.wait_visibility()
-        self.focus_force()
-        try:
-            self.grab_set()
-        except tk.TclError:
-            pass
-        self.wait_window()
-
-    # -- subclasses override these -------------------------------------------
-
-    def _configure_window(self) -> None:
-        """Called before _build. Override to adjust window size / resizability."""
-        pass
-
-    def _build(self) -> None:
-        raise NotImplementedError
-
-    def _collect(self) -> dict | None:
-        raise NotImplementedError
-
-    # -- private ---------------------------------------------------------------
-
-    def _add_buttons(self) -> None:
-        frm = ttk.Frame(self)
-        frm.pack(fill="x", padx=12, pady=(0, 10))
-        ttk.Button(frm, text="OK", width=8, command=self._on_ok).pack(
-            side="right", padx=4
-        )
-        ttk.Button(frm, text="Cancel", width=8, command=self._on_close).pack(
-            side="right"
-        )
-
-    def _on_close(self) -> None:
-        self.destroy()
-
-    def _on_ok(self) -> None:
-        result = self._collect()
-        if result is not None:
-            self.result = result
-            self.destroy()
-
-    def destroy(self) -> None:
-        try:
-            self.grab_release()
-        except Exception:
-            pass
-        super().destroy()
-
-    # -- field helpers ---------------------------------------------------------
-
-    @staticmethod
-    def _row(frame, label: str, row: int) -> None:
-        ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", padx=6, pady=3)
-
-    def _entry(self, frame, label: str, row: int, default: str = "") -> tk.StringVar:
-        self._row(frame, label, row)
-        var = tk.StringVar(value=default)
-        ttk.Entry(frame, textvariable=var, width=30).grid(
-            row=row, column=1, padx=6, pady=3
-        )
-        return var
-
-    def _combo(
-        self,
-        frame,
-        label: str,
-        row: int,
-        values: list[str],
-        default: str = "",
-    ) -> tk.StringVar:
-        self._row(frame, label, row)
-        var = tk.StringVar(value=default or (values[0] if values else ""))
-        ttk.Combobox(
-            frame, textvariable=var, values=values, state="readonly", width=28
-        ).grid(row=row, column=1, padx=6, pady=3)
-        return var
-
-    def _check(
-        self, frame, label: str, row: int, default: bool = False
-    ) -> tk.BooleanVar:
-        self._row(frame, label, row)
-        var = tk.BooleanVar(value=default)
-        ttk.Checkbutton(frame, variable=var).grid(
-            row=row, column=1, sticky="w", padx=6, pady=3
-        )
-        return var
-
-    def _file_entry(
-        self,
-        frame,
-        label: str,
-        row: int,
-        default: str = "",
-        filetypes: list | None = None,
-    ) -> tk.StringVar:
-        self._row(frame, label, row)
-        var = tk.StringVar(value=default)
-        wrap = ttk.Frame(frame)
-        wrap.grid(row=row, column=1, padx=6, pady=3)
-        ttk.Entry(wrap, textvariable=var, width=26).pack(side="left")
-        ft = filetypes or [("All files", "*.*")]
-        ttk.Button(
-            wrap,
-            text="…",
-            width=3,
-            command=lambda: var.set(
-                filedialog.askopenfilename(filetypes=ft) or var.get()
-            ),
-        ).pack(side="left", padx=2)
-        return var
-
 
 # ── Geometry dialog ───────────────────────────────────────────────────────────
 
@@ -282,7 +115,9 @@ class GeomDialog(_Dialog):
         ei = self._ex_ins
 
         # ── Scrollable canvas ──────────────────────────────────────────────
-        canvas = tk.Canvas(self._body, borderwidth=0, highlightthickness=0)
+        canvas = tk.Canvas(
+            self._body, borderwidth=0, highlightthickness=0, background=BG
+        )
         vsb = ttk.Scrollbar(self._body, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=vsb.set)
         vsb.pack(side="right", fill="y")
@@ -376,7 +211,7 @@ class GeomDialog(_Dialog):
         ttk.Label(
             ins_outer,
             text="If unchecked, bolt geometry dimensions are used for thread check.",
-            foreground="gray",
+            style="Muted.TLabel",
         ).grid(row=2, column=0, columnspan=2, sticky="w", padx=6, pady=(0, 4))
 
         self._ins_fields_frm = ttk.Frame(ins_outer)
@@ -644,8 +479,14 @@ class BoltSpecDialog(_Dialog):
 class BoltREDialog(_Dialog):
     """Dialog for adding/editing a bolt reference event."""
 
-    def __init__(self, parent: tk.Widget, existing: dict | None = None) -> None:
+    def __init__(
+        self,
+        parent: tk.Widget,
+        existing: dict | None = None,
+        analyses: list[str] | None = None,
+    ) -> None:
         self._ex = existing or {}
+        self._analyses = analyses or []
         super().__init__(parent, "Add / Edit Reference Event")
 
     def _configure_window(self) -> None:
@@ -670,8 +511,8 @@ class BoltREDialog(_Dialog):
 
         pri_frm = ttk.LabelFrame(self._body, text="Primary Action")
         pri_frm.pack(fill="x", pady=(4, 0))
-        self._pri_analysis = self._entry(
-            pri_frm, "Analysis *", 0, ex.get("primary_analysis", "")
+        self._pri_analysis = self._analysis_field(
+            pri_frm, "Analysis *", 0, self._analyses, ex.get("primary_analysis", "")
         )
         self._pri_loadstep = self._entry(
             pri_frm, "Loadstep *", 1, ex.get("primary_loadstep", "")
@@ -679,8 +520,8 @@ class BoltREDialog(_Dialog):
 
         all_frm = ttk.LabelFrame(self._body, text="All Loads Action")
         all_frm.pack(fill="x", pady=(4, 0))
-        self._all_analysis = self._entry(
-            all_frm, "Analysis *", 0, ex.get("all_analysis", "")
+        self._all_analysis = self._analysis_field(
+            all_frm, "Analysis *", 0, self._analyses, ex.get("all_analysis", "")
         )
         self._all_loadstep = self._entry(
             all_frm, "Loadstep *", 1, ex.get("all_loadstep", "")
@@ -720,8 +561,14 @@ class BoltREDialog(_Dialog):
 class BoltFatigueREDialog(_Dialog):
     """Dialog for adding/editing a bolt fatigue reference event."""
 
-    def __init__(self, parent: tk.Widget, existing: dict | None = None) -> None:
+    def __init__(
+        self,
+        parent: tk.Widget,
+        existing: dict | None = None,
+        analyses: list[str] | None = None,
+    ) -> None:
         self._ex = existing or {}
+        self._analyses = analyses or []
         super().__init__(parent, "Add / Edit Fatigue Reference Event")
 
     def _configure_window(self) -> None:
@@ -749,8 +596,8 @@ class BoltFatigueREDialog(_Dialog):
             self._body, text="Delta Sigma + (analysis, loadstep)"
         )
         ds_plus_frm.pack(fill="x", pady=(4, 0))
-        self._ds_plus_ana = self._entry(
-            ds_plus_frm, "Analysis *", 0, ex.get("ds_plus_analysis", "")
+        self._ds_plus_ana = self._analysis_field(
+            ds_plus_frm, "Analysis *", 0, self._analyses, ex.get("ds_plus_analysis", "")
         )
         self._ds_plus_ls = self._entry(
             ds_plus_frm, "Loadstep *", 1, ex.get("ds_plus_loadstep", "")
@@ -760,8 +607,12 @@ class BoltFatigueREDialog(_Dialog):
             self._body, text="Delta Sigma − (analysis, loadstep)"
         )
         ds_minus_frm.pack(fill="x", pady=(4, 0))
-        self._ds_minus_ana = self._entry(
-            ds_minus_frm, "Analysis *", 0, ex.get("ds_minus_analysis", "")
+        self._ds_minus_ana = self._analysis_field(
+            ds_minus_frm,
+            "Analysis *",
+            0,
+            self._analyses,
+            ex.get("ds_minus_analysis", ""),
         )
         self._ds_minus_ls = self._entry(
             ds_minus_frm, "Loadstep *", 1, ex.get("ds_minus_loadstep", "")
@@ -769,8 +620,13 @@ class BoltFatigueREDialog(_Dialog):
 
         sus_frm = ttk.LabelFrame(self._body, text="Sigma Sustained (optional)")
         sus_frm.pack(fill="x", pady=(4, 0))
-        self._sus_ana = self._entry(
-            sus_frm, "Analysis", 0, ex.get("sigma_sus_analysis", "")
+        self._sus_ana = self._analysis_field(
+            sus_frm,
+            "Analysis",
+            0,
+            self._analyses,
+            ex.get("sigma_sus_analysis", ""),
+            optional=True,
         )
         self._sus_ls = self._entry(
             sus_frm, "Loadstep", 1, ex.get("sigma_sus_loadstep", "")
@@ -818,231 +674,21 @@ class BoltFatigueREDialog(_Dialog):
 # ── General tab ───────────────────────────────────────────────────────────────
 
 
-class GeneralTab(ttk.Frame):
-    def __init__(self, parent: ttk.Notebook, project: dict) -> None:
-        super().__init__(parent)
-        self._project = project
-        self._build()
+class GeneralTab(RunTab):
+    _RUN_LABEL = "Run Bolts Assessment"
+    _REQUIRED = ("flanges", "No flanges", "Define at least one flange first.")
 
-    def _build(self) -> None:
-        frm = ttk.LabelFrame(self, text="Run Options")
-        frm.pack(padx=20, pady=20, fill="x")
-
-        ttk.Label(frm, text="Fatigue assessment").grid(
-            row=0, column=0, sticky="w", padx=10, pady=6
-        )
-        self._fatigue = tk.BooleanVar(
-            value=self._project["run_options"].get("fatigue", False)
-        )
-        ttk.Checkbutton(frm, variable=self._fatigue).grid(
-            row=0, column=1, sticky="w", padx=10, pady=6
-        )
-
-        ttk.Label(frm, text="Additional materials folder").grid(
-            row=1, column=0, sticky="w", padx=10, pady=6
-        )
-        self._matlib = tk.StringVar(
-            value=self._project["run_options"].get("matlib_path", "")
-        )
-        ttk.Entry(frm, textvariable=self._matlib, width=40).grid(
-            row=1, column=1, padx=10, pady=6, sticky="w"
-        )
-        ttk.Button(frm, text="Browse...", command=self._browse_matlib).grid(
-            row=1, column=2, padx=4, pady=6
-        )
-
-        ttk.Label(frm, text="Output root folder").grid(
-            row=2, column=0, sticky="w", padx=10, pady=6
-        )
-        self._root_dir = tk.StringVar(
-            value=self._project["run_options"].get("root_dir", "")
-        )
-        ttk.Entry(frm, textvariable=self._root_dir, width=40).grid(
-            row=2, column=1, padx=10, pady=6, sticky="w"
-        )
-        ttk.Button(frm, text="Browse...", command=self._browse_root).grid(
-            row=2, column=2, padx=4, pady=6
-        )
-
-        run_frm = ttk.LabelFrame(self, text="Run")
-        run_frm.pack(padx=20, pady=(0, 20), fill="x")
-        ttk.Button(
-            run_frm, text="Run Bolts Assessment", command=self._run_assessment
-        ).pack(padx=10, pady=10)
-        self._status_var = tk.StringVar(value="")
-        ttk.Label(run_frm, textvariable=self._status_var, foreground="gray").pack(
-            padx=10, pady=(0, 6)
-        )
-
-    def _browse_matlib(self) -> None:
-        d = filedialog.askdirectory(title="Select additional materials folder")
-        if d:
-            self._matlib.set(d)
-
-    def _browse_root(self) -> None:
-        d = filedialog.askdirectory(title="Select output root folder")
-        if d:
-            self._root_dir.set(d)
-
-    def _run_assessment(self) -> None:
-        self.sync()
-        root_dir = self._root_dir.get().strip()
-        if not root_dir:
-            messagebox.showwarning(
-                "No root folder", "Please set the output root folder first."
-            )
-            return
-        if not self._project.get("flanges"):
-            messagebox.showwarning("No flanges", "Define at least one flange first.")
-            return
-
-        self._status_var.set("Building configuration…")
-        try:
-            configs, geoms = _build_bolts_from_project(self._project)
-        except Exception as exc:
-            messagebox.showerror("Configuration Error", str(exc))
-            self._status_var.set("Configuration error.")
-            return
-
+    def _prepare(self) -> Callable[[], None]:
+        configs, geoms = _build_bolts_from_project(self._project)
+        root_dir = self._project["run_options"]["root_dir"]
         fatigue = self._project["run_options"].get("fatigue", False)
 
-        log_win = _LogWindow(self.winfo_toplevel())
-        handler = _TextHandler(log_win)
-        root_logger = logging.getLogger()
-        old_level = root_logger.level
-        root_logger.setLevel(logging.INFO)
-        root_logger.addHandler(handler)
-        self._status_var.set("Running…")
+        def work() -> None:
+            from cassy.runners.run_bolts import run_bolts
 
-        def _work() -> None:
-            try:
-                from cassy.runners.run_bolts import run_bolts
-                from tqdm.contrib.logging import logging_redirect_tqdm
+            run_bolts(root_dir, fatigue=fatigue, geoms=geoms, config_dict=configs)
 
-                with logging_redirect_tqdm():
-                    run_bolts(
-                        root_dir,
-                        fatigue=fatigue,
-                        geoms=geoms,
-                        config_dict=configs,
-                    )
-                self.after(0, lambda: self._status_var.set("Completed successfully."))
-                self.after(
-                    0,
-                    lambda: log_win.set_done(
-                        True, "Assessment completed successfully."
-                    ),
-                )
-            except Exception as exc:
-                msg = str(exc)
-                self.after(0, lambda: self._status_var.set(f"Error: {msg}"))
-                self.after(0, lambda: log_win.set_done(False, f"Error: {msg}"))
-            finally:
-                root_logger.removeHandler(handler)
-                root_logger.setLevel(old_level)
-
-        threading.Thread(target=_work, daemon=True).start()
-
-    def sync(self) -> None:
-        self._project["run_options"]["fatigue"] = self._fatigue.get()
-        self._project["run_options"]["matlib_path"] = self._matlib.get().strip()
-        self._project["run_options"]["root_dir"] = self._root_dir.get().strip()
-
-    def load_from_project(self) -> None:
-        self._fatigue.set(self._project["run_options"].get("fatigue", False))
-        self._matlib.set(self._project["run_options"].get("matlib_path", ""))
-        self._root_dir.set(self._project["run_options"].get("root_dir", ""))
-
-
-# ── Base table tab ────────────────────────────────────────────────────────────
-
-
-class _TableTab(ttk.Frame):
-    """Tab with a Treeview table and Add / Edit / Delete toolbar."""
-
-    _COLUMNS: tuple[str, ...]
-    _HEADINGS: dict[str, str]
-    _LIST_KEY: str
-
-    def __init__(self, parent: ttk.Notebook, project: dict) -> None:
-        super().__init__(parent)
-        self._project = project
-        self._build()
-
-    def _build(self) -> None:
-        toolbar = ttk.Frame(self)
-        toolbar.pack(fill="x", padx=6, pady=4)
-        ttk.Button(toolbar, text="Add", width=7, command=self._add).pack(
-            side="left", padx=2
-        )
-        ttk.Button(toolbar, text="Edit", width=7, command=self._edit).pack(
-            side="left", padx=2
-        )
-        ttk.Button(toolbar, text="Delete", width=7, command=self._delete).pack(
-            side="left", padx=2
-        )
-        self._extra_toolbar(toolbar)
-
-        frm = ttk.Frame(self)
-        frm.pack(fill="both", expand=True, padx=6, pady=(0, 6))
-        vsb = ttk.Scrollbar(frm, orient="vertical")
-        hsb = ttk.Scrollbar(frm, orient="horizontal")
-        self._tree = ttk.Treeview(
-            frm,
-            columns=self._COLUMNS,
-            show="headings",
-            yscrollcommand=vsb.set,
-            xscrollcommand=hsb.set,
-        )
-        vsb.config(command=self._tree.yview)
-        hsb.config(command=self._tree.xview)
-        for col in self._COLUMNS:
-            self._tree.heading(col, text=self._HEADINGS.get(col, col), anchor="center")
-            self._tree.column(col, width=110, minwidth=60, anchor="center")
-        self._tree.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-        frm.rowconfigure(0, weight=1)
-        frm.columnconfigure(0, weight=1)
-        self._tree.bind("<Double-1>", lambda _e: self._edit())
-        self.refresh()
-
-    def _extra_toolbar(self, toolbar: ttk.Frame) -> None:
-        """Override to add extra toolbar buttons."""
-        pass
-
-    def _row_values(self, item: dict) -> tuple:
-        raise NotImplementedError
-
-    def _list(self) -> list:
-        return self._project[self._LIST_KEY]
-
-    def refresh(self) -> None:
-        for child in self._tree.get_children():
-            self._tree.delete(child)
-        for item in self._list():
-            self._tree.insert("", "end", values=self._row_values(item))
-
-    def _selected_index(self) -> int | None:
-        sel = self._tree.selection()
-        if not sel:
-            return None
-        return list(self._tree.get_children()).index(sel[0])
-
-    def _add(self) -> None:
-        raise NotImplementedError
-
-    def _edit(self) -> None:
-        raise NotImplementedError
-
-    def _delete(self) -> None:
-        idx = self._selected_index()
-        if idx is None:
-            messagebox.showwarning("Selection", "Select an item to delete.")
-            return
-        if messagebox.askyesno("Delete", "Delete the selected item?"):
-            self._list().pop(idx)
-            self.refresh()
+        return work
 
 
 # ── Geometries tab ────────────────────────────────────────────────────────────
@@ -1051,6 +697,7 @@ class _TableTab(ttk.Frame):
 class GeometriesTab(_TableTab):
     """Geometry library tab with import/export support for cross-project reuse."""
 
+    _ITEM_NAME = "geometry"
     _COLUMNS = ("base_name", "type", "material", "p", "d", "Le", "d_vh", "f", "KF")
     _HEADINGS = {
         "base_name": "Base Name",
@@ -1228,6 +875,7 @@ class GeometriesTab(_TableTab):
 
 
 class FlangesTab(_TableTab):
+    _ITEM_NAME = "flange"
     _COLUMNS = ("name", "design_code", "actions_file")
     _HEADINGS = {
         "name": "Name",
@@ -1298,13 +946,16 @@ class FlangesTab(_TableTab):
 # ── Bolt Specs tab ────────────────────────────────────────────────────────────
 
 
-class BoltSpecsTab(ttk.Frame):
+class BoltSpecsTab(GroupedTableTab):
     """Per-flange bolt specification table (Bolt ID, Bolt Geometry, Preload).
 
     Thread-verification geometry and base-material are part of the geometry
     library definition; they are not shown here.
     """
 
+    _GROUP_LABEL = "Flange"
+    _ITEM_NAME = "bolt"
+    _COL_WIDTH = 130
     _COLUMNS = ("bolt_id", "geom_data", "preload")
     _HEADINGS = {
         "bolt_id": "Bolt ID",
@@ -1312,95 +963,24 @@ class BoltSpecsTab(ttk.Frame):
         "preload": "Preload [N]",
     }
 
-    def __init__(self, parent: ttk.Notebook, project: dict) -> None:
-        super().__init__(parent)
-        self._project = project
-        self._build()
+    def _group_names(self) -> list[str]:
+        return [f["name"] for f in self._project["flanges"]]
 
-    def _current_flange(self) -> dict | None:
-        name = self._fl_var.get()
-        if not name:
-            return None
-        for f in self._project["flanges"]:
-            if f["name"] == name:
-                return f
-        return None
-
-    def _current_bolts(self) -> list:
-        fl = self._current_flange()
+    def _items_of(self, group: str) -> list:
+        fl = next((f for f in self._project["flanges"] if f["name"] == group), None)
         return fl["bolts_spec"] if fl else []
 
-    def _build(self) -> None:
-        top = ttk.Frame(self)
-        top.pack(fill="x", padx=6, pady=4)
-        ttk.Label(top, text="Flange:").pack(side="left", padx=(0, 4))
-        self._fl_var = tk.StringVar()
-        self._fl_combo = ttk.Combobox(
-            top, textvariable=self._fl_var, state="readonly", width=24
-        )
-        self._fl_combo.pack(side="left")
-        self._fl_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_table())
-        self.bind("<Map>", lambda _e: self.refresh())
+    def _current_flange(self) -> dict | None:
+        name = self._current_group()
+        return next((f for f in self._project["flanges"] if f["name"] == name), None)
 
-        toolbar = ttk.Frame(self)
-        toolbar.pack(fill="x", padx=6, pady=2)
-        ttk.Button(toolbar, text="Add", width=7, command=self._add).pack(
-            side="left", padx=2
-        )
-        ttk.Button(toolbar, text="Edit", width=7, command=self._edit).pack(
-            side="left", padx=2
-        )
-        ttk.Button(toolbar, text="Duplicate", width=9, command=self._duplicate).pack(
-            side="left", padx=2
-        )
-        ttk.Button(toolbar, text="Delete", width=7, command=self._delete).pack(
-            side="left", padx=2
-        )
+    def _row_values(self, item: dict) -> tuple:
+        return (item["bolt_id"], item["geom_data"], item["preload"])
 
-        frm = ttk.Frame(self)
-        frm.pack(fill="both", expand=True, padx=6, pady=(0, 6))
-        vsb = ttk.Scrollbar(frm, orient="vertical")
-        hsb = ttk.Scrollbar(frm, orient="horizontal")
-        self._tree = ttk.Treeview(
-            frm,
-            columns=self._COLUMNS,
-            show="headings",
-            yscrollcommand=vsb.set,
-            xscrollcommand=hsb.set,
+    def _extra_toolbar(self, toolbar: ttk.Frame) -> None:
+        ttk.Button(toolbar, text="Duplicate", command=self._duplicate).pack(
+            side="left", padx=(0, 4)
         )
-        vsb.config(command=self._tree.yview)
-        hsb.config(command=self._tree.xview)
-        for col in self._COLUMNS:
-            self._tree.heading(col, text=self._HEADINGS[col], anchor="center")
-            self._tree.column(col, width=130, minwidth=70, anchor="center")
-        self._tree.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-        frm.rowconfigure(0, weight=1)
-        frm.columnconfigure(0, weight=1)
-        self._tree.bind("<Double-1>", lambda _e: self._edit())
-
-    def refresh(self) -> None:
-        fl_names = [f["name"] for f in self._project["flanges"]]
-        self._fl_combo["values"] = fl_names
-        if self._fl_var.get() not in fl_names:
-            self._fl_var.set(fl_names[0] if fl_names else "")
-        self._refresh_table()
-
-    def _refresh_table(self) -> None:
-        self._tree.delete(*self._tree.get_children())
-        for bolt in self._current_bolts():
-            self._tree.insert(
-                "",
-                "end",
-                values=(bolt["bolt_id"], bolt["geom_data"], bolt["preload"]),
-            )
-
-    def _selected_index(self) -> int | None:
-        sel = self._tree.selection()
-        if not sel:
-            return None
-        return self._tree.index(sel[0])
 
     def _geom_names_by_type(self, geom_type: str) -> list[str]:
         return [
@@ -1467,32 +1047,17 @@ class BoltSpecsTab(ttk.Frame):
             self._tree.selection_set(children[-1])
             self._tree.see(children[-1])
 
-    def _delete(self) -> None:
-        fl = self._current_flange()
-        if fl is None:
-            return
-        idx = self._selected_index()
-        if idx is None:
-            messagebox.showwarning("Selection", "Select a bolt entry to delete.")
-            return
-        bolt_id = fl["bolts_spec"][idx]["bolt_id"]
-        if not messagebox.askyesno(
-            "Delete", f"Delete bolt '{bolt_id}' and its reference events?"
-        ):
-            return
-        fl["bolts_spec"].pop(idx)
-        self._refresh_table()
-
 
 # ── Bolt RE tab (base) ────────────────────────────────────────────────────────
 
 
-class BoltREsTab(ttk.Frame):
+class BoltREsTab(_TableTab):
     """Reference events table shared across all flanges and bolts.
 
     Subclassed for fatigue REs.
     """
 
+    _ITEM_NAME = "reference event"
     _RE_KEY = "reference_events"
     _COLUMNS = (
         "re_id",
@@ -1515,51 +1080,8 @@ class BoltREsTab(ttk.Frame):
         "all_loads": "All Loads",
     }
 
-    def __init__(self, parent: ttk.Notebook, project: dict) -> None:
-        super().__init__(parent)
-        self._project = project
-        self._build()
-
-    def _current_res(self) -> list:
+    def _list(self) -> list:
         return self._project[self._RE_KEY]
-
-    def _build(self) -> None:
-        self.bind("<Map>", lambda _e: self.refresh())
-
-        toolbar = ttk.Frame(self)
-        toolbar.pack(fill="x", padx=6, pady=4)
-        ttk.Button(toolbar, text="Add", width=7, command=self._add).pack(
-            side="left", padx=2
-        )
-        ttk.Button(toolbar, text="Edit", width=7, command=self._edit).pack(
-            side="left", padx=2
-        )
-        ttk.Button(toolbar, text="Delete", width=7, command=self._delete).pack(
-            side="left", padx=2
-        )
-
-        frm = ttk.Frame(self)
-        frm.pack(fill="both", expand=True, padx=6, pady=(0, 6))
-        vsb = ttk.Scrollbar(frm, orient="vertical")
-        hsb = ttk.Scrollbar(frm, orient="horizontal")
-        self._tree = ttk.Treeview(
-            frm,
-            columns=self._COLUMNS,
-            show="headings",
-            yscrollcommand=vsb.set,
-            xscrollcommand=hsb.set,
-        )
-        vsb.config(command=self._tree.yview)
-        hsb.config(command=self._tree.xview)
-        for col in self._COLUMNS:
-            self._tree.heading(col, text=self._HEADINGS[col], anchor="center")
-            self._tree.column(col, width=110, minwidth=60, anchor="center")
-        self._tree.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-        frm.rowconfigure(0, weight=1)
-        frm.columnconfigure(0, weight=1)
-        self._tree.bind("<Double-1>", lambda _e: self._edit())
 
     def _row_values(self, item: dict) -> tuple:
         primary = (
@@ -1577,28 +1099,16 @@ class BoltREsTab(ttk.Frame):
             all_ld,
         )
 
-    def refresh(self) -> None:
-        self._refresh_table()
-
-    def _refresh_table(self) -> None:
-        self._tree.delete(*self._tree.get_children())
-        for re in self._current_res():
-            self._tree.insert("", "end", values=self._row_values(re))
-
-    def _selected_index(self) -> int | None:
-        sel = self._tree.selection()
-        if not sel:
-            return None
-        return self._tree.index(sel[0])
-
-    def _make_dialog(self, parent: tk.Widget, existing: dict | None = None):
-        return BoltREDialog(parent, existing=existing)
+    def _make_dialog(self, parent: tk.Widget, existing: dict | None = None) -> _Dialog:
+        return BoltREDialog(
+            parent, existing=existing, analyses=_get_analysis_names(self._project)
+        )
 
     def _add(self) -> None:
         dlg = self._make_dialog(self)
         if dlg.result is None:
             return
-        re_list = self._project[self._RE_KEY]
+        re_list = self._list()
         if any(r["re_id"] == dlg.result["re_id"] for r in re_list):
             messagebox.showerror(
                 "Duplicate",
@@ -1606,27 +1116,18 @@ class BoltREsTab(ttk.Frame):
             )
             return
         re_list.append(dlg.result)
-        self._refresh_table()
+        self.refresh()
 
     def _edit(self) -> None:
         idx = self._selected_index()
         if idx is None:
             messagebox.showwarning("Selection", "Select a reference event to edit.")
             return
-        re_list = self._project[self._RE_KEY]
+        re_list = self._list()
         dlg = self._make_dialog(self, existing=re_list[idx])
         if dlg.result:
             re_list[idx] = dlg.result
-            self._refresh_table()
-
-    def _delete(self) -> None:
-        idx = self._selected_index()
-        if idx is None:
-            messagebox.showwarning("Selection", "Select a reference event to delete.")
-            return
-        if messagebox.askyesno("Delete", "Delete the selected reference event?"):
-            self._project[self._RE_KEY].pop(idx)
-            self._refresh_table()
+            self.refresh()
 
 
 # ── Bolt Fatigue RE tab ───────────────────────────────────────────────────────
@@ -1653,8 +1154,10 @@ class BoltFatigueREsTab(BoltREsTab):
         "sigma_sus": "\u03a3 Sustained",
     }
 
-    def _make_dialog(self, parent: tk.Widget, existing: dict | None = None):
-        return BoltFatigueREDialog(parent, existing=existing)
+    def _make_dialog(self, parent: tk.Widget, existing: dict | None = None) -> _Dialog:
+        return BoltFatigueREDialog(
+            parent, existing=existing, analyses=_get_analysis_names(self._project)
+        )
 
     def _row_values(self, item: dict) -> tuple:
         ds_plus = (
@@ -1678,258 +1181,23 @@ class BoltFatigueREsTab(BoltREsTab):
 # ── Bolt T & DPA tab ──────────────────────────────────────────────────────────
 
 
-class BoltTDPATab(ttk.Frame):
+class BoltTDPATab(TDPAGridTab):
     """Grid of (flange × bolt) × reference events; each cell holds T and DPA entries."""
 
     _PROJECT_KEY = "tdpa"
     _RE_KEY = "reference_events"
+    _GROUP_FIELD = "flange"
+    _ITEM_FIELD = "bolt_id"
+    _GROUP_LABEL = "Flange"
+    _ITEM_LABEL = "Bolt ID"
+    _CSV_ITEM_COL = "bolt"
+    _EMPTY_MSG = "No data to display (add flanges, bolts and reference events first)."
 
-    def __init__(self, parent: ttk.Notebook, project: dict) -> None:
-        super().__init__(parent)
-        self._project = project
-        # key: (flange_name, bolt_id, re_id) -> (t_var, dpa_var)
-        self._cell_vars: dict[
-            tuple[str, str, str], tuple[tk.StringVar, tk.StringVar]
-        ] = {}
-        self._build_shell()
-        self.after(0, self.rebuild_grid)
-
-    def _build_shell(self) -> None:
-        toolbar = ttk.Frame(self)
-        toolbar.pack(fill="x", padx=6, pady=4)
-        ttk.Button(toolbar, text="Refresh grid", command=self.rebuild_grid).pack(
-            side="left", padx=2
-        )
-        ttk.Button(toolbar, text="Import CSV...", command=self._import_csv).pack(
-            side="left", padx=2
-        )
-        ttk.Button(toolbar, text="Export CSV...", command=self._export_csv).pack(
-            side="left", padx=2
-        )
-        ttk.Label(
-            toolbar,
-            text="CSV columns: flange, bolt, event, T, DPA",
-            foreground="gray",
-        ).pack(side="left", padx=8)
-
-        outer = ttk.Frame(self)
-        outer.pack(fill="both", expand=True, padx=6, pady=(0, 6))
-        self._canvas = tk.Canvas(outer, borderwidth=0, background="#f0f0f0")
-        vsb = ttk.Scrollbar(outer, orient="vertical", command=self._canvas.yview)
-        hsb = ttk.Scrollbar(outer, orient="horizontal", command=self._canvas.xview)
-        self._canvas.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        self._canvas.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-        outer.rowconfigure(0, weight=1)
-        outer.columnconfigure(0, weight=1)
-
-        self._inner = ttk.Frame(self._canvas)
-        self._canvas.create_window((0, 0), window=self._inner, anchor="nw")
-        self._inner.bind(
-            "<Configure>",
-            lambda _e: self._canvas.configure(scrollregion=self._canvas.bbox("all")),
-        )
-
-    def rebuild_grid(self) -> None:
-        for widget in self._inner.winfo_children():
-            widget.destroy()
-        self._cell_vars.clear()
-
-        flanges = self._project.get("flanges", [])
-        flange_bolt_pairs: list[tuple[str, str]] = [
-            (f["name"], b["bolt_id"]) for f in flanges for b in f.get("bolts_spec", [])
+    def _groups(self) -> list[tuple[str, list]]:
+        return [
+            (f["name"], [b["bolt_id"] for b in f.get("bolts_spec", [])])
+            for f in self._project.get("flanges", [])
         ]
-        re_ids = [r["re_id"] for r in self._project.get(self._RE_KEY, [])]
-        # Deduplicate while preserving order
-        seen: set[str] = set()
-        unique_re_ids: list[str] = []
-        for rid in re_ids:
-            if rid not in seen:
-                seen.add(rid)
-                unique_re_ids.append(rid)
-
-        if not flange_bolt_pairs or not unique_re_ids:
-            ttk.Label(
-                self._inner,
-                text="No data to display (add flanges, bolts and reference events first).",
-                foreground="gray",
-            ).grid(padx=20, pady=20)
-            return
-
-        existing: dict[tuple[str, str, str], tuple[str, str]] = {
-            (e["flange"], e["bolt_id"], e["re_id"]): (str(e["T"]), str(e["dpa"]))
-            for e in self._project.get(self._PROJECT_KEY, [])
-            if "bolt_id" in e
-        }
-
-        CELL_W = 9
-
-        # Header row 0: Flange | Bolt ID | [RE1 colspan=2] [RE2 colspan=2] ...
-        ttk.Label(
-            self._inner,
-            text="Flange",
-            relief="groove",
-            width=16,
-            anchor="center",
-            padding=3,
-        ).grid(row=0, column=0, rowspan=2, sticky="nsew", padx=1, pady=1)
-        ttk.Label(
-            self._inner,
-            text="Bolt ID",
-            relief="groove",
-            width=10,
-            anchor="center",
-            padding=3,
-        ).grid(row=0, column=1, rowspan=2, sticky="nsew", padx=1, pady=1)
-
-        for c, re_id in enumerate(unique_re_ids):
-            ttk.Label(
-                self._inner,
-                text=re_id,
-                relief="groove",
-                width=CELL_W * 2 + 1,
-                anchor="center",
-                padding=3,
-            ).grid(row=0, column=2 + c * 2, columnspan=2, sticky="nsew", padx=1, pady=1)
-            ttk.Label(
-                self._inner,
-                text="T [°C]",
-                relief="groove",
-                width=CELL_W,
-                anchor="center",
-            ).grid(row=1, column=2 + c * 2, sticky="nsew", padx=1, pady=1)
-            ttk.Label(
-                self._inner, text="DPA", relief="groove", width=CELL_W, anchor="center"
-            ).grid(row=1, column=3 + c * 2, sticky="nsew", padx=1, pady=1)
-
-        for row_idx, (flange_name, bolt_id) in enumerate(flange_bolt_pairs):
-            ttk.Label(
-                self._inner,
-                text=flange_name,
-                relief="groove",
-                width=16,
-                anchor="center",
-            ).grid(row=2 + row_idx, column=0, sticky="nsew", padx=1, pady=1)
-            ttk.Label(
-                self._inner,
-                text=bolt_id,
-                relief="groove",
-                width=10,
-                anchor="center",
-            ).grid(row=2 + row_idx, column=1, sticky="nsew", padx=1, pady=1)
-            for c, re_id in enumerate(unique_re_ids):
-                t_def, dpa_def = existing.get((flange_name, bolt_id, re_id), ("", "0"))
-                t_var = tk.StringVar(value=t_def)
-                dpa_var = tk.StringVar(value=dpa_def)
-                self._cell_vars[(flange_name, bolt_id, re_id)] = (t_var, dpa_var)
-                ttk.Entry(self._inner, textvariable=t_var, width=CELL_W).grid(
-                    row=2 + row_idx, column=2 + c * 2, padx=1, pady=1
-                )
-                ttk.Entry(self._inner, textvariable=dpa_var, width=CELL_W).grid(
-                    row=2 + row_idx, column=3 + c * 2, padx=1, pady=1
-                )
-
-    def _import_csv(self) -> None:
-        path = filedialog.askopenfilename(
-            title="Import T & DPA from CSV",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-        )
-        if not path:
-            return
-        errors: list[str] = []
-        loaded = 0
-        try:
-            with open(path, newline="", encoding="utf-8-sig") as fh:
-                reader = csv.DictReader(fh)
-                for lineno, row in enumerate(reader, start=2):
-                    row = {k.strip().lower(): v.strip() for k, v in row.items()}
-                    flange = row.get("flange", "")
-                    bolt = row.get("bolt", "")
-                    event = row.get("event", "")
-                    t_raw = row.get("t", "")
-                    dpa_raw = row.get("dpa", "")
-                    if not (flange and bolt and event):
-                        errors.append(
-                            f"Line {lineno}: missing flange/bolt/event — skipped"
-                        )
-                        continue
-                    key = (flange, bolt, event)
-                    if key not in self._cell_vars:
-                        errors.append(
-                            f"Line {lineno}: ({flange!r}, {bolt!r}, {event!r}) not in grid — skipped"
-                        )
-                        continue
-                    t_var, dpa_var = self._cell_vars[key]
-                    t_var.set(t_raw)
-                    dpa_var.set(dpa_raw)
-                    loaded += 1
-        except Exception as exc:
-            messagebox.showerror("Import Error", str(exc))
-            return
-        summary = f"Imported {loaded} value(s)."
-        if errors:
-            summary += f"\n\nWarnings ({len(errors)}):\n" + "\n".join(errors[:20])
-            if len(errors) > 20:
-                summary += f"\n… and {len(errors) - 20} more"
-        messagebox.showinfo("Import complete", summary)
-
-    def _export_csv(self) -> None:
-        if not self._cell_vars:
-            messagebox.showwarning(
-                "Empty grid", "No data to export (build the grid first)."
-            )
-            return
-        path = filedialog.asksaveasfilename(
-            title="Export T & DPA to CSV",
-            defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-        )
-        if not path:
-            return
-        try:
-            with open(path, "w", newline="", encoding="utf-8") as fh:
-                writer = csv.writer(fh)
-                writer.writerow(["flange", "bolt", "event", "T", "DPA"])
-                for (flange_name, bolt_id, re_id), (
-                    t_var,
-                    dpa_var,
-                ) in self._cell_vars.items():
-                    writer.writerow(
-                        [flange_name, bolt_id, re_id, t_var.get(), dpa_var.get()]
-                    )
-            messagebox.showinfo("Export complete", f"T & DPA data saved to:\n{path}")
-        except Exception as exc:
-            messagebox.showerror("Export Error", str(exc))
-
-    def sync(self) -> list[str]:
-        """Read cells into project[_PROJECT_KEY]; return validation errors."""
-        entries = []
-        errors = []
-        for (flange_name, bolt_id, re_id), (t_var, dpa_var) in self._cell_vars.items():
-            t_str = t_var.get().strip()
-            dpa_str = dpa_var.get().strip()
-            if not t_str:
-                continue
-            try:
-                T = float(t_str)
-                dpa = float(dpa_str) if dpa_str else 0.0
-            except ValueError:
-                errors.append(
-                    f"Flange '{flange_name}' / Bolt '{bolt_id}' / RE '{re_id}': T and DPA must be numbers"
-                )
-                continue
-            entries.append(
-                {
-                    "flange": flange_name,
-                    "bolt_id": bolt_id,
-                    "re_id": re_id,
-                    "T": T,
-                    "dpa": dpa,
-                }
-            )
-        self._project[self._PROJECT_KEY] = entries
-        return errors
 
 
 # ── Bolt T & DPA Fatigue tab ──────────────────────────────────────────────────
@@ -1940,310 +1208,17 @@ class BoltFatigueTDPATab(BoltTDPATab):
     _RE_KEY = "fatigue_reference_events"
 
 
-# ── Log window ────────────────────────────────────────────────────────────────
-
-
-class _LogWindow(tk.Toplevel):
-    def __init__(self, master: tk.Misc) -> None:
-        super().__init__(master)
-        self.title("Cassy \u2014 Assessment Log")
-        self.geometry("860x540")
-        self.resizable(True, True)
-        _set_icon(self)
-
-        frm = ttk.Frame(self)
-        frm.pack(fill="both", expand=True, padx=6, pady=6)
-        self._text = tk.Text(
-            frm,
-            state="disabled",
-            wrap="none",
-            font=("Courier New", 9),
-            bg="#1e1e1e",
-            fg="#d4d4d4",
-        )
-        vsb = ttk.Scrollbar(frm, orient="vertical", command=self._text.yview)
-        hsb = ttk.Scrollbar(frm, orient="horizontal", command=self._text.xview)
-        self._text.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        vsb.pack(side="right", fill="y")
-        hsb.pack(side="bottom", fill="x")
-        self._text.pack(side="left", fill="both", expand=True)
-
-        bot = ttk.Frame(self)
-        bot.pack(fill="x", padx=6, pady=(2, 6))
-        self._status = tk.Label(bot, text="Running\u2026", anchor="w")
-        self._status.pack(side="left", fill="x", expand=True)
-        ttk.Button(bot, text="Close", command=self.destroy).pack(side="right")
-
-    def append(self, text: str) -> None:
-        self._text.configure(state="normal")
-        self._text.insert("end", text + "\n")
-        self._text.see("end")
-        self._text.configure(state="disabled")
-
-    def set_done(self, success: bool, msg: str) -> None:
-        color = "#4caf50" if success else "#f44336"
-        self._status.configure(text=msg, foreground=color)
-
-
-class _TextHandler(logging.Handler):
-    def __init__(self, win: _LogWindow) -> None:
-        super().__init__()
-        self._win = win
-        self.setFormatter(logging.Formatter("%(levelname)-8s %(name)s: %(message)s"))
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            msg = self.format(record)
-            self._win.after(0, self._win.append, msg)
-        except Exception:
-            pass
-
-
-# ── Builder helpers ───────────────────────────────────────────────────────────
-
-
-def _build_bolts_from_project(
-    project: dict,
-) -> tuple[dict, dict]:
-    """Build ``(configs, geoms)`` from the in-memory project dict.
-
-    Returns
-    -------
-    configs : dict[str, FlangeAssessmentConfig]
-        One entry per flange, keyed by flange name.
-    geoms : dict[str, BoltLikeGeom]
-        Geometry objects keyed by ``"{base_name}_{type}"``
-        (e.g. ``"M8_bolt"``, ``"M8_ins_insert"``).
-    """
-    import pandas as pd
-
-    from cassy.bolts.bolt_config import (
-        BoltReferenceEvent,
-        BoltReferenceEventFatigue,
-        FlangeAssessmentConfig,
-    )
-    from cassy.bolts.geometry import BoltGeom, InsertGeom
-    from cassy.designcodes.map import BOLT_CODES
-    from cassy.runners.run_common import build_material_library
-
-    matlib = project["run_options"].get("matlib_path") or None
-    materials = build_material_library(matlib)
-    fatigue = project["run_options"].get("fatigue", False)
-
-    # ---- Build geometry objects ----
-    geoms: dict = {}
-    for geom_entry in project.get("geometries", []):
-        base_name = geom_entry["base_name"]
-        geom_type = geom_entry["type"]
-        mat_name = geom_entry["material"]
-        if mat_name not in materials:
-            raise ValueError(
-                f"Material '{mat_name}' not found in the library "
-                f"(geometry '{base_name}')."
-            )
-
-        kwargs: dict = {
-            "name": f"{base_name}_{geom_type}",
-            "material": materials[mat_name],
-            "p": geom_entry.get("p", 0),
-            "d": geom_entry.get("d", 0),
-            "Le": geom_entry.get("Le", 0),
-            "d_vh": geom_entry.get("d_vh", 0),
-            "f": geom_entry.get("f", 0.15),
-            "dn": geom_entry.get("dn"),
-            "df": geom_entry.get("df"),
-            "D": geom_entry.get("D"),
-        }
-
-        if geom_type == "bolt":
-            kwargs.update(
-                {
-                    "f_prime": geom_entry.get("f_prime", 0.15),
-                    "B": geom_entry.get("B", 0),
-                    "C": geom_entry.get("C", 0),
-                    "KF": geom_entry.get("KF", 4),
-                    "d1": geom_entry.get("d1"),
-                    "H": geom_entry.get("H"),
-                    "a": geom_entry.get("a"),
-                    "Dm": geom_entry.get("Dm"),
-                    "Dp": geom_entry.get("Dp"),
-                }
-            )
-            geoms[f"{base_name}_bolt"] = BoltGeom(**kwargs)
-        elif geom_type == "insert":
-            geoms[f"{base_name}_insert"] = InsertGeom(**kwargs)
-
-    # ---- Build FlangeAssessmentConfig objects ----
-    configs: dict = {}
-    for flange in project.get("flanges", []):
-        flange_name = flange["name"]
-        actions_file = flange.get("actions_file", "")
-        if not actions_file or not os.path.exists(actions_file):
-            raise ValueError(
-                f"Actions CSV not found for flange '{flange_name}': '{actions_file}'"
-            )
-        actions = pd.read_csv(actions_file)
-        actions["boltID"] = actions["boltID"].astype(str)
-        actions.set_index(["boltID", "analysis", "loadstep"], inplace=True)
-
-        code = BOLT_CODES[flange["design_code"]]
-
-        # bolts_spec DataFrame — insert row added automatically when a matching
-        # insert geometry (same base_name) exists in the geometry library
-        rows = []
-        for bolt_entry in flange.get("bolts_spec", []):
-            bolt_id = str(bolt_entry["bolt_id"])
-            bolt_geom_name = bolt_entry["geom_data"]
-            rows.append(
-                {
-                    "Bolt ID": bolt_id,
-                    "Geom type": "bolt",
-                    "Geom data": bolt_geom_name,
-                    "Preload [N]": float(bolt_entry["preload"]),
-                }
-            )
-            if f"{bolt_geom_name}_insert" in geoms:
-                rows.append(
-                    {
-                        "Bolt ID": bolt_id,
-                        "Geom type": "insert",
-                        "Geom data": bolt_geom_name,
-                        "Preload [N]": 0.0,
-                    }
-                )
-        bolts_spec = (
-            pd.DataFrame(rows).set_index("Bolt ID")
-            if rows
-            else pd.DataFrame(columns=["Geom type", "Geom data", "Preload [N]"])
-        )
-
-        # Reference events — per bolt; T/DPA from tdpa table keyed by (flange, bolt_id, re_id)
-        tdpa_lut: dict[tuple[str, str, str], tuple[float, float]] = {
-            (e["flange"], e["bolt_id"], e["re_id"]): (float(e["T"]), float(e["dpa"]))
-            for e in project.get("tdpa", [])
-            if "bolt_id" in e
-        }
-        shared_res = project.get("reference_events", [])
-        REs: dict = {}
-        for bolt_entry in flange.get("bolts_spec", []):
-            bid = str(bolt_entry["bolt_id"])
-            REs[bid] = [
-                BoltReferenceEvent(
-                    name=re["re_id"],
-                    oper_cond=re.get("oc", "N/A"),
-                    init_event=re.get("ie", "N/A"),
-                    concat_event=re.get("ce", "N/A"),
-                    temp=tdpa_lut.get((flange_name, bid, re["re_id"]), (0.0, 0.0))[0],
-                    dpa=tdpa_lut.get((flange_name, bid, re["re_id"]), (0.0, 0.0))[1],
-                    load_category=re.get("load_category", "I"),
-                    service_lvl=re.get("service_lvl", "A"),
-                    primary=(re["primary_analysis"], re["primary_loadstep"]),
-                    all_loads=(re["all_analysis"], re["all_loadstep"]),
-                )
-                for re in shared_res
-            ]
-
-        # Fatigue reference events — per bolt; T/DPA from tdpa_fatigue table keyed by (flange, bolt_id, re_id)
-        REs_fatigue = None
-        if fatigue:
-            tdpa_fat_lut: dict[tuple[str, str, str], tuple[float, float]] = {
-                (e["flange"], e["bolt_id"], e["re_id"]): (
-                    float(e["T"]),
-                    float(e["dpa"]),
-                )
-                for e in project.get("tdpa_fatigue", [])
-                if "bolt_id" in e
-            }
-            shared_fat_res = project.get("fatigue_reference_events", [])
-            REs_fatigue = {}
-            for bolt_entry in flange.get("bolts_spec", []):
-                bid = str(bolt_entry["bolt_id"])
-                bolt_fat_re_list = []
-                for re in shared_fat_res:
-                    sus_ana = re.get("sigma_sus_analysis", "")
-                    sus_ls = re.get("sigma_sus_loadstep", "")
-                    sigma_sus = (sus_ana, sus_ls) if (sus_ana and sus_ls) else None
-                    T_fat, dpa_fat = tdpa_fat_lut.get(
-                        (flange_name, bid, re["re_id"]), (0.0, 0.0)
-                    )
-                    bolt_fat_re_list.append(
-                        BoltReferenceEventFatigue(
-                            name=re["re_id"],
-                            oper_cond=re.get("oc", "N/A"),
-                            init_event=re.get("ie", "N/A"),
-                            concat_event=re.get("ce", "N/A"),
-                            temp=T_fat,
-                            dpa=dpa_fat,
-                            load_category=re.get("load_category", "I"),
-                            service_lvl=re.get("service_lvl", "A"),
-                            n_cycles=int(re["n_cycles"]),
-                            delta_sigma=(
-                                (re["ds_plus_analysis"], re["ds_plus_loadstep"]),
-                                (re["ds_minus_analysis"], re["ds_minus_loadstep"]),
-                            ),
-                            sigma_sustained=sigma_sus,
-                        )
-                    )
-                REs_fatigue[bid] = bolt_fat_re_list
-
-        configs[flange_name] = FlangeAssessmentConfig(
-            actions=actions,
-            code=code,
-            bolts_spec=bolts_spec,
-            REs=REs,
-            REs_fatigue=REs_fatigue,
-            name=flange_name,
-        )
-
-    return configs, geoms
-
-
 # ── Main application window ───────────────────────────────────────────────────
 
 
-class BoltsGUI(tk.Tk):
-    def __init__(self) -> None:
-        super().__init__()
-        self.title("Cassy \u2014 Bolts Assessment Configuration")
-        self.geometry("1100x680")
-        self.minsize(800, 520)
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
-        _set_icon(self)
+class BoltsGUI(ProjectApp):
+    _TITLE = "Cassy \u2014 Bolts Assessment Configuration"
 
-        self._project_path: str | None = None
-        self._project: dict = _fresh_project()
-
-        self._build_menu()
-        self._build_tabs()
-
-    # ── Menu ──────────────────────────────────────────────────
-
-    def _build_menu(self) -> None:
-        menubar = tk.Menu(self)
-        self.config(menu=menubar)
-
-        file_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="File", menu=file_menu)
-        file_menu.add_command(label="New", accelerator="Ctrl+N", command=self._new)
-        file_menu.add_command(label="Open...", accelerator="Ctrl+O", command=self._open)
-        file_menu.add_separator()
-        file_menu.add_command(label="Save", accelerator="Ctrl+S", command=self._save)
-        file_menu.add_command(label="Save As...", command=self._save_as)
-        file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self.destroy)
-
-        self.bind_all("<Control-n>", lambda _e: self._new())
-        self.bind_all("<Control-o>", lambda _e: self._open())
-        self.bind_all("<Control-s>", lambda _e: self._save())
-
-    # ── Tabs ──────────────────────────────────────────────────
+    @staticmethod
+    def _fresh_project() -> dict:
+        return _fresh_project()
 
     def _build_tabs(self) -> None:
-        if hasattr(self, "_nb"):
-            self._nb.destroy()
-        self._nb = ttk.Notebook(self)
-        self._nb.pack(fill="both", expand=True, padx=5, pady=5)
-
         self._tab_general = GeneralTab(self._nb, self._project)
         self._tab_geoms = GeometriesTab(self._nb, self._project)
         self._tab_flanges = FlangesTab(self._nb, self._project)
@@ -2253,21 +1228,18 @@ class BoltsGUI(tk.Tk):
         self._tab_tdpa = BoltTDPATab(self._nb, self._project)
         self._tab_tdpa_fat = BoltFatigueTDPATab(self._nb, self._project)
 
-        self._nb.add(self._tab_general, text="  General  ")
-        self._nb.add(self._tab_geoms, text="  Geometries  ")
-        self._nb.add(self._tab_flanges, text="  Flanges  ")
-        self._nb.add(self._tab_bolt_specs, text="  Bolt Specs  ")
-        self._nb.add(self._tab_res, text="  Ref. Events  ")
-        self._nb.add(self._tab_fat_res, text="  Fat. Ref. Events  ")
-        self._nb.add(self._tab_tdpa, text="  T & DPA  ")
-        self._nb.add(self._tab_tdpa_fat, text="  T & DPA Fatigue  ")
+        self._nb.add(self._tab_general, text="General")
+        self._nb.add(self._tab_geoms, text="Geometries")
+        self._nb.add(self._tab_flanges, text="Flanges")
+        self._nb.add(self._tab_bolt_specs, text="Bolt Specs")
+        self._nb.add(self._tab_res, text="Ref. Events")
+        self._nb.add(self._tab_fat_res, text="Fat. Ref. Events")
+        self._nb.add(self._tab_tdpa, text="T & DPA")
+        self._nb.add(self._tab_tdpa_fat, text="T & DPA Fatigue")
 
-    # ── Sync / refresh helpers ────────────────────────────────
-
-    def _sync_all(self) -> None:
+    def _sync_all(self) -> list[str]:
         self._tab_general.sync()
-        self._tab_tdpa.sync()
-        self._tab_tdpa_fat.sync()
+        return self._tab_tdpa.sync() + self._tab_tdpa_fat.sync()
 
     def _refresh_all_tabs(self) -> None:
         self._tab_general.load_from_project()
@@ -2278,70 +1250,6 @@ class BoltsGUI(tk.Tk):
         self._tab_fat_res.refresh()
         self._tab_tdpa.rebuild_grid()
         self._tab_tdpa_fat.rebuild_grid()
-
-    # ── File operations ───────────────────────────────────────
-
-    def _new(self) -> None:
-        if not messagebox.askyesno("New Project", "Discard current project?"):
-            return
-        self._project.clear()
-        self._project.update(_fresh_project())
-        self._project_path = None
-        self.title("Cassy \u2014 Bolts Assessment Configuration")
-        self._refresh_all_tabs()
-        self.focus_force()
-
-    def _open(self) -> None:
-        path = filedialog.askopenfilename(
-            title="Open bolts project",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-        )
-        if not path:
-            return
-        try:
-            with open(path, encoding="utf-8") as fh:
-                data = json.load(fh)
-        except Exception as exc:
-            messagebox.showerror("Open Error", str(exc))
-            return
-        self._project.clear()
-        self._project.update(data)
-        self._project_path = path
-        self.title(f"Cassy \u2014 {os.path.basename(path)}")
-        self._refresh_all_tabs()
-
-    def _save(self) -> None:
-        if self._project_path is None:
-            self._save_as()
-        else:
-            self._write(self._project_path)
-
-    def _save_as(self) -> None:
-        path = filedialog.asksaveasfilename(
-            title="Save bolts project as",
-            defaultextension=".json",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-        )
-        if not path:
-            return
-        self._project_path = path
-        self._write(path)
-
-    def _write(self, path: str) -> None:
-        self._sync_all()
-        try:
-            with open(path, "w", encoding="utf-8") as fh:
-                json.dump(self._project, fh, indent=2)
-            self.title(f"Cassy \u2014 {os.path.basename(path)}")
-        except Exception as exc:
-            messagebox.showerror("Save Error", str(exc))
-
-
-# ── Module helpers ────────────────────────────────────────────────────────────
-
-
-def _fresh_project() -> dict:
-    return copy.deepcopy(EMPTY_BOLT_PROJECT)
 
 
 def main() -> None:
