@@ -1,0 +1,36 @@
+<svg width="240" height="240" viewBox="0 0 240 240" role="img"
+     aria-label="CASSY logo - a pressure-boundary C cut by a stress classification line and closed by a bolt nut"
+     xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="amber" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="240" y2="240">
+      <stop offset="0%" stop-color="#FFD173"/>
+      <stop offset="100%" stop-color="#F5A623"/>
+    </linearGradient>
+    <mask id="cuts" maskUnits="userSpaceOnUse" x="0" y="0" width="240" height="240">
+      <rect width="240" height="240" fill="#fff"/>
+      <!-- gap through the wall for the stress classification line -->
+      <line x1="80.40" y1="159.60" x2="46.46" y2="193.54" stroke="#000" stroke-width="20" stroke-linecap="round"/>
+      <!-- gap around the nut -->
+      <polygon points="201.20,51.86 205.71,77.47 185.79,94.18 161.36,85.30 156.85,59.69 176.77,42.98"
+               fill="#000" stroke="#000" stroke-width="14" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+
+  <g transform="translate(7,0)">
+    <!-- C-shaped pressure boundary -->
+    <path d="M 181.28 68.58 A 80 80 0 1 0 181.28 171.42"
+          fill="none" stroke="url(#amber)" stroke-width="40" mask="url(#cuts)"/>
+
+    <!-- hex nut with through hole -->
+    <path fill="url(#amber)" fill-rule="evenodd"
+          d="M 201.20 51.86 L 205.71 77.47 L 185.79 94.18 L 161.36 85.30 L 156.85 59.69 L 176.77 42.98 Z
+             M 172.28 68.58 a 9 9 0 1 0 18 0 a 9 9 0 1 0 -18 0 Z"/>
+
+    <!-- stress classification line through the wall thickness -->
+    <g fill="#38D9C0" stroke="#38D9C0">
+      <line x1="77.57" y1="162.43" x2="49.29" y2="190.71" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="77.57" cy="162.43" r="7.5" stroke="none"/>
+      <circle cx="49.29" cy="190.71" r="7.5" stroke="none"/>
+    </g>
+  </g>
+</svg>

@@ -32,7 +32,7 @@ nav = [
 [project.theme]
 variant = "modern"
 # custom_dir = "overrides"
-# favicon = "images/favicon.png"
+favicon = "images/logo.svg"
 language = "en"
 features = [
   "announce.dismiss",
@@ -63,7 +63,7 @@ features = [
   # "toc.integrate",
 ]
 
-# logo = "assets/logo.png"
+logo = "images/logo.svg"
 
 # [project.theme.icon]
 # logo = "lucide/smile"

@@ -8,6 +8,7 @@ stress trensors that are to be used as inputs for CASSY.
 Before even starting the configuration of the assessment, one linearized stress file must be generatted as input data for each submodel. This file will contain the linearized stress tensors that can be later combined and assessed in CASSY.
 
 The columns of the file must be:
+
 * **path**: number (ID) of the path
 * **analysis**: name of the analysis to which the stress are extracted from
 * **loadstep**: loadstep of the analysis from which the stresses are extracted from

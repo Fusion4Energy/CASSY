@@ -1,5 +1,8 @@
 # Welcome to CASSY documentation
 
+![CASSY](images/logo_full.svg#only-light){ width="500" }
+![CASSY](images/logo_full_dark.svg#only-dark){ width="500" }
+
 CASSY is an automated tool for stress assessment following design codes.
 
 It is based on a tool that was initially developed at NIER Ingegneria. This new version is developed and mantained by the Fusion For Energy (F4E) engineering analyses unit.

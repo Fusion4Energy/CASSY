@@ -6,7 +6,10 @@
 
 # CASSY
 
-<img src="imgs/full_logo.png" width="500"/>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo_full_dark.svg">
+  <img src="docs/images/logo_full.svg" alt="CASSY" width="500"/>
+</picture>
 
 CASSY is an automated tool for stress assessment following design codes.
 
