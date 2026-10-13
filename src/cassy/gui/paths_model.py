@@ -29,6 +29,8 @@ SERVICE_LEVELS: list[str] = ["A", "C", "D"]
 EMPTY_PROJECT: dict[str, Any] = {
     "run_options": {
         "fatigue": False,
+        "print_recap": True,
+        "merge": True,
         "matlib_path": "",
         "root_dir": "",
     },
@@ -44,6 +46,19 @@ EMPTY_PROJECT: dict[str, Any] = {
 
 def fresh_project() -> dict:
     return copy.deepcopy(EMPTY_PROJECT)
+
+
+def migrate_project(project: dict) -> dict:
+    """Upgrade, in place, loads saved with the old analysis_name/time_step fields."""
+    from cassy.auxiliary.functions import parse_legacy_combination
+
+    for ld in project.get("loads", []):
+        if "steps" not in ld:
+            terms = parse_legacy_combination(
+                ld.pop("analysis_name", ""), ld.pop("time_step", "")
+            )
+            ld["steps"] = [t.to_dict() for t in terms]
+    return project
 
 
 def bool_label(v: bool) -> str:
@@ -76,162 +91,100 @@ def get_available_analyses(project: dict) -> list[str]:
 def build_configs_from_project(project: dict) -> dict:
     """Build a dict of ``Configuration`` objects from the in-memory project dict.
 
-    This lets the runner be called without writing any Excel files to disk.
     Stress tensors are read from the CSV paths stored in each submodel entry.
     """
-    import pandas as pd
-    from cassy.paths.paths_config import Configuration
+    from cassy.auxiliary.types import LoadTerm
+    from cassy.paths.paths_config import (
+        Configuration,
+        LoadConfig,
+        PathConfig,
+        ReferenceEventConfig,
+        read_stress_tensors,
+    )
 
-    tdpa_lut = {
-        (e["submodel"], e["path_num"], e["re_id"]): (e["T"], e["dpa"])
-        for e in project.get("tdpa", [])
-        if "submodel" in e
+    loads = {
+        ld["name"]: LoadConfig(
+            name=ld["name"],
+            steps=[LoadTerm.from_dict(t) for t in ld["steps"]],
+            stress_classification=StressClassification(ld["stress_type"]),
+            load_type=LoadType(ld["load_type"]),
+            unit=ld["unit"],
+            scale=float(ld["scale"]),
+            spatial_rec_method=SpatialRecMethod(ld.get("spatial_rec") or "algebraic"),
+            isPD=ld.get("is_pd", False),
+            isCyclic=ld.get("is_cyclic", False),
+            isPressure=ld.get("is_pressure", False),
+            isShortOverstress=ld.get("is_short_overstress", False),
+        )
+        for ld in project.get("loads", [])
     }
-    tdpa_fat_lut = {
-        (e["submodel"], e["path_num"], e["re_id"]): (e["T"], e["dpa"])
-        for e in project.get("tdpa_fatigue", [])
-        if "submodel" in e
-    }
 
-    loads = project.get("loads", [])
+    def _tdpa_lut(key: str) -> dict:
+        return {
+            (e["submodel"], e["path_num"], e["re_id"]): (float(e["T"]), float(e["dpa"]))
+            for e in project.get(key, [])
+            if "submodel" in e
+        }
 
-    def _re_df(
-        re_list: list, lut: dict, sm_name: str, paths: list, with_ncycles: bool
-    ) -> pd.DataFrame:
-        rows = []
-        for p in paths:
-            pnum = p["path_num"]
-            for re in re_list:
-                re_id = re["re_id"]
-                T, dpa = lut.get((sm_name, pnum, re_id), (0.0, 0.0))
-                row = {
-                    "Path N": pnum,
-                    "ID": re_id,
-                    "Operating Conditions": re.get("oc", "N/A"),
-                    "Initiating Event": re.get("ie", "N/A"),
-                    "Concatenated Event": re.get("ce", "N/A"),
-                    "T [\u00b0C]": T,
-                    "DPA": dpa,
-                    "Loading ctg.": re.get("load_ctg", "N/A"),
-                    "Service Level": re.get("service_lvl", "A"),
-                    "Loads": ", ".join(re.get("loads", [])),
-                }
-                if with_ncycles:
-                    row["N of cycles"] = re.get("ncycles") or 0
-                rows.append(row)
-        if not rows:
-            return pd.DataFrame()
-        return pd.DataFrame(rows).set_index(["Path N", "ID"]).sort_index()
+    def _re_configs(
+        re_list: list, lut: dict, sm_name: str, pnum: int, fatigue: bool
+    ) -> list[ReferenceEventConfig]:
+        out = []
+        for re in re_list:
+            T, dpa = lut.get((sm_name, pnum, re["re_id"]), (0.0, 0.0))
+            out.append(
+                ReferenceEventConfig(
+                    service_lvl=re.get("service_lvl", "A"),
+                    re_ID=re["re_id"],
+                    T=T,
+                    dpa=dpa,
+                    oc=re.get("oc", "N/A"),
+                    ie=re.get("ie", "N/A"),
+                    ce=re.get("ce", "N/A"),
+                    load_ctg=re.get("load_ctg", "N/A"),
+                    ncycles=(re.get("ncycles") or 0) if fatigue else None,
+                    loads=list(re.get("loads", [])),
+                )
+            )
+        return out
+
+    tdpa_lut = _tdpa_lut("tdpa")
+    tdpa_fat_lut = _tdpa_lut("tdpa_fatigue")
+    res = project.get("reference_events", [])
+    fat_res = project.get("fatigue_reference_events", [])
 
     configs: dict = {}
     for sm in project.get("submodels", []):
         sm_name = sm["name"]
-        sm_paths = project["paths"].get(sm_name, [])
-
-        # Stresses sheet
-        df_stresses = (
-            pd.DataFrame(
-                [
-                    {
-                        "Load Name": ld["name"],
-                        "Stress Type": ld["stress_type"],
-                        "Load Type": ld["load_type"],
-                        "Unit": ld["unit"],
-                        "Scale": ld["scale"],
-                        "Spatial Recombination": ld["spatial_rec"],
-                        "Is Cyclic": ld["is_cyclic"],
-                        "Is Pressure": ld["is_pressure"],
-                        "Is Short Overstress": ld["is_short_overstress"],
-                        "Derives from Plasma Disruption": ld["is_pd"],
-                    }
-                    for ld in loads
-                ]
-            ).set_index("Load Name")
-            if loads
-            else pd.DataFrame()
-        )
-
-        # Load Steps sheet
-        df_load_steps = (
-            pd.DataFrame(
-                [
-                    {
-                        "Load Name": ld["name"],
-                        "Analysis Name": ld["analysis_name"],
-                        "Time Step": ld["time_step"],
-                    }
-                    for ld in loads
-                ]
-            ).set_index("Load Name")
-            if loads
-            else pd.DataFrame()
-        )
-
-        # Paths sheet
-        df_paths = (
-            pd.DataFrame(
-                [
-                    {
-                        "Path N": p["path_num"],
-                        "Material": p["material"],
-                        "Type": p["ptype"],
-                        "Welding-n": p["welding_n"],
-                        "Welding-f": p["welding_f"],
-                    }
-                    for p in sm_paths
-                ]
-            ).set_index("Path N")
-            if sm_paths
-            else pd.DataFrame()
-        )
-
-        # Reference Event sheets
-        df_re = _re_df(
-            project.get("reference_events", []),
-            tdpa_lut,
-            sm_name,
-            sm_paths,
-            with_ncycles=False,
-        )
-        df_re_fat = _re_df(
-            project.get("fatigue_reference_events", []),
-            tdpa_fat_lut,
-            sm_name,
-            sm_paths,
-            with_ncycles=True,
-        )
-
-        # General sheet
-        df_general = pd.DataFrame({"Value": [sm["design_code"]]}, index=["Design Code"])
-        df_general.index.name = df_general.columns[0]
-
-        # Build Configuration bypassing file-based __init__
-        conf = object.__new__(Configuration)
-        conf.submodel = sm_name
-        conf.code = sm["design_code"]
-        conf.sheets = {
-            "Stresses": df_stresses,
-            "Load Steps": df_load_steps,
-            "Paths": df_paths,
-            "Reference Event": df_re,
-            "Reference Event Fatigue": df_re_fat,
-            "General": df_general,
-        }
-        conf.paths = df_paths.index if not df_paths.empty else pd.Index([], dtype=int)
-        conf.loads = df_load_steps.index if not df_load_steps.empty else pd.Index([])
-
-        # Stress tensors
         tensors_file = sm.get("tensors_file", "")
-        if tensors_file and os.path.exists(tensors_file):
-            st = pd.read_csv(tensors_file)
-            st["loadstep"] = st["loadstep"].astype(int)
-            st["path"] = st["path"].astype(int)
-            conf.stress_tensors = st.set_index(
-                ["path", "analysis", "loadstep", "pathpoint", "stress_type"]
-            ).sort_index()
-        else:
-            conf.stress_tensors = pd.DataFrame()
-
-        configs[sm_name] = conf
+        if not tensors_file or not os.path.exists(tensors_file):
+            raise ValueError(
+                f"Stress tensors CSV not found for submodel '{sm_name}': "
+                f"'{tensors_file}'"
+            )
+        paths = {
+            int(p["path_num"]): PathConfig(
+                pnum=int(p["path_num"]),
+                material=p["material"],
+                ptype=PathType(p.get("ptype", "normal")),
+                welding_n=float(p.get("welding_n", 1.0)),
+                welding_f=float(p.get("welding_f", 1.0)),
+            )
+            for p in project["paths"].get(sm_name, [])
+        }
+        configs[sm_name] = Configuration(
+            submodel=sm_name,
+            code=sm["design_code"],
+            loads=loads,
+            paths=paths,
+            stress_tensors=read_stress_tensors(tensors_file),
+            reference_events={
+                pnum: _re_configs(res, tdpa_lut, sm_name, pnum, False) for pnum in paths
+            },
+            fatigue_reference_events={
+                pnum: _re_configs(fat_res, tdpa_fat_lut, sm_name, pnum, True)
+                for pnum in paths
+            },
+        )
 
     return configs

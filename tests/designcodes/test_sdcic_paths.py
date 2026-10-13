@@ -35,15 +35,16 @@ def material_ss316():
 # Fixture for a real ReferenceEvent from path_stresses.csv and path_config_recomb.xlsx using from_recombination
 @pytest.fixture
 def ref_event() -> ReferenceEvent:
-    from cassy.paths.paths_config import parse_cfg_files
+    from pathlib import Path
+
+    from cassy.gui.paths_model import build_configs_from_project
     from cassy.paths.submodel import Submodel
+    from tests.helpers import load_project
 
-    # Prepare file paths
-    stress_path = str(RES.joinpath("stress"))
-    config_folder = str(RES.joinpath("conf"))
-
-    # Parse the configuration as in production
-    configs = parse_cfg_files(config_folder, stress_path)
+    project = load_project(
+        Path(res.__file__).parent / "conf" / "path_config_recomb.json"
+    )
+    configs = build_configs_from_project(project)
     # Use the first submodel in the config
     submodel_name, conf = next(iter(configs.items()))
     # Use a dummy material library (not used for ReferenceEvent creation)

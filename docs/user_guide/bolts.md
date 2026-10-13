@@ -31,6 +31,9 @@ python -m cassy --boltsgui
 The GUI will open on the *General* Tab where the main run options can be set:
 
 * **Fatigue assessment**, controls if the fatigue assessment is performed or not
+* **Generate Word recap**, if unchecked only the Excel results are written (faster)
+* **Merge repeated cells in Word tables**, makes the Word tables more readable but is slower
+* **Assess only bolts (skip inserts)**, skip the assessment of the base material threads
 * **Additional materials folder**, allows the user to point to folder that can contain additional material files that are not included in CASSY default library. These must be in yaml format, see [materials](materials).
 * **Output root folder**, browse to a destination folder where to output all CASSY results
 
@@ -70,10 +73,14 @@ can be built. For each reference event, the following data is specified:
     the assessment, it will only be used in reporting.
 * **Concatenated Event**, description of the event, it is not mandatory for 
     the assessment, it will only be used in reporting.
-* **Primary Action**, pointer to the combined primary loads actions. These must be consistent with the columns *analysis* and *loadstep* of the actions .csv files. `<loadstep>` can be
-a single loadstep or a linear combination (e.g. '4-3+2').
-* **All**, pointer to the combined all loads actions. These must be consistent with the columns *analysis* and *loadstep* of the actions .csv files. `<loadstep>` can be
-a single loadstep or a linear combination (e.g. '4-3+2').
+* **Primary Action**, linear combination of actions giving the primary loads (see [load combinations](#load-combinations)).
+* **All Loads Action**, linear combination of actions giving all loads (see [load combinations](#load-combinations)).
+
+### Load combinations
+Each action is defined as a list of terms, added with the `+ Add term` button. Every term
+requires a sign (`+` or `-`), an **analysis** and a **step**, which must match the *analysis* and
+*loadstep* columns of the actions .csv file. Terms can come from different analyses, e.g.
+`+ X:1` and `- Y:5` computes step 1 of analysis X minus step 5 of analysis Y.
 
 ## Fat. Ref. Event tab
 Similarly to what is done for regular reference events, fatigue ones also have to be defined:
@@ -90,12 +97,10 @@ Similarly to what is done for regular reference events, fatigue ones also have t
     the assessment, it will only be used in reporting.
 * **N cycles**, number of cycles to be considered for the specific
     load combination.
-* **Delta sigma+**, **Delta sigma-**, pointer to the combined cyclic loads that compose the delta of the actions. These must be consistent with the columns *analysis*
-and *loadstep* of the actions .csv files. The result cyclic actions will be computed as
-`sigma+` - `sigma-`.
-* **Sigma sustained**, pointer to the combined primary loads actions.
-These must be consistent with the columns *analysis*
-and *loadstep* of the actions .csv files.
+* **Delta sigma+**, **Delta sigma-**, the [load combinations](#load-combinations) that compose
+the delta of the actions. The resulting cyclic actions are computed as `sigma+` - `sigma-`.
+* **Sigma sustained**, optional [load combination](#load-combinations) giving the sustained
+primary actions.
 
 ## T & DPA Tab
 For each combination of Reference Event, submodel and bolt, a temperature and DPA value must 

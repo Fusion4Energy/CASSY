@@ -44,6 +44,7 @@ from cassy.gui.bolts_gui import (
     _build_bolts_from_project,
     _fresh_project,
 )
+from cassy.gui.common import LoadTermsEditor
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +101,10 @@ def _geom_insert(base_name: str = "M8") -> dict:
     }
 
 
+def _term(analysis: str = "Inertial", step: int = 1, sign: str = "+") -> dict:
+    return {"sign": sign, "analysis": analysis, "step": step}
+
+
 def _re_dict(re_id: str = "RE-01") -> dict:
     return {
         "re_id": re_id,
@@ -108,10 +113,8 @@ def _re_dict(re_id: str = "RE-01") -> dict:
         "oc": "Normal",
         "ie": "N/A",
         "ce": "N/A",
-        "primary_analysis": "Inertial",
-        "primary_loadstep": "1",
-        "all_analysis": "Inertial",
-        "all_loadstep": "1",
+        "primary": [_term()],
+        "all_loads": [_term()],
     }
 
 
@@ -124,12 +127,9 @@ def _fat_re_dict(re_id: str = "FRE-01") -> dict:
         "ie": "N/A",
         "ce": "N/A",
         "n_cycles": 100,
-        "ds_plus_analysis": "Inertial",
-        "ds_plus_loadstep": "1",
-        "ds_minus_analysis": "Inertial",
-        "ds_minus_loadstep": "2",
-        "sigma_sus_analysis": "",
-        "sigma_sus_loadstep": "",
+        "ds_plus": [_term(step=1)],
+        "ds_minus": [_term(step=2)],
+        "sigma_sus": [],
     }
 
 
@@ -443,15 +443,7 @@ class TestBoltSpecDialogCollect:
 
 
 class TestBoltREDialogCollect:
-    def _make(
-        self,
-        root,
-        re_id="RE-01",
-        pri_ana="Inertial",
-        pri_ls="1",
-        all_ana="Inertial",
-        all_ls="1",
-    ):
+    def _make(self, root, re_id="RE-01", primary=None, all_loads=None):
         dlg = object.__new__(BoltREDialog)
         dlg._ex = {}
         dlg._re_id = tk.StringVar(root, value=re_id)
@@ -460,21 +452,20 @@ class TestBoltREDialogCollect:
         dlg._oc = tk.StringVar(root, value="Normal")
         dlg._ie = tk.StringVar(root, value="N/A")
         dlg._ce = tk.StringVar(root, value="N/A")
-        dlg._pri_analysis = tk.StringVar(root, value=pri_ana)
-        dlg._pri_loadstep = tk.StringVar(root, value=pri_ls)
-        dlg._all_analysis = tk.StringVar(root, value=all_ana)
-        dlg._all_loadstep = tk.StringVar(root, value=all_ls)
+        dlg._primary = LoadTermsEditor(root, [], primary or [_term()])
+        dlg._all_loads = LoadTermsEditor(root, [], all_loads or [_term()])
         return dlg
 
     def test_collect_valid(self, root):
-        dlg = self._make(root)
+        cross = [_term("X", 1), _term("Y", 5, sign="-")]
+        dlg = self._make(root, all_loads=cross)
         result = dlg._collect()
         assert result is not None
         assert result["re_id"] == "RE-01"
         assert "temp" not in result
         assert "dpa" not in result
-        assert result["primary_analysis"] == "Inertial"
-        assert result["primary_loadstep"] == "1"
+        assert result["primary"] == [_term()]
+        assert result["all_loads"] == cross
         assert result["service_lvl"] == "A"
         assert result["load_category"] == "I"
 
@@ -485,8 +476,15 @@ class TestBoltREDialogCollect:
         assert result is None
         mb.showerror.assert_called_once()
 
-    def test_collect_missing_action_fields(self, root):
-        dlg = self._make(root, pri_ana="")
+    def test_collect_missing_analysis(self, root):
+        dlg = self._make(root, primary=[_term(analysis="")])
+        with patch("cassy.gui.bolts_gui.messagebox") as mb:
+            result = dlg._collect()
+        assert result is None
+        mb.showerror.assert_called_once()
+
+    def test_collect_non_integer_step(self, root):
+        dlg = self._make(root, primary=[{"sign": "+", "analysis": "X", "step": "1.5"}])
         with patch("cassy.gui.bolts_gui.messagebox") as mb:
             result = dlg._collect()
         assert result is None
@@ -504,12 +502,9 @@ class TestBoltFatigueREDialogCollect:
         root,
         re_id="FRE-01",
         ncycles="100",
-        ds_plus_ana="Inertial",
-        ds_plus_ls="1",
-        ds_minus_ana="Inertial",
-        ds_minus_ls="2",
-        sus_ana="",
-        sus_ls="",
+        ds_plus=None,
+        ds_minus=None,
+        sigma_sus=None,
     ):
         dlg = object.__new__(BoltFatigueREDialog)
         dlg._ex = {}
@@ -520,12 +515,9 @@ class TestBoltFatigueREDialogCollect:
         dlg._ie = tk.StringVar(root, value="N/A")
         dlg._ce = tk.StringVar(root, value="N/A")
         dlg._ncycles = tk.StringVar(root, value=ncycles)
-        dlg._ds_plus_ana = tk.StringVar(root, value=ds_plus_ana)
-        dlg._ds_plus_ls = tk.StringVar(root, value=ds_plus_ls)
-        dlg._ds_minus_ana = tk.StringVar(root, value=ds_minus_ana)
-        dlg._ds_minus_ls = tk.StringVar(root, value=ds_minus_ls)
-        dlg._sus_ana = tk.StringVar(root, value=sus_ana)
-        dlg._sus_ls = tk.StringVar(root, value=sus_ls)
+        dlg._ds_plus = LoadTermsEditor(root, [], ds_plus or [_term(step=1)])
+        dlg._ds_minus = LoadTermsEditor(root, [], ds_minus or [_term(step=2)])
+        dlg._sigma_sus = LoadTermsEditor(root, [], sigma_sus, required=False)
         return dlg
 
     def test_collect_valid(self, root):
@@ -536,18 +528,14 @@ class TestBoltFatigueREDialogCollect:
         assert "temp" not in result
         assert "dpa" not in result
         assert result["n_cycles"] == 100
-        assert result["ds_plus_analysis"] == "Inertial"
-        assert result["ds_plus_loadstep"] == "1"
-        assert result["ds_minus_analysis"] == "Inertial"
-        assert result["ds_minus_loadstep"] == "2"
-        assert result["sigma_sus_analysis"] == ""
-        assert result["sigma_sus_loadstep"] == ""
+        assert result["ds_plus"] == [_term(step=1)]
+        assert result["ds_minus"] == [_term(step=2)]
+        assert result["sigma_sus"] == []
 
     def test_collect_with_sustained(self, root):
-        dlg = self._make(root, sus_ana="Thermal", sus_ls="3")
+        dlg = self._make(root, sigma_sus=[_term("Thermal", 3)])
         result = dlg._collect()
-        assert result["sigma_sus_analysis"] == "Thermal"
-        assert result["sigma_sus_loadstep"] == "3"
+        assert result["sigma_sus"] == [_term("Thermal", 3)]
 
     def test_collect_missing_re_id(self, root):
         dlg = self._make(root, re_id="")
@@ -564,11 +552,41 @@ class TestBoltFatigueREDialogCollect:
         mb.showerror.assert_called_once()
 
     def test_collect_missing_delta_sigma(self, root):
-        dlg = self._make(root, ds_plus_ana="")
+        dlg = self._make(root, ds_plus=[_term(analysis="")])
         with patch("cassy.gui.bolts_gui.messagebox") as mb:
             result = dlg._collect()
         assert result is None
         mb.showerror.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# 6b. LoadTermsEditor
+# ---------------------------------------------------------------------------
+
+
+class TestLoadTermsEditor:
+    def test_required_starts_with_one_empty_row(self, root):
+        editor = LoadTermsEditor(root, ["X"])
+        assert len(editor._rows) == 1
+        with pytest.raises(ValueError):
+            editor.get()
+
+    def test_add_and_remove_rows(self, root):
+        editor = LoadTermsEditor(root, ["X", "Y"], [_term("X", 1)])
+        editor.add_row(_term("Y", 5, sign="-"))
+        assert editor.get() == [_term("X", 1), _term("Y", 5, sign="-")]
+        editor._remove(editor._rows[0])
+        assert editor.get() == [_term("Y", 5, sign="-")]
+
+    def test_required_rejects_no_rows(self, root):
+        editor = LoadTermsEditor(root, [], [_term()])
+        editor._remove(editor._rows[0])
+        with pytest.raises(ValueError):
+            editor.get()
+
+    def test_optional_allows_no_rows(self, root):
+        editor = LoadTermsEditor(root, [], None, required=False)
+        assert editor.get() == []
 
 
 # ---------------------------------------------------------------------------
@@ -582,12 +600,27 @@ class TestGeneralTab:
         nb = tk.ttk.Notebook(root)
         tab = GeneralTab(nb, proj)
         tab._fatigue.set(True)
+        tab._flags["print_recap"].set(False)
+        tab._flags["merge"].set(False)
+        tab._flags["only_bolts"].set(True)
         tab._matlib.set("/my/libs")
         tab._root_dir.set("/my/output")
         tab.sync()
         assert proj["run_options"]["fatigue"] is True
+        assert proj["run_options"]["print_recap"] is False
+        assert proj["run_options"]["merge"] is False
+        assert proj["run_options"]["only_bolts"] is True
         assert proj["run_options"]["matlib_path"] == "/my/libs"
         assert proj["run_options"]["root_dir"] == "/my/output"
+
+    def test_run_options_default_when_missing(self, root):
+        proj = _fresh_project()
+        proj["run_options"] = {"fatigue": False, "matlib_path": "", "root_dir": ""}
+        nb = tk.ttk.Notebook(root)
+        tab = GeneralTab(nb, proj)
+        assert tab._flags["print_recap"].get() is True
+        assert tab._flags["merge"].get() is True
+        assert tab._flags["only_bolts"].get() is False
 
     def test_load_from_project(self, root):
         proj = _fresh_project()
@@ -914,10 +947,9 @@ class TestBoltFatigueREsTab:
         nb = tk.ttk.Notebook(root)
         tab = BoltFatigueREsTab(nb, proj)
         fat_re = _fat_re_dict()
-        fat_re["sigma_sus_analysis"] = "Thermal"
-        fat_re["sigma_sus_loadstep"] = "3"
+        fat_re["sigma_sus"] = [_term("Thermal", 3)]
         vals = tab._row_values(fat_re)
-        assert "Thermal" in vals[6]
+        assert vals[6] == "Thermal:3"
 
     def test_make_dialog_returns_fatigue_dialog(self, root):
         proj = _project()
@@ -1126,8 +1158,7 @@ class TestBuildBoltsFromProject:
         proj = _project()
         proj["run_options"]["fatigue"] = True
         fat_re = _fat_re_dict()
-        fat_re["sigma_sus_analysis"] = ""
-        fat_re["sigma_sus_loadstep"] = ""
+        fat_re["sigma_sus"] = []
         proj["flanges"] = [
             {
                 "name": "F1",

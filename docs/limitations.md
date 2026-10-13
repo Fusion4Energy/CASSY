@@ -14,15 +14,11 @@ Only the following design codes are implemented in cassy for bolts assessments:
 - SDC-IC
 - EN 13445 (only for bolts fatigue)
 
-These are also the name tags that can be used in the excel config files.
-
 ## Paths
 Only the following design codes are implemented in cassy for paths assessments:
 - RCC-MRx
 - RCC-MR
 - SDC-IC
-
-These are also the name tags that can be used in the excel config files.
 
 # Materials
 ## Material properties

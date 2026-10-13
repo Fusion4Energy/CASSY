@@ -1,0 +1,414 @@
+{
+  "run_options": {
+    "fatigue": true,
+    "print_recap": true,
+    "merge": true,
+    "only_bolts": false,
+    "matlib_path": "",
+    "root_dir": ""
+  },
+  "geometries": [
+    {
+      "base_name": "M12",
+      "type": "bolt",
+      "material": "Inconel 718 (non leak tight) SDC-IC",
+      "p": 1.75,
+      "d": 12.0,
+      "dn": 11.73,
+      "d1": 12.0,
+      "df": 12.0,
+      "D": 11.43,
+      "Dp": 13.0,
+      "Dm": 13.7,
+      "Le": 60.0,
+      "H": 6.0,
+      "a": 18.0,
+      "B": 0.0,
+      "C": 0.0,
+      "d_vh": 0.0,
+      "KF": 4.0,
+      "f": 0.15,
+      "f_prime": 0.15
+    },
+    {
+      "base_name": "M12",
+      "type": "insert",
+      "material": "SS316L(N)-IG_SDC-IC",
+      "p": 1.75,
+      "d": 32.0,
+      "dn": 30.0,
+      "df": 32.0,
+      "D": 29.0,
+      "Le": 50.0,
+      "d_vh": 0.0,
+      "f": 0.15
+    }
+  ],
+  "flanges": [
+    {
+      "name": "Flange1",
+      "design_code": "SDC-IC",
+      "actions_file": "actions/Flange1.csv",
+      "bolts_spec": [
+        {
+          "bolt_id": "1",
+          "geom_data": "M12",
+          "preload": 200000.0
+        },
+        {
+          "bolt_id": "2",
+          "geom_data": "M12",
+          "preload": 200000.0
+        }
+      ]
+    }
+  ],
+  "reference_events": [
+    {
+      "re_id": "NOS-I.1",
+      "service_lvl": "A",
+      "load_category": "I",
+      "oc": "NOS",
+      "ie": "-",
+      "ce": "-",
+      "primary": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 1
+        }
+      ],
+      "all_loads": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 1
+        }
+      ]
+    },
+    {
+      "re_id": "NOS-II.1",
+      "service_lvl": "A",
+      "load_category": "II",
+      "oc": "NOS",
+      "ie": "SL1",
+      "ce": "-",
+      "primary": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 2
+        }
+      ],
+      "all_loads": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 2
+        }
+      ]
+    },
+    {
+      "re_id": "NOS-III.1",
+      "service_lvl": "C",
+      "load_category": "III",
+      "oc": "NOS",
+      "ie": "SMHV",
+      "ce": "-",
+      "primary": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 3
+        }
+      ],
+      "all_loads": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 3
+        }
+      ]
+    },
+    {
+      "re_id": "NOS-III.2",
+      "service_lvl": "C",
+      "load_category": "III",
+      "oc": "NOS",
+      "ie": "LOCA",
+      "ce": "-",
+      "primary": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 1
+        }
+      ],
+      "all_loads": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 1
+        }
+      ]
+    },
+    {
+      "re_id": "NOS-IV.1",
+      "service_lvl": "D",
+      "load_category": "IV",
+      "oc": "NOS",
+      "ie": "SL2",
+      "ce": "-",
+      "primary": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 4
+        }
+      ],
+      "all_loads": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 4
+        }
+      ]
+    },
+    {
+      "re_id": "NOS-IV.3",
+      "service_lvl": "D",
+      "load_category": "IV",
+      "oc": "NOS",
+      "ie": "SMHV",
+      "ce": "FIRE",
+      "primary": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 3
+        }
+      ],
+      "all_loads": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 3
+        }
+      ]
+    },
+    {
+      "re_id": "Lift",
+      "service_lvl": "A",
+      "load_category": "I",
+      "oc": "Assembly",
+      "ie": "-",
+      "ce": "-",
+      "primary": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 5
+        }
+      ],
+      "all_loads": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 5
+        }
+      ]
+    }
+  ],
+  "fatigue_reference_events": [
+    {
+      "re_id": "NOS-I.1",
+      "service_lvl": "A",
+      "load_category": "I",
+      "oc": "NOS",
+      "ie": "-",
+      "ce": "-",
+      "n_cycles": 1000,
+      "ds_plus": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 2
+        }
+      ],
+      "ds_minus": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 1
+        }
+      ],
+      "sigma_sus": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 1
+        }
+      ]
+    },
+    {
+      "re_id": "NOS-I.2",
+      "service_lvl": "A",
+      "load_category": "II",
+      "oc": "NOS",
+      "ie": "-",
+      "ce": "-",
+      "n_cycles": 10,
+      "ds_plus": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 4
+        }
+      ],
+      "ds_minus": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 3
+        }
+      ],
+      "sigma_sus": [
+        {
+          "sign": "+",
+          "analysis": "loads",
+          "step": 1
+        }
+      ]
+    }
+  ],
+  "tdpa": [
+    {
+      "flange": "Flange1",
+      "bolt_id": "1",
+      "re_id": "NOS-I.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "1",
+      "re_id": "NOS-II.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "1",
+      "re_id": "NOS-III.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "1",
+      "re_id": "NOS-III.2",
+      "T": 145.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "1",
+      "re_id": "NOS-IV.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "1",
+      "re_id": "NOS-IV.3",
+      "T": 300.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "1",
+      "re_id": "Lift",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "2",
+      "re_id": "NOS-I.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "2",
+      "re_id": "NOS-II.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "2",
+      "re_id": "NOS-III.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "2",
+      "re_id": "NOS-III.2",
+      "T": 145.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "2",
+      "re_id": "NOS-IV.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "2",
+      "re_id": "NOS-IV.3",
+      "T": 300.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "2",
+      "re_id": "Lift",
+      "T": 35.0,
+      "dpa": 0.0
+    }
+  ],
+  "tdpa_fatigue": [
+    {
+      "flange": "Flange1",
+      "bolt_id": "1",
+      "re_id": "NOS-I.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "1",
+      "re_id": "NOS-I.2",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "2",
+      "re_id": "NOS-I.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "flange": "Flange1",
+      "bolt_id": "2",
+      "re_id": "NOS-I.2",
+      "T": 35.0,
+      "dpa": 0.0
+    }
+  ]
+}

@@ -19,7 +19,14 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Callable
 
-from cassy.gui.common import GroupedTableTab, ProjectApp, RunTab, TDPAGridTab
+from cassy.auxiliary.functions import format_terms
+from cassy.gui.common import (
+    GroupedTableTab,
+    LoadTermsEditor,
+    ProjectApp,
+    RunTab,
+    TDPAGridTab,
+)
 from cassy.gui.common import Dialog as _Dialog
 from cassy.gui.common import TableTab as _TableTab
 from cassy.gui.paths_model import (  # noqa: F401  (re-exported)
@@ -39,6 +46,7 @@ from cassy.gui.paths_model import (
 from cassy.gui.paths_model import fresh_project as _fresh_project
 from cassy.gui.paths_model import get_available_analyses as _get_available_analyses
 from cassy.gui.paths_model import get_material_names as _get_material_names
+from cassy.gui.paths_model import migrate_project as _migrate_project
 
 
 # ── Submodel dialog ───────────────────────────────────────────────────────────
@@ -95,53 +103,44 @@ class LoadDialog(_Dialog):
         frm = ttk.LabelFrame(self._body, text="Load definition")
         frm.pack(fill="both")
         self._name = self._entry(frm, "Name *", 0, ex.get("name", ""))
-        if self._analyses:
-            self._analysis = self._combo(
-                frm, "Analysis name *", 1, self._analyses, ex.get("analysis_name", "")
-            )
-        else:
-            self._analysis = self._entry(
-                frm, "Analysis name *", 1, ex.get("analysis_name", "")
-            )
-        self._timestep = self._entry(frm, "Time step *", 2, ex.get("time_step", "1"))
         self._stype = self._combo(
-            frm, "Stress type", 3, STRESS_TYPES, ex.get("stress_type", "P")
+            frm, "Stress type", 1, STRESS_TYPES, ex.get("stress_type", "P")
         )
         self._ltype = self._combo(
-            frm, "Load type", 4, LOAD_TYPES, ex.get("load_type", "Volumetric")
+            frm, "Load type", 2, LOAD_TYPES, ex.get("load_type", "Volumetric")
         )
-        self._unit = self._combo(frm, "Unit", 5, UNITS, ex.get("unit", "Pa"))
-        self._scale = self._entry(frm, "Scale", 6, str(ex.get("scale", 1.0)))
+        self._unit = self._combo(frm, "Unit", 3, UNITS, ex.get("unit", "Pa"))
+        self._scale = self._entry(frm, "Scale", 4, str(ex.get("scale", 1.0)))
         self._spatial = self._combo(
             frm,
             "Spatial recombination",
-            7,
+            5,
             SPATIAL_REC_METHODS,
             ex.get("spatial_rec", "algebraic"),
         )
-        self._is_pd = self._check(frm, "Plasma Disruption?", 8, ex.get("is_pd", False))
-        self._is_cyclic = self._check(frm, "Is Cyclic?", 9, ex.get("is_cyclic", False))
+        self._is_pd = self._check(frm, "Plasma Disruption?", 6, ex.get("is_pd", False))
+        self._is_cyclic = self._check(frm, "Is Cyclic?", 7, ex.get("is_cyclic", False))
         self._is_pressure = self._check(
-            frm, "Is Pressure?", 10, ex.get("is_pressure", False)
+            frm, "Is Pressure?", 8, ex.get("is_pressure", False)
         )
         self._is_short = self._check(
-            frm, "Is Short Overstress?", 11, ex.get("is_short_overstress", False)
+            frm, "Is Short Overstress?", 9, ex.get("is_short_overstress", False)
         )
+
+        steps_frm = ttk.LabelFrame(self._body, text="Time steps *")
+        steps_frm.pack(fill="x", pady=(4, 0))
+        self._steps = LoadTermsEditor(steps_frm, self._analyses, ex.get("steps"))
+        self._steps.pack(fill="x")
 
     def _collect(self) -> dict | None:
         name = self._name.get().strip()
         if not name:
             messagebox.showerror("Validation", "Name is required.", parent=self)
             return None
-        analysis = self._analysis.get().strip()
-        if not analysis:
-            messagebox.showerror(
-                "Validation", "Analysis name is required.", parent=self
-            )
-            return None
-        timestep = self._timestep.get().strip()
-        if not timestep:
-            messagebox.showerror("Validation", "Time step is required.", parent=self)
+        try:
+            steps = self._steps.get()
+        except ValueError as exc:
+            messagebox.showerror("Validation", str(exc), parent=self)
             return None
         try:
             scale = float(self._scale.get())
@@ -150,8 +149,7 @@ class LoadDialog(_Dialog):
             return None
         return {
             "name": name,
-            "analysis_name": analysis,
-            "time_step": timestep,
+            "steps": steps,
             "stress_type": self._stype.get(),
             "load_type": self._ltype.get(),
             "unit": self._unit.get(),
@@ -295,11 +293,20 @@ class GeneralTab(RunTab):
         root_dir = opts["root_dir"]
         fatigue = opts.get("fatigue", False)
         matlib = opts.get("matlib_path") or None
+        print_recap = opts.get("print_recap", True)
+        merge = opts.get("merge", True)
 
         def work() -> None:
             from cassy.runners.run_paths import run_paths
 
-            run_paths(root_dir, fatigue=fatigue, matlib=matlib, configs=configs)
+            run_paths(
+                root_dir,
+                configs,
+                fatigue=fatigue,
+                matlib=matlib,
+                print_recap=print_recap,
+                merge=merge,
+            )
 
         return work
 
@@ -391,8 +398,7 @@ class LoadsTab(_TableTab):
     _ITEM_NAME = "load"
     _COLUMNS = (
         "name",
-        "analysis",
-        "timestep",
+        "steps",
         "stress_type",
         "load_type",
         "unit",
@@ -405,8 +411,7 @@ class LoadsTab(_TableTab):
     )
     _HEADINGS = {
         "name": "Name",
-        "analysis": "Analysis",
-        "timestep": "Time Step",
+        "steps": "Time Steps",
         "stress_type": "Stress Type",
         "load_type": "Load Type",
         "unit": "Unit",
@@ -422,8 +427,7 @@ class LoadsTab(_TableTab):
     def _row_values(self, item: dict) -> tuple:
         return (
             item["name"],
-            item["analysis_name"],
-            item["time_step"],
+            format_terms(item.get("steps", [])),
             item["stress_type"],
             item["load_type"],
             item["unit"],
@@ -656,6 +660,10 @@ class PathsGUI(ProjectApp):
     @staticmethod
     def _fresh_project() -> dict:
         return _fresh_project()
+
+    @staticmethod
+    def _migrate_project(project: dict) -> dict:
+        return _migrate_project(project)
 
     def _build_tabs(self) -> None:
         self._tab_general = GeneralTab(self._nb, self._project)

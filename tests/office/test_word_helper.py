@@ -6,7 +6,7 @@ from cassy.additional_data import templates
 from cassy.bolts.bolt_assess import FlangeAssessment
 from cassy.designcodes.sdcic_bolts import SDC_IC_Bolts
 from cassy.office.word_helper import WordOutput
-from tests.bolts.test_bolt_assess import flange_assessment, geometries
+from tests.bolts.test_bolt_assess import flange_assessment
 from tests.office import res
 
 RESOURCES = files(res)
@@ -38,8 +38,8 @@ class TestWordOutput:
         tag: str,
     ):
         flange_assessment.assess()
-        input_df = flange_assessment.bolt_results[1][tag]
-        banner = flange_assessment.compute_banner(1, complete=complete)
+        input_df = flange_assessment.bolt_results["1"][tag]
+        banner = flange_assessment.compute_banner("1", complete=complete)
         # Add the input table to the Word document
         word_output.add_table(banner, input_df, table_type, "Test Input Table")
         # Save the document for inspection
@@ -53,8 +53,8 @@ class TestWordOutput:
     ):
         flange_assessment.config.code = SDC_IC_Bolts()
         flange_assessment.assess()
-        fatigue_df = flange_assessment.bolt_results[1]["Fatigue"]
-        banner = flange_assessment.compute_banner(1, complete=True)
+        fatigue_df = flange_assessment.bolt_results["1"]["Fatigue"]
+        banner = flange_assessment.compute_banner("1", complete=True)
         # Add the fatigue SDCIC table to the Word document
         table = word_output.add_table(
             banner, fatigue_df, "fatigue SDCIC bolts", "Test Fatigue Table", merge=False

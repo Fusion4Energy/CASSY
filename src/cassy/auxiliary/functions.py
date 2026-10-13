@@ -1,6 +1,6 @@
-import logging
+import re
 
-import pandas as pd
+from cassy.auxiliary.types import LoadTerm
 # import xlwings as xw
 
 
@@ -28,8 +28,32 @@ def stripfunc(string: str) -> str:
 #         return False
 
 
-def cleanNA(df: pd.DataFrame, column_id: str = "ID") -> pd.DataFrame:
-    # Drop all rows containing only NaN
-    df.dropna(axis=0, subset=[column_id])
+_LEGACY_TOKEN = re.compile(r"([+-]?)(\d+)")
 
-    return df
+
+def parse_legacy_combination(analysis: str, expr: str | int) -> list[LoadTerm]:
+    """Convert the old (analysis, '4-3+2') notation into LoadTerms.
+
+    Only used to migrate project files saved before per-term analyses existed.
+    """
+    text = str(expr).replace(" ", "")
+    if not text or _LEGACY_TOKEN.sub("", text):
+        raise ValueError(f"Invalid load step combination: {expr!r}")
+    return [
+        LoadTerm(sign or "+", str(analysis), int(step))
+        for sign, step in _LEGACY_TOKEN.findall(text)
+    ]
+
+
+def format_terms(terms: list) -> str:
+    """Readable form of a load combination, e.g. 'X:2 - Y:5'."""
+    parts = []
+    for i, term in enumerate(terms):
+        if isinstance(term, dict):
+            term = LoadTerm.from_dict(term)
+        body = f"{term.analysis}:{term.step}"
+        if i == 0:
+            parts.append(body if term.sign == "+" else f"-{body}")
+        else:
+            parts.append(f"{term.sign} {body}")
+    return " ".join(parts)

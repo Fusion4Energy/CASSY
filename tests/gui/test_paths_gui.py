@@ -44,6 +44,7 @@ from cassy.gui.paths_gui import (
     _fresh_project,
     _get_available_analyses,
 )
+from cassy.gui.common import LoadTermsEditor
 
 RES = Path(__file__).parent / "res"
 
@@ -72,8 +73,7 @@ def _project():
     p["loads"] = [
         {
             "name": "LD1",
-            "analysis_name": "ana1",
-            "time_step": "1",
+            "steps": [{"sign": "+", "analysis": "ana1", "step": 1}],
             "stress_type": "P",
             "load_type": "Volumetric",
             "unit": "Pa",
@@ -245,16 +245,16 @@ class TestLoadDialog:
         self,
         root,
         name="LD1",
-        analysis="ana1",
-        timestep="1",
+        steps=None,
         scale="1.0",
         missing_name=False,
     ):
         dlg = object.__new__(LoadDialog)
         dlg._ex = {}
         dlg._name = tk.StringVar(root, value="" if missing_name else name)
-        dlg._analysis = tk.StringVar(root, value=analysis)
-        dlg._timestep = tk.StringVar(root, value=timestep)
+        dlg._steps = LoadTermsEditor(
+            root, [], steps or [{"sign": "+", "analysis": "ana1", "step": 1}]
+        )
         dlg._stype = tk.StringVar(root, value="P")
         dlg._ltype = tk.StringVar(root, value="Volumetric")
         dlg._unit = tk.StringVar(root, value="Pa")
@@ -271,6 +271,22 @@ class TestLoadDialog:
         result = dlg._collect()
         assert result["name"] == "LD1"
         assert result["scale"] == 1.0
+        assert result["steps"] == [{"sign": "+", "analysis": "ana1", "step": 1}]
+
+    def test_collect_cross_analysis_steps(self, root):
+        steps = [
+            {"sign": "+", "analysis": "X", "step": 1},
+            {"sign": "-", "analysis": "Y", "step": 5},
+        ]
+        result = self._make(root, steps=steps)._collect()
+        assert result["steps"] == steps
+
+    def test_collect_missing_step(self, root):
+        dlg = self._make(root, steps=[{"sign": "+", "analysis": "X", "step": ""}])
+        with patch("cassy.gui.paths_gui.messagebox") as mb:
+            result = dlg._collect()
+        assert result is None
+        mb.showerror.assert_called_once()
 
     def test_collect_missing_name(self, root):
         dlg = self._make(root, missing_name=True)
@@ -329,16 +345,16 @@ class TestGetAvailableAnalyses:
         assert len(result) == len(set(result))
 
     def test_load_dialog_uses_combobox_when_analyses_provided(self, root):
-        """LoadDialog._build() should produce a combobox for _analysis when
-        analyses are provided, so that get() still returns the value correctly."""
+        """LoadDialog._build() should create a term editor offering the analyses."""
         dlg = object.__new__(LoadDialog)
         dlg._ex = {}
         dlg._analyses = ["Inertial", "Thermal"]
         dlg._body = tk.Frame(root)
         dlg._build()
-        # _analysis is a StringVar regardless of widget type; set and read it
-        dlg._analysis.set("Inertial")
-        assert dlg._analysis.get() == "Inertial"
+        _frm, _sign, analysis, step = dlg._steps._rows[0]
+        analysis.set("Inertial")
+        step.set("2")
+        assert dlg._steps.get() == [{"sign": "+", "analysis": "Inertial", "step": 2}]
 
     def test_load_dialog_collect_with_analyses(self, root):
         """_collect() should work correctly when the combobox path is used."""
@@ -346,8 +362,9 @@ class TestGetAvailableAnalyses:
         dlg._ex = {}
         dlg._analyses = ["Inertial", "Thermal"]
         dlg._name = tk.StringVar(root, value="LD_new")
-        dlg._analysis = tk.StringVar(root, value="Inertial")
-        dlg._timestep = tk.StringVar(root, value="2")
+        dlg._steps = LoadTermsEditor(
+            root, dlg._analyses, [{"sign": "+", "analysis": "Inertial", "step": 2}]
+        )
         dlg._stype = tk.StringVar(root, value="P")
         dlg._ltype = tk.StringVar(root, value="Volumetric")
         dlg._unit = tk.StringVar(root, value="Pa")
@@ -359,7 +376,7 @@ class TestGetAvailableAnalyses:
         dlg._is_short = tk.BooleanVar(root, value=False)
         result = dlg._collect()
         assert result is not None
-        assert result["analysis_name"] == "Inertial"
+        assert result["steps"][0]["analysis"] == "Inertial"
         assert result["scale"] == 1.5
 
 
@@ -493,9 +510,13 @@ class TestGeneralTab:
         nb = tk.ttk.Notebook(root)
         tab = GeneralTab(nb, proj)
         tab._fatigue.set(True)
+        tab._flags["merge"].set(False)
         tab._matlib.set("/some/path")
         tab.sync()
         assert proj["run_options"]["fatigue"] is True
+        assert proj["run_options"]["merge"] is False
+        assert proj["run_options"]["print_recap"] is True
+        assert "only_bolts" not in proj["run_options"]
         assert proj["run_options"]["matlib_path"] == "/some/path"
 
     def test_load_from_project(self, root):

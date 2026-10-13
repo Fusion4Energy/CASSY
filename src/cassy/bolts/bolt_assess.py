@@ -95,12 +95,8 @@ class FlangeAssessment:
 
         assessors = {}
         for ref_event in ref_events:
-            primary_actions = self.config.get_actions(
-                boltID, ref_event.primary[0], ref_event.primary[1]
-            )
-            all_actions = self.config.get_actions(
-                boltID, ref_event.all_loads[0], ref_event.all_loads[1]
-            )
+            primary_actions = self.config.get_actions(boltID, ref_event.primary)
+            all_actions = self.config.get_actions(boltID, ref_event.all_loads)
 
             assessor = BoltActionAssessor(
                 f"{boltID}",
@@ -126,21 +122,17 @@ class FlangeAssessment:
 
         assessors = {}
         for ref_event in ref_events:
-            if ref_event.sigma_sustained is None:
+            if not ref_event.sigma_sustained:
                 # If no sustained stress is defined, use the primary actions
                 primary_actions = pd.Series(
                     {"Fx": 0, "Fy": 0, "Fz": 0, "Mx": 0, "My": 0, "Mz": 0}
                 )
             else:
                 primary_actions = self.config.get_actions(
-                    boltID, ref_event.sigma_sustained[0], ref_event.sigma_sustained[1]
+                    boltID, ref_event.sigma_sustained
                 )
-            delta_plus = self.config.get_actions(
-                boltID, ref_event.delta_sigma[0][0], ref_event.delta_sigma[0][1]
-            )
-            delta_minus = self.config.get_actions(
-                boltID, ref_event.delta_sigma[1][0], ref_event.delta_sigma[1][1]
-            )
+            delta_plus = self.config.get_actions(boltID, ref_event.delta_sigma[0])
+            delta_minus = self.config.get_actions(boltID, ref_event.delta_sigma[1])
             all_actions = delta_plus - delta_minus
             assessor = BoltActionAssessor(
                 f"{boltID}",

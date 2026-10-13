@@ -1,0 +1,157 @@
+{
+  "run_options": {
+    "fatigue": true,
+    "print_recap": true,
+    "merge": true,
+    "matlib_path": "",
+    "root_dir": ""
+  },
+  "loads": [
+    {
+      "name": "thermal",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "thermal",
+          "step": 1
+        }
+      ],
+      "stress_type": "Q",
+      "load_type": "Volumetric",
+      "unit": "MPa",
+      "scale": 1.0,
+      "spatial_rec": "algebraic",
+      "is_pd": false,
+      "is_cyclic": true,
+      "is_pressure": false,
+      "is_short_overstress": false
+    },
+    {
+      "name": "pressure",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "pressure",
+          "step": 1
+        }
+      ],
+      "stress_type": "P",
+      "load_type": "Volumetric",
+      "unit": "MPa",
+      "scale": 1.0,
+      "spatial_rec": "algebraic",
+      "is_pd": false,
+      "is_cyclic": false,
+      "is_pressure": true,
+      "is_short_overstress": false
+    }
+  ],
+  "reference_events": [
+    {
+      "re_id": "NOS-I.1",
+      "service_lvl": "A",
+      "loads": [
+        "thermal",
+        "pressure"
+      ],
+      "oc": "NO",
+      "ie": "N/A",
+      "ce": "N/A",
+      "load_ctg": "I",
+      "ncycles": null
+    }
+  ],
+  "fatigue_reference_events": [
+    {
+      "re_id": "NOS-I.1",
+      "service_lvl": "A",
+      "loads": [
+        "thermal",
+        "pressure"
+      ],
+      "oc": "NO",
+      "ie": "N/A",
+      "ce": "N/A",
+      "load_ctg": "I",
+      "ncycles": 20000
+    }
+  ],
+  "submodels": [
+    {
+      "name": "Model_A",
+      "design_code": "RCC-MRx",
+      "tensors_file": "converted_tensors.csv"
+    }
+  ],
+  "paths": {
+    "Model_A": [
+      {
+        "path_num": 1,
+        "material": "SS316L(N)-IG",
+        "ptype": "normal",
+        "welding_n": 1.0,
+        "welding_f": 1.0
+      },
+      {
+        "path_num": 2,
+        "material": "SS316L(N)-IG",
+        "ptype": "normal",
+        "welding_n": 1.0,
+        "welding_f": 1.0
+      },
+      {
+        "path_num": 3,
+        "material": "SS316L(N)-IG",
+        "ptype": "normal",
+        "welding_n": 1.0,
+        "welding_f": 1.0
+      }
+    ]
+  },
+  "tdpa": [
+    {
+      "submodel": "Model_A",
+      "path_num": 1,
+      "re_id": "NOS-I.1",
+      "T": 390.0,
+      "dpa": 0.0
+    },
+    {
+      "submodel": "Model_A",
+      "path_num": 2,
+      "re_id": "NOS-I.1",
+      "T": 397.0,
+      "dpa": 0.0
+    },
+    {
+      "submodel": "Model_A",
+      "path_num": 3,
+      "re_id": "NOS-I.1",
+      "T": 458.0,
+      "dpa": 0.0
+    }
+  ],
+  "tdpa_fatigue": [
+    {
+      "submodel": "Model_A",
+      "path_num": 1,
+      "re_id": "NOS-I.1",
+      "T": 390.0,
+      "dpa": 0.0
+    },
+    {
+      "submodel": "Model_A",
+      "path_num": 2,
+      "re_id": "NOS-I.1",
+      "T": 397.0,
+      "dpa": 0.0
+    },
+    {
+      "submodel": "Model_A",
+      "path_num": 3,
+      "re_id": "NOS-I.1",
+      "T": 458.0,
+      "dpa": 0.0
+    }
+  ]
+}

@@ -1,5 +1,3 @@
-import os
-import re
 from abc import ABC
 from dataclasses import dataclass
 from typing import Optional
@@ -7,10 +5,8 @@ from typing import Optional
 import pandas as pd
 
 from cassy.auxiliary.custom_errors import ConfigError
-from cassy.auxiliary.functions import cleanNA
-from cassy.auxiliary.types import PathLike
+from cassy.auxiliary.types import LoadTerm
 from cassy.designcodes.codes import Code
-from cassy.designcodes.map import BOLT_CODES
 
 
 @dataclass
@@ -89,14 +85,10 @@ class BoltReferenceEvent(Event):
         load category of the event. Either A, C or D.
     service_lvl : str
         service level of the event. Either I, II, III or IV.
-    primary : tuple[str, str]
-        primary actions of the event. The first element is the name of analysis
-        and the second element is the string describing the load steps linear
-        combination.
-    all_loads : tuple[str, str]
-        all actions of the event. The first element is the name of analysis
-        and the second element is the string describing the load steps linear
-        combination.
+    primary : list[LoadTerm]
+        linear combination of load steps giving the primary actions.
+    all_loads : list[LoadTerm]
+        linear combination of load steps giving all actions.
 
     Raises
     ------
@@ -104,18 +96,8 @@ class BoltReferenceEvent(Event):
         if wrong service level or load category is provided
     """
 
-    primary: tuple[str, str]
-    all_loads: tuple[str, str]
-
-    def __post_init__(self):
-        super().__post_init__()
-        # check that both primary and all_loads are of size 2
-        for item in [self.primary, self.all_loads]:
-            if len(item) != 2:
-                raise ConfigError(
-                    f"Actions {item} not allowed. "
-                    f"If building from excel use the notation (analysis, ls1-ls2+ls3)"
-                )
+    primary: list[LoadTerm]
+    all_loads: list[LoadTerm]
 
 
 @dataclass
@@ -143,13 +125,10 @@ class BoltReferenceEventFatigue(Event):
         service level of the event. Either I, II, III or IV.
     n_cycles : int
         number of cycles for the event.
-    delta_sigma : tuple[tuple[str, str], tuple[str, int]]
-        delta sigma of the event. in each tuple, the first element is the name of
-        analysis and the second element is the load step. The difference between the
-        two load steps is the delta sigma.
-    sigma_sustained : tuple[str, str] | None
-        sustained sigma of the event. The first element is the name of the analysis and
-        the second element is the load step.
+    delta_sigma : tuple[list[LoadTerm], list[LoadTerm]]
+        the two load combinations whose difference is the delta sigma (+, -).
+    sigma_sustained : list[LoadTerm] | None
+        load combination giving the sustained sigma of the event.
 
     Raises
     ------
@@ -158,22 +137,8 @@ class BoltReferenceEventFatigue(Event):
     """
 
     n_cycles: int
-    delta_sigma: tuple[tuple[str, str], tuple[str, str]]
-    sigma_sustained: tuple[str, str] | None = None
-
-    def __post_init__(self):
-        super().__post_init__()
-        # check that both delta_sigma and sigma_sustained are of size 2
-        if len(self.delta_sigma[0]) != 2:
-            raise ConfigError(
-                f"Delta sigma {self.delta_sigma} not allowed. "
-                f"If building from excel use the notation analysis_loadstep "
-            )
-        if self.sigma_sustained is not None and len(self.sigma_sustained) != 2:
-            raise ConfigError(
-                f"Sustained sigma {self.sigma_sustained} not allowed. "
-                f"If building from excel use the notation analysis_loadstep "
-            )
+    delta_sigma: tuple[list[LoadTerm], list[LoadTerm]]
+    sigma_sustained: list[LoadTerm] | None = None
 
 
 class FlangeAssessmentConfig:
@@ -216,191 +181,37 @@ class FlangeAssessmentConfig:
         else:
             self.has_insert = False
 
-    @classmethod
-    def from_excel(
-        cls, config_file: PathLike, actions_file: PathLike, fatigue: bool = True
-    ) -> "FlangeAssessmentConfig":
-        """Build a FlangeAssessmentConfig from an excel files and a csv file containing
-        the actions on the bolts.
-
-        Parameters
-        ----------
-        config_file : PathLike
-            path to the excel file containing all the configuration data needed for
-            the assessment of a flange.
-        actions_file : PathLike
-            path to the .csv file containing all the actions on the bolts extracted
-            from FEM.
-        fatigue : bool, optional
-            if True fatigue assesment should also be performed, by default True
-
-        Returns
-        -------
-        FlangeAssessmentConfig
-            An instance of FlangeAssessmentConfig with the provided data.
+    def get_actions(self, bolt_id: str, terms: list[LoadTerm]) -> pd.Series:
         """
-        # --- Build the section actions for the REs ---
-        actions = pd.read_csv(actions_file)
-        actions["boltID"] = actions["boltID"].astype(str)
-        actions.set_index(["boltID", "analysis", "loadstep"], inplace=True)
-        name = os.path.basename(config_file).split(".")[0]
-        additional_data = pd.read_excel(config_file, sheet_name="Additional Data")
-        additional_data = additional_data.set_index("Parameter")["Value"].to_dict()
-        code = BOLT_CODES[additional_data["Code"]]
-
-        bolts_spec = cleanNA(
-            pd.read_excel(config_file, sheet_name="Bolts"), column_id="Bolt ID"
-        ).set_index("Bolt ID")
-
-        # Parse the Reference Events
-        REs_df = cleanNA(pd.read_excel(config_file, sheet_name="REs")).set_index(
-            "Bolt ID"
-        )
-        REs = {}
-        for bolt_id in REs_df.index.unique():
-            re_list = []
-
-            event_data = REs_df.loc[bolt_id]
-            if isinstance(event_data, pd.Series):
-                # If only one row for the bolt ID, convert to DataFrame
-                event_data = event_data.to_frame().T
-
-            for _, row in event_data.iterrows():
-                re = BoltReferenceEvent(
-                    name=row["ID"],
-                    oper_cond=row["Operating Conditions"],
-                    init_event=row["Initiating Event"],
-                    concat_event=row["Concatenated Event"],
-                    temp=float(row["T [°C]"]),
-                    dpa=float(row["DPA"]),
-                    load_category=row["Load Category"],
-                    service_lvl=row["Service Level"],
-                    primary=_convert_str_to_tuple(row["Primary"]),
-                    all_loads=_convert_str_to_tuple(row["All"]),
-                )
-                re_list.append(re)
-            REs[str(bolt_id)] = re_list
-
-        # Parse the Reference Events for fatigue
-        if fatigue:
-            REs_fatigue = {}
-            REs_fatigue_df = cleanNA(
-                pd.read_excel(config_file, sheet_name="REs Fatigue")
-            ).set_index("Bolt ID")
-            for bolt_id in REs_fatigue_df.index.unique():
-                re_fatigue_list = []
-
-                event_data = REs_fatigue_df.loc[bolt_id]
-                if isinstance(event_data, pd.Series):
-                    # If only one row for the bolt ID, convert to DataFrame
-                    event_data = event_data.to_frame().T
-
-                for _, row in event_data.iterrows():
-                    delta_sigma = (
-                        tuple(row["Delta sigma +"].split("_")),
-                        tuple(row["Delta sigma -"].split("_")),
-                    )
-                    if code.name == "RCC-MR (Bolts)":
-                        sustained = None
-                    else:
-                        sustained = tuple(row["Sigma sustained"].split("_"))
-                    re_fatigue = BoltReferenceEventFatigue(
-                        name=row["ID"],
-                        oper_cond=row["Operating Conditions"],
-                        init_event=row["Initiating Event"],
-                        concat_event=row["Concatenated Event"],
-                        temp=float(row["T [°C]"]),
-                        dpa=float(row["DPA"]),
-                        load_category=row["Load Category"],
-                        service_lvl=row["Service Level"],
-                        n_cycles=int(row["Total number of cycles"]),
-                        delta_sigma=delta_sigma,
-                        sigma_sustained=sustained,
-                    )
-                    re_fatigue_list.append(re_fatigue)
-                REs_fatigue[str(bolt_id)] = re_fatigue_list
-
-        else:
-            REs_fatigue = None
-
-        return cls(
-            actions=actions,
-            code=code,
-            bolts_spec=bolts_spec,
-            REs=REs,
-            REs_fatigue=REs_fatigue,
-            name=name,
-        )
-
-    def get_actions(self, bolt_id: str, analysis: str, loadstep: str) -> pd.Series:
-        """
-        Get the primary or all loads actions for a given bolt ID and pointer.
+        Sum the actions on a bolt over a linear combination of load steps.
 
         Parameters
         ----------
         bolt_id : str
             The ID of the bolt.
-        analysis : str
-            The analysis type (e.g., "thermal").
-        loadstep : str
-            The load step (e.g., "1" or a linear combination like ("2-1")).
+        terms : list[LoadTerm]
+            The signed (analysis, load step) terms to combine.
 
         Returns
         -------
         pd.Series
-            The primary actions for the given bolt ID and ref event.
+            The combined actions for the given bolt ID.
         """
-        try:
-            steps = parse_linear_combination(loadstep)
-        except ValueError as e:
-            raise ConfigError(
-                f"Error parsing loadstep '{loadstep}' for bolt {bolt_id} and analysis {analysis}: {e}"
-            )
-        # initialize the series with zero values
+        if not terms:
+            raise ConfigError(f"Empty load combination for bolt {bolt_id}.")
         actions = self.actions.iloc[0].copy()
         actions[:] = 0
 
-        for sign, step in steps:
+        for term in terms:
             try:
-                to_add = self.actions.loc[bolt_id, analysis, step]
+                to_add = self.actions.loc[bolt_id, term.analysis, term.step]
             except KeyError:
                 raise ConfigError(
-                    f"Actions for bolt {bolt_id} with analysis {analysis} and load step {loadstep} not found."
+                    f"Actions for bolt {bolt_id} with analysis {term.analysis} "
+                    f"and load step {term.step} not found."
                 )
-            if sign == "+":
+            if term.sign == "+":
                 actions += to_add
-            elif sign == "-":
+            else:
                 actions -= to_add
         return actions
-
-
-def _convert_str_to_tuple(s: str) -> tuple:
-    """
-    from '(A, B)' to ('A', 'B').
-    """
-    if s.startswith("(") and s.endswith(")"):
-        s = s[1:-1]
-    items = s.split(",")
-    new_items = []
-    for item in items:
-        newitem = item.strip()
-        new_items.append(newitem)
-    return tuple(new_items)
-
-
-TOKENS = re.compile(r"[+-]*\d+")
-
-
-def parse_linear_combination(expr: str) -> list[tuple[str, int]]:
-    # Returns list of (sign, loadstep) tuples, e.g. [('+', 7), ('-', 5), ...]
-    bits = TOKENS.findall(expr.replace(" ", ""))
-    to_combine = []
-    for bit in bits:
-        if bit.startswith(("+", "-")):
-            sign = bit[0]
-            step = int(bit[1:])
-        else:
-            sign = "+"
-            step = int(bit)
-        to_combine.append((sign, step))
-    return to_combine

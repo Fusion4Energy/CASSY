@@ -21,6 +21,9 @@ LOAD_CATEGORIES: list[str] = ["I", "II", "III", "IV"]
 EMPTY_BOLT_PROJECT: dict[str, Any] = {
     "run_options": {
         "fatigue": False,
+        "print_recap": True,
+        "merge": True,
+        "only_bolts": False,
         "matlib_path": "",
         "root_dir": "",
     },
@@ -35,6 +38,37 @@ EMPTY_BOLT_PROJECT: dict[str, Any] = {
 
 def fresh_project() -> dict:
     return copy.deepcopy(EMPTY_BOLT_PROJECT)
+
+
+# (new key, old key prefix) of the load combinations of each RE type
+_COMBINATIONS = {
+    "reference_events": (("primary", "primary"), ("all_loads", "all")),
+    "fatigue_reference_events": (
+        ("ds_plus", "ds_plus"),
+        ("ds_minus", "ds_minus"),
+        ("sigma_sus", "sigma_sus"),
+    ),
+}
+
+
+def migrate_project(project: dict) -> dict:
+    """Upgrade, in place, REs saved with the old *_analysis/*_loadstep fields."""
+    from cassy.auxiliary.functions import parse_legacy_combination
+
+    for key, pairs in _COMBINATIONS.items():
+        for re in project.get(key, []):
+            for new, old in pairs:
+                if new in re:
+                    continue
+                analysis = str(re.pop(f"{old}_analysis", "")).strip()
+                loadstep = str(re.pop(f"{old}_loadstep", "")).strip()
+                terms = (
+                    parse_legacy_combination(analysis, loadstep)
+                    if analysis and loadstep
+                    else []
+                )
+                re[new] = [t.to_dict() for t in terms]
+    return project
 
 
 def get_material_names(matlib_path: str = "") -> list[str]:
@@ -61,35 +95,12 @@ def get_analysis_names(project: dict) -> list[str]:
     return sorted(names)
 
 
-def build_bolts_from_project(project: dict) -> tuple[dict, dict]:
-    """Build ``(configs, geoms)`` from the in-memory project dict.
-
-    Returns
-    -------
-    configs : dict[str, FlangeAssessmentConfig]
-        One entry per flange, keyed by flange name.
-    geoms : dict[str, BoltLikeGeom]
-        Geometry objects keyed by ``"{base_name}_{type}"``
-        (e.g. ``"M8_bolt"``, ``"M8_ins_insert"``).
-    """
-    import pandas as pd
-
-    from cassy.bolts.bolt_config import (
-        BoltReferenceEvent,
-        BoltReferenceEventFatigue,
-        FlangeAssessmentConfig,
-    )
+def build_geometries(entries: list[dict], materials: dict) -> dict:
+    """Build geometry objects keyed by ``"{base_name}_{type}"``."""
     from cassy.bolts.geometry import BoltGeom, InsertGeom
-    from cassy.designcodes.map import BOLT_CODES
-    from cassy.runners.run_common import build_material_library
 
-    matlib = project["run_options"].get("matlib_path") or None
-    materials = build_material_library(matlib)
-    fatigue = project["run_options"].get("fatigue", False)
-
-    # ---- Build geometry objects ----
     geoms: dict = {}
-    for geom_entry in project.get("geometries", []):
+    for geom_entry in entries:
         base_name = geom_entry["base_name"]
         geom_type = geom_entry["type"]
         mat_name = geom_entry["material"]
@@ -129,6 +140,44 @@ def build_bolts_from_project(project: dict) -> tuple[dict, dict]:
             geoms[f"{base_name}_bolt"] = BoltGeom(**kwargs)
         elif geom_type == "insert":
             geoms[f"{base_name}_insert"] = InsertGeom(**kwargs)
+    return geoms
+
+
+def build_bolts_from_project(
+    project: dict, materials: dict | None = None
+) -> tuple[dict, dict]:
+    """Build ``(configs, geoms)`` from the in-memory project dict.
+
+    ``materials`` overrides the library built from ``run_options.matlib_path``.
+
+    Returns
+    -------
+    configs : dict[str, FlangeAssessmentConfig]
+        One entry per flange, keyed by flange name.
+    geoms : dict[str, BoltLikeGeom]
+        Geometry objects keyed by ``"{base_name}_{type}"``
+        (e.g. ``"M8_bolt"``, ``"M8_ins_insert"``).
+    """
+    import pandas as pd
+
+    from cassy.auxiliary.types import LoadTerm
+    from cassy.bolts.bolt_config import (
+        BoltReferenceEvent,
+        BoltReferenceEventFatigue,
+        FlangeAssessmentConfig,
+    )
+    from cassy.designcodes.map import BOLT_CODES
+    from cassy.runners.run_common import build_material_library
+
+    def _terms(items: list[dict]) -> list[LoadTerm]:
+        return [LoadTerm.from_dict(t) for t in items]
+
+    matlib = project["run_options"].get("matlib_path") or None
+    if materials is None:
+        materials = build_material_library(matlib)
+    fatigue = project["run_options"].get("fatigue", False)
+
+    geoms = build_geometries(project.get("geometries", []), materials)
 
     # ---- Build FlangeAssessmentConfig objects ----
     configs: dict = {}
@@ -194,8 +243,8 @@ def build_bolts_from_project(project: dict) -> tuple[dict, dict]:
                     dpa=tdpa_lut.get((flange_name, bid, re["re_id"]), (0.0, 0.0))[1],
                     load_category=re.get("load_category", "I"),
                     service_lvl=re.get("service_lvl", "A"),
-                    primary=(re["primary_analysis"], re["primary_loadstep"]),
-                    all_loads=(re["all_analysis"], re["all_loadstep"]),
+                    primary=_terms(re["primary"]),
+                    all_loads=_terms(re["all_loads"]),
                 )
                 for re in shared_res
             ]
@@ -217,9 +266,7 @@ def build_bolts_from_project(project: dict) -> tuple[dict, dict]:
                 bid = str(bolt_entry["bolt_id"])
                 bolt_fat_re_list = []
                 for re in shared_fat_res:
-                    sus_ana = re.get("sigma_sus_analysis", "")
-                    sus_ls = re.get("sigma_sus_loadstep", "")
-                    sigma_sus = (sus_ana, sus_ls) if (sus_ana and sus_ls) else None
+                    sigma_sus = _terms(re.get("sigma_sus", [])) or None
                     T_fat, dpa_fat = tdpa_fat_lut.get(
                         (flange_name, bid, re["re_id"]), (0.0, 0.0)
                     )
@@ -235,8 +282,8 @@ def build_bolts_from_project(project: dict) -> tuple[dict, dict]:
                             service_lvl=re.get("service_lvl", "A"),
                             n_cycles=int(re["n_cycles"]),
                             delta_sigma=(
-                                (re["ds_plus_analysis"], re["ds_plus_loadstep"]),
-                                (re["ds_minus_analysis"], re["ds_minus_loadstep"]),
+                                _terms(re["ds_plus"]),
+                                _terms(re["ds_minus"]),
                             ),
                             sigma_sustained=sigma_sus,
                         )
