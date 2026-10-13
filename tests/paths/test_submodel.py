@@ -9,21 +9,29 @@ from cassy.designcodes.codes import Code
 from cassy.designcodes.rccmr import RCC_MR
 from cassy.designcodes.rccmrx import RCC_MRx
 from cassy.designcodes.sdcic import SDC_IC
-from cassy.paths.paths_config import Configuration
 from cassy.general.material import Material
+from cassy.gui.paths_model import build_configs_from_project
+from cassy.paths.paths_config import Configuration
 from cassy.paths.submodel import Submodel
+from tests.helpers import load_project
 from tests.paths import res
 
 # Add path to material files
 RES = files(materials)
+RES_DIR = Path(res.__file__).parent
+
+
+def _config(name: str, tensors_file: Path | None = None) -> Configuration:
+    project = load_project(RES_DIR / name)
+    if tensors_file is not None:
+        project["submodels"][0]["tensors_file"] = str(tensors_file)
+    return build_configs_from_project(project)["Model_A"]
 
 
 class TestSubmodel:
     @pytest.fixture
     def submodel(self) -> Submodel:
-        with as_file(files(res).joinpath("submodel.xlsx")) as file:
-            with as_file(files(res).joinpath("submodel_tensors.csv")) as tensors_file:
-                config = Configuration("Model_A", file, tensors_file)
+        config = _config("submodel.json")
         with as_file(RES.joinpath("SS316L(N)-IG_SDC-IC.yaml")) as mat_path:
             steel = Material(mat_path)
 
@@ -41,9 +49,7 @@ class TestSubmodel:
         submodel.assess(code, fatigue=True)
 
     def test_assess_stress_fatigue(self):
-        with as_file(files(res).joinpath("submodel.xlsx")) as file:
-            with as_file(files(res).joinpath("submodel_tensors.csv")) as tensors_file:
-                config = Configuration("Model_A", file, tensors_file)
+        config = _config("submodel.json")
         with as_file(RES.joinpath("XM-19 SS_SDC-IC.yaml")) as mat_path:
             xm = Material(mat_path)
 
@@ -163,8 +169,7 @@ class TestSubmodel:
         converted_df.to_csv(converted_file, index=False)
 
         # read the configuration file
-        with as_file(files(res).joinpath("2E22GB/config.xlsx")) as config_file:
-            config = Configuration("Model_A", config_file, converted_file)
+        config = _config("2E22GB/config.json", converted_file)
 
         with as_file(RES.joinpath("SS316L(N)-IG_RCC-MRx.yaml")) as mat_path:
             steel = Material(mat_path)

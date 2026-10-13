@@ -24,6 +24,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Callable
 
+from cassy.auxiliary.functions import format_terms
 from cassy.gui.bolts_model import (  # noqa: F401  (re-exported)
     BOLT_DESIGN_CODES,
     EMPTY_BOLT_PROJECT,
@@ -34,7 +35,15 @@ from cassy.gui.bolts_model import build_bolts_from_project as _build_bolts_from_
 from cassy.gui.bolts_model import fresh_project as _fresh_project
 from cassy.gui.bolts_model import get_analysis_names as _get_analysis_names
 from cassy.gui.bolts_model import get_material_names as _get_material_names
-from cassy.gui.common import BG, GroupedTableTab, ProjectApp, RunTab, TDPAGridTab
+from cassy.gui.bolts_model import migrate_project as _migrate_project
+from cassy.gui.common import (
+    BG,
+    GroupedTableTab,
+    LoadTermsEditor,
+    ProjectApp,
+    RunTab,
+    TDPAGridTab,
+)
 from cassy.gui.common import Dialog as _Dialog
 from cassy.gui.common import TableTab as _TableTab
 
@@ -490,7 +499,6 @@ class BoltREDialog(_Dialog):
         super().__init__(parent, "Add / Edit Reference Event")
 
     def _configure_window(self) -> None:
-        self.geometry("420x500")
         self.resizable(False, True)
 
     def _build(self) -> None:
@@ -509,37 +517,26 @@ class BoltREDialog(_Dialog):
         self._ie = self._entry(frm, "Initiating Event", 4, ex.get("ie", "N/A"))
         self._ce = self._entry(frm, "Concatenated Event", 5, ex.get("ce", "N/A"))
 
-        pri_frm = ttk.LabelFrame(self._body, text="Primary Action")
+        pri_frm = ttk.LabelFrame(self._body, text="Primary Action *")
         pri_frm.pack(fill="x", pady=(4, 0))
-        self._pri_analysis = self._analysis_field(
-            pri_frm, "Analysis *", 0, self._analyses, ex.get("primary_analysis", "")
-        )
-        self._pri_loadstep = self._entry(
-            pri_frm, "Loadstep *", 1, ex.get("primary_loadstep", "")
-        )
+        self._primary = LoadTermsEditor(pri_frm, self._analyses, ex.get("primary"))
+        self._primary.pack(fill="x")
 
-        all_frm = ttk.LabelFrame(self._body, text="All Loads Action")
+        all_frm = ttk.LabelFrame(self._body, text="All Loads Action *")
         all_frm.pack(fill="x", pady=(4, 0))
-        self._all_analysis = self._analysis_field(
-            all_frm, "Analysis *", 0, self._analyses, ex.get("all_analysis", "")
-        )
-        self._all_loadstep = self._entry(
-            all_frm, "Loadstep *", 1, ex.get("all_loadstep", "")
-        )
+        self._all_loads = LoadTermsEditor(all_frm, self._analyses, ex.get("all_loads"))
+        self._all_loads.pack(fill="x")
 
     def _collect(self) -> dict | None:
         re_id = self._re_id.get().strip()
         if not re_id:
             messagebox.showerror("Validation", "RE ID is required.", parent=self)
             return None
-        pri_ana = self._pri_analysis.get().strip()
-        pri_ls = self._pri_loadstep.get().strip()
-        all_ana = self._all_analysis.get().strip()
-        all_ls = self._all_loadstep.get().strip()
-        if not (pri_ana and pri_ls and all_ana and all_ls):
-            messagebox.showerror(
-                "Validation", "All action fields are required.", parent=self
-            )
+        try:
+            primary = self._primary.get()
+            all_loads = self._all_loads.get()
+        except ValueError as exc:
+            messagebox.showerror("Validation", str(exc), parent=self)
             return None
         return {
             "re_id": re_id,
@@ -548,10 +545,8 @@ class BoltREDialog(_Dialog):
             "oc": self._oc.get().strip(),
             "ie": self._ie.get().strip(),
             "ce": self._ce.get().strip(),
-            "primary_analysis": pri_ana,
-            "primary_loadstep": pri_ls,
-            "all_analysis": all_ana,
-            "all_loadstep": all_ls,
+            "primary": primary,
+            "all_loads": all_loads,
         }
 
 
@@ -572,7 +567,6 @@ class BoltFatigueREDialog(_Dialog):
         super().__init__(parent, "Add / Edit Fatigue Reference Event")
 
     def _configure_window(self) -> None:
-        self.geometry("420x580")
         self.resizable(False, True)
 
     def _build(self) -> None:
@@ -592,45 +586,24 @@ class BoltFatigueREDialog(_Dialog):
         self._ce = self._entry(frm, "Concatenated Event", 5, ex.get("ce", "N/A"))
         self._ncycles = self._entry(frm, "N cycles *", 6, str(ex.get("n_cycles", "")))
 
-        ds_plus_frm = ttk.LabelFrame(
-            self._body, text="Delta Sigma + (analysis, loadstep)"
-        )
+        ds_plus_frm = ttk.LabelFrame(self._body, text="Delta Sigma + *")
         ds_plus_frm.pack(fill="x", pady=(4, 0))
-        self._ds_plus_ana = self._analysis_field(
-            ds_plus_frm, "Analysis *", 0, self._analyses, ex.get("ds_plus_analysis", "")
-        )
-        self._ds_plus_ls = self._entry(
-            ds_plus_frm, "Loadstep *", 1, ex.get("ds_plus_loadstep", "")
-        )
+        self._ds_plus = LoadTermsEditor(ds_plus_frm, self._analyses, ex.get("ds_plus"))
+        self._ds_plus.pack(fill="x")
 
-        ds_minus_frm = ttk.LabelFrame(
-            self._body, text="Delta Sigma − (analysis, loadstep)"
-        )
+        ds_minus_frm = ttk.LabelFrame(self._body, text="Delta Sigma − *")
         ds_minus_frm.pack(fill="x", pady=(4, 0))
-        self._ds_minus_ana = self._analysis_field(
-            ds_minus_frm,
-            "Analysis *",
-            0,
-            self._analyses,
-            ex.get("ds_minus_analysis", ""),
+        self._ds_minus = LoadTermsEditor(
+            ds_minus_frm, self._analyses, ex.get("ds_minus")
         )
-        self._ds_minus_ls = self._entry(
-            ds_minus_frm, "Loadstep *", 1, ex.get("ds_minus_loadstep", "")
-        )
+        self._ds_minus.pack(fill="x")
 
         sus_frm = ttk.LabelFrame(self._body, text="Sigma Sustained (optional)")
         sus_frm.pack(fill="x", pady=(4, 0))
-        self._sus_ana = self._analysis_field(
-            sus_frm,
-            "Analysis",
-            0,
-            self._analyses,
-            ex.get("sigma_sus_analysis", ""),
-            optional=True,
+        self._sigma_sus = LoadTermsEditor(
+            sus_frm, self._analyses, ex.get("sigma_sus"), required=False
         )
-        self._sus_ls = self._entry(
-            sus_frm, "Loadstep", 1, ex.get("sigma_sus_loadstep", "")
-        )
+        self._sigma_sus.pack(fill="x")
 
     def _collect(self) -> dict | None:
         re_id = self._re_id.get().strip()
@@ -643,17 +616,13 @@ class BoltFatigueREDialog(_Dialog):
                 "Validation", "N cycles must be a positive integer.", parent=self
             )
             return None
-        ds_plus_ana = self._ds_plus_ana.get().strip()
-        ds_plus_ls = self._ds_plus_ls.get().strip()
-        ds_minus_ana = self._ds_minus_ana.get().strip()
-        ds_minus_ls = self._ds_minus_ls.get().strip()
-        if not (ds_plus_ana and ds_plus_ls and ds_minus_ana and ds_minus_ls):
-            messagebox.showerror(
-                "Validation", "All delta sigma fields are required.", parent=self
-            )
+        try:
+            ds_plus = self._ds_plus.get()
+            ds_minus = self._ds_minus.get()
+            sigma_sus = self._sigma_sus.get()
+        except ValueError as exc:
+            messagebox.showerror("Validation", str(exc), parent=self)
             return None
-        sus_ana = self._sus_ana.get().strip()
-        sus_ls = self._sus_ls.get().strip()
         return {
             "re_id": re_id,
             "service_lvl": self._svc.get(),
@@ -662,12 +631,9 @@ class BoltFatigueREDialog(_Dialog):
             "ie": self._ie.get().strip(),
             "ce": self._ce.get().strip(),
             "n_cycles": int(ncycles_raw),
-            "ds_plus_analysis": ds_plus_ana,
-            "ds_plus_loadstep": ds_plus_ls,
-            "ds_minus_analysis": ds_minus_ana,
-            "ds_minus_loadstep": ds_minus_ls,
-            "sigma_sus_analysis": sus_ana,
-            "sigma_sus_loadstep": sus_ls,
+            "ds_plus": ds_plus,
+            "ds_minus": ds_minus,
+            "sigma_sus": sigma_sus,
         }
 
 
@@ -677,16 +643,27 @@ class BoltFatigueREDialog(_Dialog):
 class GeneralTab(RunTab):
     _RUN_LABEL = "Run Bolts Assessment"
     _REQUIRED = ("flanges", "No flanges", "Define at least one flange first.")
+    _BOOL_OPTIONS = RunTab._BOOL_OPTIONS + (
+        ("only_bolts", "Assess only bolts (skip inserts)", False),
+    )
 
     def _prepare(self) -> Callable[[], None]:
         configs, geoms = _build_bolts_from_project(self._project)
-        root_dir = self._project["run_options"]["root_dir"]
-        fatigue = self._project["run_options"].get("fatigue", False)
+        opts = self._project["run_options"]
+        root_dir = opts["root_dir"]
 
         def work() -> None:
             from cassy.runners.run_bolts import run_bolts
 
-            run_bolts(root_dir, fatigue=fatigue, geoms=geoms, config_dict=configs)
+            run_bolts(
+                root_dir,
+                configs,
+                geoms,
+                fatigue=opts.get("fatigue", False),
+                print_recap=opts.get("print_recap", True),
+                merge=opts.get("merge", True),
+                only_bolts=opts.get("only_bolts", False),
+            )
 
         return work
 
@@ -1084,10 +1061,6 @@ class BoltREsTab(_TableTab):
         return self._project[self._RE_KEY]
 
     def _row_values(self, item: dict) -> tuple:
-        primary = (
-            f"({item.get('primary_analysis', '')}, {item.get('primary_loadstep', '')})"
-        )
-        all_ld = f"({item.get('all_analysis', '')}, {item.get('all_loadstep', '')})"
         return (
             item["re_id"],
             item.get("service_lvl", ""),
@@ -1095,8 +1068,8 @@ class BoltREsTab(_TableTab):
             item.get("oc", ""),
             item.get("ie", ""),
             item.get("ce", ""),
-            primary,
-            all_ld,
+            format_terms(item.get("primary", [])),
+            format_terms(item.get("all_loads", [])),
         )
 
     def _make_dialog(self, parent: tk.Widget, existing: dict | None = None) -> _Dialog:
@@ -1160,21 +1133,14 @@ class BoltFatigueREsTab(BoltREsTab):
         )
 
     def _row_values(self, item: dict) -> tuple:
-        ds_plus = (
-            f"({item.get('ds_plus_analysis', '')}, {item.get('ds_plus_loadstep', '')})"
-        )
-        ds_minus = f"({item.get('ds_minus_analysis', '')}, {item.get('ds_minus_loadstep', '')})"
-        sus_ana = item.get("sigma_sus_analysis", "")
-        sus_ls = item.get("sigma_sus_loadstep", "")
-        sigma_sus = f"({sus_ana}, {sus_ls})" if sus_ana else "N/A"
         return (
             item["re_id"],
             item.get("service_lvl", ""),
             item.get("load_category", ""),
             item.get("n_cycles", ""),
-            ds_plus,
-            ds_minus,
-            sigma_sus,
+            format_terms(item.get("ds_plus", [])),
+            format_terms(item.get("ds_minus", [])),
+            format_terms(item.get("sigma_sus", [])) or "N/A",
         )
 
 
@@ -1217,6 +1183,10 @@ class BoltsGUI(ProjectApp):
     @staticmethod
     def _fresh_project() -> dict:
         return _fresh_project()
+
+    @staticmethod
+    def _migrate_project(project: dict) -> dict:
+        return _migrate_project(project)
 
     def _build_tabs(self) -> None:
         self._tab_general = GeneralTab(self._nb, self._project)

@@ -25,8 +25,8 @@ see [Bolts assessment](bolts) for further details.
 
     The GUIs are in beta! Expect (and report) bugs
 
-!!! warning
+!!! note
 
-    Old excel configuration files and command line execution is still supported but undocumented as
-    it is being phased out. It is stringly recommended to switch to the new GUI/json configuration
-    As the support for legacy excels may be dropped in the future.
+    Excel configuration files and command line execution are no longer supported. Assessments are
+    configured in the GUIs and saved as .json project files. Project files saved by older versions
+    of the GUIs are upgraded automatically when opened.

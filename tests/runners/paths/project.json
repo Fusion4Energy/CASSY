@@ -1,0 +1,221 @@
+{
+  "run_options": {
+    "fatigue": true,
+    "print_recap": true,
+    "merge": true,
+    "matlib_path": "",
+    "root_dir": ""
+  },
+  "loads": [
+    {
+      "name": "ThermalNO",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "Thermal",
+          "step": 1
+        }
+      ],
+      "stress_type": "Q",
+      "load_type": "Volumetric",
+      "unit": "MPa",
+      "scale": 1.0,
+      "spatial_rec": "algebraic",
+      "is_pd": false,
+      "is_cyclic": true,
+      "is_pressure": false,
+      "is_short_overstress": false
+    },
+    {
+      "name": "SustainedLoads",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "Sustained",
+          "step": 1
+        }
+      ],
+      "stress_type": "P",
+      "load_type": "Volumetric",
+      "unit": "MPa",
+      "scale": 1.0,
+      "spatial_rec": "algebraic",
+      "is_pd": false,
+      "is_cyclic": false,
+      "is_pressure": true,
+      "is_short_overstress": false
+    },
+    {
+      "name": "SL1 X",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "Inertial",
+          "step": 1
+        }
+      ],
+      "stress_type": "P",
+      "load_type": "Inertial",
+      "unit": "MPa",
+      "scale": 0.33,
+      "spatial_rec": "srss",
+      "is_pd": false,
+      "is_cyclic": true,
+      "is_pressure": false,
+      "is_short_overstress": true
+    },
+    {
+      "name": "SL1 Y",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "Inertial",
+          "step": 2
+        }
+      ],
+      "stress_type": "P",
+      "load_type": "Inertial",
+      "unit": "MPa",
+      "scale": 0.33,
+      "spatial_rec": "srss",
+      "is_pd": false,
+      "is_cyclic": true,
+      "is_pressure": false,
+      "is_short_overstress": true
+    },
+    {
+      "name": "SL1 Z",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "Inertial",
+          "step": 3
+        }
+      ],
+      "stress_type": "P",
+      "load_type": "Inertial",
+      "unit": "MPa",
+      "scale": 0.33,
+      "spatial_rec": "srss",
+      "is_pd": false,
+      "is_cyclic": true,
+      "is_pressure": false,
+      "is_short_overstress": true
+    }
+  ],
+  "reference_events": [
+    {
+      "re_id": "NOS-I.1",
+      "service_lvl": "A",
+      "loads": [
+        "SustainedLoads"
+      ],
+      "oc": "NO",
+      "ie": "-",
+      "ce": "-",
+      "load_ctg": "I",
+      "ncycles": null
+    },
+    {
+      "re_id": "NOS-II.1",
+      "service_lvl": "A",
+      "loads": [
+        "SustainedLoads",
+        "ThermalNO",
+        "SL1 X",
+        "SL1 Y",
+        "SL1 Z"
+      ],
+      "oc": "NO",
+      "ie": "SL1",
+      "ce": "-",
+      "load_ctg": "II",
+      "ncycles": null
+    }
+  ],
+  "fatigue_reference_events": [
+    {
+      "re_id": "NOS-I.1",
+      "service_lvl": "A",
+      "loads": [
+        "ThermalNO"
+      ],
+      "oc": "NO",
+      "ie": "-",
+      "ce": "-",
+      "load_ctg": "I",
+      "ncycles": 30000
+    }
+  ],
+  "submodels": [
+    {
+      "name": "Model_B",
+      "design_code": "RCC-MRx",
+      "tensors_file": "stresses/Model_B.csv"
+    }
+  ],
+  "paths": {
+    "Model_B": [
+      {
+        "path_num": 1,
+        "material": "SS316L(N)-IG_SDC-IC",
+        "ptype": "normal",
+        "welding_n": 1.0,
+        "welding_f": 1.0
+      },
+      {
+        "path_num": 2,
+        "material": "SS316L(N)-IG_SDC-IC",
+        "ptype": "fillet",
+        "welding_n": 1.0,
+        "welding_f": 1.0
+      }
+    ]
+  },
+  "tdpa": [
+    {
+      "submodel": "Model_B",
+      "path_num": 1,
+      "re_id": "NOS-I.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "submodel": "Model_B",
+      "path_num": 1,
+      "re_id": "NOS-II.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "submodel": "Model_B",
+      "path_num": 2,
+      "re_id": "NOS-I.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "submodel": "Model_B",
+      "path_num": 2,
+      "re_id": "NOS-II.1",
+      "T": 35.0,
+      "dpa": 0.0
+    }
+  ],
+  "tdpa_fatigue": [
+    {
+      "submodel": "Model_B",
+      "path_num": 1,
+      "re_id": "NOS-I.1",
+      "T": 35.0,
+      "dpa": 0.0
+    },
+    {
+      "submodel": "Model_B",
+      "path_num": 2,
+      "re_id": "NOS-I.1",
+      "T": 35.0,
+      "dpa": 0.0
+    }
+  ]
+}

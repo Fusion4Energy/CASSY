@@ -1,10 +1,13 @@
+import json
 from importlib.resources import as_file, files
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from cassy.additional_data import materials as mat_folder
+from cassy.auxiliary.types import LoadTerm
 from cassy.bolts.bolt_config import BoltReferenceEvent, BoltReferenceEventFatigue
 from cassy.bolts.code_assessor import BoltActionAssessor
 from cassy.bolts.geometry import BoltGeom
@@ -19,9 +22,19 @@ from cassy.designcodes.sdcic_bolts import (
     SDC_IC_Bolts,
 )
 from cassy.general.material import Material
+from cassy.gui.bolts_model import build_geometries
 from tests.designcodes import res
 
 RES = files(res)
+
+
+def _bolt_geom(material: Material) -> BoltGeom:
+    entries = json.loads(
+        (Path(res.__file__).parent / "M12_bolt.json").read_text(encoding="utf-8")
+    )
+    return build_geometries(entries, {"Inconel 718 (non leak-tight)": material})[
+        "M12_bolt"
+    ]
 
 
 @pytest.fixture
@@ -39,9 +52,7 @@ def material():
 
 @pytest.fixture
 def assessor(material):
-    materials = {"Inconel 718 (non leak-tight)": material}
-    with as_file(files(res).joinpath("M12_bolt.xlsx")) as path:
-        bolt_geom = BoltGeom.from_excel(path, materials)
+    bolt_geom = _bolt_geom(material)
 
     primary = pd.Series(
         {
@@ -64,16 +75,23 @@ def assessor(material):
         }
     )
     ref_event = BoltReferenceEvent(
-        "test", "op", "init", "concat", 133, 2.5, "II", "A", ("1", "1"), ("2", "2")
+        "test",
+        "op",
+        "init",
+        "concat",
+        133,
+        2.5,
+        "II",
+        "A",
+        [LoadTerm("+", "1", 1)],
+        [LoadTerm("+", "2", 2)],
     )
     return BoltActionAssessor("test", primary, secondary, ref_event, bolt_geom, 1.5e4)
 
 
 @pytest.fixture
 def assessor_fatigue(material):
-    materials = {"Inconel 718 (non leak-tight)": material}
-    with as_file(files(res).joinpath("M12_bolt.xlsx")) as path:
-        bolt_geom = BoltGeom.from_excel(path, materials)
+    bolt_geom = _bolt_geom(material)
 
     primary = pd.Series(
         {
@@ -105,8 +123,8 @@ def assessor_fatigue(material):
         "II",
         "A",
         30000,
-        [("1", "1"), ("1", "1")],
-        ("2", "2"),
+        ([LoadTerm("+", "1", 1)], [LoadTerm("+", "1", 1)]),
+        [LoadTerm("+", "2", 2)],
     )
     return BoltActionAssessor("test", primary, secondary, ref_event, bolt_geom, 2.0e4)
 

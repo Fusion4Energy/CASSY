@@ -1,0 +1,194 @@
+{
+  "run_options": {
+    "fatigue": true,
+    "print_recap": true,
+    "merge": true,
+    "matlib_path": "",
+    "root_dir": ""
+  },
+  "loads": [
+    {
+      "name": "THO",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "THO_",
+          "step": 1
+        }
+      ],
+      "stress_type": "Q",
+      "load_type": "Volumetric",
+      "unit": "Pa",
+      "scale": 1.0,
+      "spatial_rec": "algebraic",
+      "is_pd": false,
+      "is_cyclic": true,
+      "is_pressure": false,
+      "is_short_overstress": false
+    },
+    {
+      "name": "PRET",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "PRET_",
+          "step": 1
+        }
+      ],
+      "stress_type": "Q",
+      "load_type": "Volumetric",
+      "unit": "Pa",
+      "scale": 1.0,
+      "spatial_rec": "algebraic",
+      "is_pd": false,
+      "is_cyclic": false,
+      "is_pressure": true,
+      "is_short_overstress": false
+    },
+    {
+      "name": "PRETTHINTERLAYER",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "PRETTHINTERLAYER_",
+          "step": 1
+        }
+      ],
+      "stress_type": "Q",
+      "load_type": "Volumetric",
+      "unit": "Pa",
+      "scale": 1.0,
+      "spatial_rec": "algebraic",
+      "is_pd": false,
+      "is_cyclic": false,
+      "is_pressure": true,
+      "is_short_overstress": false
+    },
+    {
+      "name": "DW",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "DW_",
+          "step": 1
+        }
+      ],
+      "stress_type": "P",
+      "load_type": "Volumetric",
+      "unit": "Pa",
+      "scale": 1.0,
+      "spatial_rec": "algebraic",
+      "is_pd": false,
+      "is_cyclic": true,
+      "is_pressure": false,
+      "is_short_overstress": true
+    },
+    {
+      "name": "MD",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "MD_",
+          "step": 1
+        }
+      ],
+      "stress_type": "P",
+      "load_type": "Volumetric",
+      "unit": "Pa",
+      "scale": 1.0,
+      "spatial_rec": "algebraic",
+      "is_pd": true,
+      "is_cyclic": true,
+      "is_pressure": false,
+      "is_short_overstress": true
+    },
+    {
+      "name": "SL1THO",
+      "steps": [
+        {
+          "sign": "+",
+          "analysis": "SL1THO_",
+          "step": 1
+        }
+      ],
+      "stress_type": "P",
+      "load_type": "Volumetric",
+      "unit": "Pa",
+      "scale": 1.0,
+      "spatial_rec": "algebraic",
+      "is_pd": false,
+      "is_cyclic": true,
+      "is_pressure": false,
+      "is_short_overstress": true
+    }
+  ],
+  "reference_events": [
+    {
+      "re_id": "DW+THO+MD+SL1",
+      "service_lvl": "A",
+      "loads": [
+        "PRET",
+        "PRETTHINTERLAYER",
+        "DW",
+        "THO",
+        "MD",
+        "SL1THO"
+      ],
+      "oc": "NO",
+      "ie": "SL1",
+      "ce": "MD",
+      "load_ctg": "II",
+      "ncycles": null
+    }
+  ],
+  "fatigue_reference_events": [
+    {
+      "re_id": "DW+THO",
+      "service_lvl": "A",
+      "loads": [
+        "THO"
+      ],
+      "oc": "NO",
+      "ie": "-",
+      "ce": "-",
+      "load_ctg": "I",
+      "ncycles": 30000
+    }
+  ],
+  "submodels": [
+    {
+      "name": "path_config_recomb",
+      "design_code": "SDC-IC",
+      "tensors_file": "../stress/path_config_recomb.csv"
+    }
+  ],
+  "paths": {
+    "path_config_recomb": [
+      {
+        "path_num": 1,
+        "material": "CuCrZr-IG Tr B SDC-IC",
+        "ptype": "normal",
+        "welding_n": 1.0,
+        "welding_f": 1.0
+      }
+    ]
+  },
+  "tdpa": [
+    {
+      "submodel": "path_config_recomb",
+      "path_num": 1,
+      "re_id": "DW+THO+MD+SL1",
+      "T": 119.0,
+      "dpa": 0.0
+    }
+  ],
+  "tdpa_fatigue": [
+    {
+      "submodel": "path_config_recomb",
+      "path_num": 1,
+      "re_id": "DW+THO",
+      "T": 119.0,
+      "dpa": 0.0
+    }
+  ]
+}

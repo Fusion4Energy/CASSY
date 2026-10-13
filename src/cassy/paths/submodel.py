@@ -288,17 +288,14 @@ class Submodel:
 
         # Initialize all paths
         paths: dict[int, Path] = {}
-        for idx, row in config["Paths"].iterrows():
-            pnum = int(idx)
-            ptype = row["Type"]
-            welding_n = float(row["Welding-n"])
-            welding_f = float(row["Welding-f"])
-            material = mat_dict[row["Material"]]
-
-            path = Path(
-                pnum, material, ptype=ptype, Welding_n=welding_n, Welding_f=welding_f
+        for pnum, pconf in config.paths.items():
+            paths[pnum] = Path(
+                pnum,
+                mat_dict[pconf.material],
+                ptype=pconf.ptype.value,
+                Welding_n=pconf.welding_n,
+                Welding_f=pconf.welding_f,
             )
-            paths[pnum] = path
         self.paths = paths
 
         self.assessments = None
@@ -553,111 +550,42 @@ class Submodel:
             if True also fatigue events are built, by default False
         """
         for pathnum in self.config.paths:
-            # identify all reference events of the path
-            re_list = self.config.get_REid_path(pathnum)
-            for re in re_list:
-                self._build_RE(pathnum, re)
+            for pos in ["begin", "end"]:
+                for re_config in self.config.get_reference_events(pathnum):
+                    self._build_RE(pathnum, re_config, pos)
+                if fatigue:
+                    for re_config in self.config.get_reference_events(
+                        pathnum, fatigue=True
+                    ):
+                        self._build_RE(pathnum, re_config, pos, fatigue=True)
 
-            if fatigue:
-                re_list_fatigue = self.config.get_REid_path(pathnum, fatigue=True)
-                for re in re_list_fatigue:
-                    self._build_RE(pathnum, re, fatigue=True)
-
-    def _build_RE(self, pathnum: int, re_ID: str, fatigue: bool = False) -> None:
+    def _build_RE(
+        self,
+        pathnum: int,
+        re_config: ReferenceEventConfig,
+        pos: str,
+        fatigue: bool = False,
+    ) -> None:
         """
-        build a reference event to assign to a specific path and submodel
+        build a reference event and assign it to a path position
 
         Parameters
         ----------
         pathnum : int
             number of the path onto which operate
-        conf : configuration.Configuration
-            Configuration object of the submodel
-        re_ID : str
-            ID of the reference event to add.
+        re_config : ReferenceEventConfig
+            configuration of the reference event, owned by this RE.
+        pos : str
+            either 'begin' or 'end'.
         fatigue : bool, optional
             If true, the RE is a fatigue one. The default is False.
-
-        Returns
-        -------
-        None.
-
         """
-        if fatigue:
-            des = " Fatigue"
-        else:
-            des = ""
-
-        idx = (pathnum, re_ID)
-
-        load_names = self.config.get_REloads(pathnum, re_ID, fatigue=fatigue)
-        try:
-            oc = (
-                self.config["Reference Event" + des]
-                .loc[idx, "Operating Conditions"]
-                .iloc[0]
-            )
-            ie = (
-                self.config["Reference Event" + des]
-                .loc[idx, "Initiating Event"]
-                .iloc[0]
-            )
-            ce = (
-                self.config["Reference Event" + des]
-                .loc[idx, "Concatenated Event"]
-                .iloc[0]
-            )
-            service_lvl = (
-                self.config["Reference Event" + des].loc[idx, "Service Level"].iloc[0]
-            )
-            load_ctg = (
-                self.config["Reference Event" + des].loc[idx, "Loading ctg."].iloc[0]
-            )
-            T = self.config["Reference Event" + des].loc[idx, "T [°C]"].iloc[0]
-            dpa = self.config["Reference Event" + des].loc[idx, "DPA"].iloc[0]
-
-            # Additional data for fatigue event
-            if fatigue:
-                ncycles = (
-                    self.config["Reference Event" + des].loc[idx, "N of cycles"].iloc[0]
-                )
-            else:
-                ncycles = None
-        except AttributeError:
-            oc = self.config["Reference Event" + des].loc[idx, "Operating Conditions"]
-            ie = self.config["Reference Event" + des].loc[idx, "Initiating Event"]
-            ce = self.config["Reference Event" + des].loc[idx, "Concatenated Event"]
-            service_lvl = self.config["Reference Event" + des].loc[idx, "Service Level"]
-            load_ctg = self.config["Reference Event" + des].loc[idx, "Loading ctg."]
-            T = self.config["Reference Event" + des].loc[idx, "T [°C]"]
-            dpa = self.config["Reference Event" + des].loc[idx, "DPA"]
-
-            # Additional data for fatigue event
-            if fatigue:
-                ncycles = self.config["Reference Event" + des].loc[idx, "N of cycles"]
-            else:
-                ncycles = None
-
-        # Recover the corresponding LinStress
-        for pos in ["begin", "end"]:
-            stresses = []
-            for load in load_names:
-                linstress = self._build_linearized_stress(load, pathnum, pos)
-                stresses.append(linstress)
-            config = ReferenceEventConfig(
-                service_lvl=service_lvl,
-                re_ID=re_ID,
-                T=T,
-                dpa=dpa,
-                oc=oc,
-                ie=ie,
-                ce=ce,
-                load_ctg=load_ctg,
-                ncycles=ncycles,
-            )
-            RE = ReferenceEvent(stresses, config)
-            # Add the reference event to the correct path
-            self.paths[pathnum].add_RE(RE, pos, fatigue=fatigue)
+        stresses = [
+            self._build_linearized_stress(load, pathnum, pos)
+            for load in re_config.loads
+        ]
+        RE = ReferenceEvent(stresses, re_config)
+        self.paths[pathnum].add_RE(RE, pos, fatigue=fatigue)
 
     def _build_linearized_stress(self, load: str, pathnum: int, pos: str) -> LinStress:
         """
@@ -677,18 +605,8 @@ class Submodel:
         LinStress
             Linearized Stress object.
         """
-        ptype = self.config["Paths"].loc[pathnum, "Type"]
-        welding_n = self.config["Paths"].loc[pathnum, "Welding-n"]
-        welding_f = self.config["Paths"].loc[pathnum, "Welding-f"]
-
-        data = self.config["Stresses"].loc[load]
-        data["name"] = load
-        data["ptype"] = ptype
-        data["Welding_n"] = welding_n
-        data["Welding_f"] = welding_f
-
+        config = LinStressConfig.from_load(
+            self.config.loads[load], self.config.paths[pathnum]
+        )
         tensor = self.config.get_stress_tensor(load, pathnum, pos)
-
-        config = LinStressConfig.from_dict(data)
-        stress = LinStress(tensor, config)
-        return stress
+        return LinStress(tensor, config)

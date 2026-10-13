@@ -1,18 +1,23 @@
+import json
 import math
 from importlib.resources import as_file, files
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from cassy.additional_data import materials
+from cassy.auxiliary.types import LoadTerm
 from cassy.bolts.bolt_config import BoltReferenceEvent, BoltReferenceEventFatigue
 from cassy.bolts.code_assessor import BoltActionAssessor
 from cassy.bolts.geometry import BoltGeom
 from cassy.designcodes.rccmrx_bolts_nl import RCCMRx_Bolts
 from cassy.designcodes.sdcic_bolts import SDC_IC_Bolts
 from cassy.general.material import Material
-from tests.bolts import res
+from cassy.gui.bolts_model import build_geometries
+
+RES = Path(__file__).parent / "res"
 
 
 class TestBoltActionAssessor:
@@ -29,10 +34,8 @@ class TestBoltActionAssessor:
 
     @pytest.fixture
     def bolt_geom(self, mat_list: dict[str, Material]) -> BoltGeom:
-        with as_file(files(res).joinpath("M12_bolt.xlsx")) as test_data:
-            # Create a BoltGeom instance from the test data
-            bolt_geom = BoltGeom.from_excel(test_data, mat_list)
-        return bolt_geom
+        project = json.loads((RES / "Flange1.json").read_text(encoding="utf-8"))
+        return build_geometries(project["geometries"], mat_list)["M12_bolt"]
 
     @pytest.fixture
     def bolt_assessor(self, bolt_geom: BoltGeom) -> BoltActionAssessor:
@@ -45,8 +48,8 @@ class TestBoltActionAssessor:
             0,
             "III",
             "C",
-            ("dummy", "1"),
-            ("dummy", "1"),
+            [LoadTerm("+", "dummy", 1)],
+            [LoadTerm("+", "dummy", 1)],
         )
         preload = 1.42e4  # N
         actions = pd.Series(

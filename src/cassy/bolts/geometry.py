@@ -1,11 +1,7 @@
 import math
-import os
 from abc import ABC
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-import pandas as pd
-
-from cassy.auxiliary.types import PathLike
 from cassy.general.material import Material
 
 
@@ -62,11 +58,11 @@ class BoltLikeGeom(ABC):
 
     def __post_init__(self):
         # compute if not provided
-        if not self.dn or pd.isna(self.dn):
+        if not self.dn:
             self.dn = self.d - 1.22687 * self.p
-        if not self.df or pd.isna(self.df):
+        if not self.df:
             self.df = self.d - 0.64952 * self.p
-        if not self.D or pd.isna(self.D):
+        if not self.D:
             self.D = self.d - 1.08253 * self.p
 
         # --- Additional geometrical feature ---
@@ -76,43 +72,6 @@ class BoltLikeGeom(ABC):
         self.An = self.dn**2 * math.pi / 4 - self.d_vh**2 * math.pi / 4
         # Section Module
         self.Z = (self.dn**4 - self.d_vh**4) * math.pi / 32 / self.dn
-
-    @classmethod
-    def from_excel(
-        cls, excel_data: PathLike, material_list: dict[str, Material]
-    ) -> "BoltLikeGeom":
-        """
-        Create a BoltLikeGeom instance from an Excel file.
-
-        Parameters
-        ----------
-        excel_data : PathLike
-            path to the excel data containing the geometrical data.
-
-        Returns
-        -------
-        BoltLikeGeom
-            An instance of BoltLikeGeom with the provided data.
-        """
-        df = pd.read_excel(excel_data, skiprows=1)
-        # Find the first row where all values are NA
-        first_all_na = (
-            df.isna().all(axis=1).idxmax() if df.isna().all(axis=1).any() else len(df)
-        )
-        # Keep only rows before the first all-NA row
-        df = df.iloc[:first_all_na]
-
-        df.set_index("SYMBOL", inplace=True)
-        geom_data = df["VALUE"].to_dict()
-        try:
-            geom_data["material"] = material_list[geom_data["material"]]
-        except KeyError:
-            raise ValueError(
-                f"Material '{geom_data['material']}' not found in material list.",
-                "Available materials: " + ", ".join(material_list.keys()),
-            )
-        geom_data["name"] = os.path.basename(excel_data).split(".")[0]
-        return cls(**geom_data)
 
 
 @dataclass
@@ -216,49 +175,16 @@ class BoltGeom(BoltLikeGeom):
         super().__post_init__()
         # --- Additional geometrical feature ---
         # diameter of head
-        if not self.a or pd.isna(self.a):
+        if not self.a:
             self.a = 1.5 * self.d
-        if not self.H or pd.isna(self.H):
+        if not self.H:
             self.H = 0.625 * self.d
-        if not self.d1 or pd.isna(self.d1):
+        if not self.d1:
             self.d1 = self.d
-        if not self.Dm or pd.isna(self.Dm):
+        if not self.Dm:
             if self.B > 0:
                 self.Dm = (self.B + self.a) / 2
             else:
                 self.Dm = 0.8 * self.a
-        if not self.Dp or pd.isna(self.Dp):
+        if not self.Dp:
             self.Dp = self.d * 1.1
-
-
-def read_geometries(
-    files: PathLike, materials: dict[str, Material]
-) -> dict[str, BoltLikeGeom]:
-    """
-    Read geometries from the specified folder.
-
-    Parameters
-    ----------
-    files : PathLike
-        Path to the folder containing geometry files.
-    materials : dict[str, Material]
-        A dictionary mapping material names to Material instances.
-
-    Returns
-    -------
-    dict[str, BoltLikeGeom]
-        A dictionary mapping geometry names to BoltLikeGeom instances.
-    """
-    geometries = {}
-    for file in os.listdir(files):
-        if file.endswith(".xlsx"):
-            if "bolt" in file:
-                geomOb = BoltGeom
-            elif "insert" in file:
-                geomOb = InsertGeom
-            else:
-                raise ValueError(f"Unknown geometry type in file: {file}")
-
-            geom = geomOb.from_excel(os.path.join(files, file), materials)
-            geometries[geom.name] = geom
-    return geometries

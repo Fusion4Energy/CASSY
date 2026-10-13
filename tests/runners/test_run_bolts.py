@@ -1,30 +1,49 @@
 import os
-import shutil
 from importlib.resources import as_file, files
 from pathlib import Path
 
 from cassy.additional_data import materials as mat_folder
+from cassy.auxiliary.types import LoadTerm
+from cassy.gui.bolts_model import build_bolts_from_project
 from cassy.runners.run_bolts import run_bolts
 from cassy.bolts.bolt_config import FlangeAssessmentConfig
 from cassy.bolts.geometry import BoltGeom, InsertGeom
 from cassy.general.material import Material
-from tests import runners
+from tests.helpers import load_project
+
+RES = Path(__file__).parent / "bolts"
 
 
-def test_run_bolts(tmpdir):
-    to_copy = files(runners).joinpath("bolts")
-    dest = tmpdir.join("bolts")
-    shutil.copytree(to_copy, dest)
-    run_bolts(dest, fatigue=True, matlib=Path(dest, "additional_materials"))
+def _project_configs() -> tuple[dict, dict]:
+    configs, geoms = {}, {}
+    for name in ("Flange1", "Flange2"):
+        project = load_project(RES / f"{name}.json")
+        project["run_options"]["matlib_path"] = str(RES / "additional_materials")
+        c, g = build_bolts_from_project(project)
+        configs.update(c)
+        geoms.update(g)
+    return configs, geoms
+
+
+def test_run_bolts(tmp_path):
+    configs, geoms = _project_configs()
+    run_bolts(tmp_path, configs, geoms, fatigue=True)
     # check that the recap has been produced
-    assert os.path.exists(Path(dest, "Recap.docx"))
+    assert os.path.exists(Path(tmp_path, "Recap.docx"))
 
 
-def test_run_bolts_no_recap(tmpdir):
-    to_copy = files(runners).joinpath("bolts")
-    dest = tmpdir.join("bolts")
-    shutil.copytree(to_copy, dest)
-    run_bolts(dest, fatigue=True, print_recap=False)
+def test_run_bolts_no_recap_no_merge_only_bolts(tmp_path):
+    configs, geoms = _project_configs()
+    run_bolts(
+        tmp_path,
+        configs,
+        geoms,
+        fatigue=True,
+        print_recap=False,
+        merge=False,
+        only_bolts=True,
+    )
+    assert not os.path.exists(Path(tmp_path, "Recap.docx"))
 
 
 def test_run_bolts_with_geoms_and_configs(tmpdir):
@@ -92,7 +111,7 @@ def test_run_bolts_with_geoms_and_configs(tmpdir):
 
     # Create Reference Events
     REs = {
-        "1": [
+        bolt_id: [
             BoltReferenceEvent(
                 name="RE1",
                 oper_cond="Normal",
@@ -102,29 +121,16 @@ def test_run_bolts_with_geoms_and_configs(tmpdir):
                 dpa=0.0,
                 load_category="I",
                 service_lvl="A",
-                primary=("loads", "1"),
-                all_loads=("loads", "2"),
+                primary=[LoadTerm("+", "loads", 1)],
+                all_loads=[LoadTerm("+", "loads", 2)],
             )
-        ],
-        "2": [
-            BoltReferenceEvent(
-                name="RE1",
-                oper_cond="Normal",
-                init_event="None",
-                concat_event="None",
-                temp=20.0,
-                dpa=0.0,
-                load_category="I",
-                service_lvl="A",
-                primary=("loads", "1"),
-                all_loads=("loads", "2"),
-            )
-        ],
+        ]
+        for bolt_id in ("1", "2")
     }
 
     # Create Fatigue Reference Events
     REs_fatigue = {
-        "1": [
+        bolt_id: [
             BoltReferenceEventFatigue(
                 name="FRE1",
                 oper_cond="Normal",
@@ -135,25 +141,14 @@ def test_run_bolts_with_geoms_and_configs(tmpdir):
                 load_category="I",
                 service_lvl="A",
                 n_cycles=1000,
-                delta_sigma=(("loads", "2"), ("loads", "1")),
-                sigma_sustained=("loads", "1"),
+                delta_sigma=(
+                    [LoadTerm("+", "loads", 2)],
+                    [LoadTerm("+", "loads", 1)],
+                ),
+                sigma_sustained=[LoadTerm("+", "loads", 1)],
             )
-        ],
-        "2": [
-            BoltReferenceEventFatigue(
-                name="FRE1",
-                oper_cond="Normal",
-                init_event="None",
-                concat_event="None",
-                temp=20.0,
-                dpa=0.0,
-                load_category="I",
-                service_lvl="A",
-                n_cycles=1000,
-                delta_sigma=(("loads", "2"), ("loads", "1")),
-                sigma_sustained=("loads", "1"),
-            )
-        ],
+        ]
+        for bolt_id in ("1", "2")
     }
 
     # Get the design code
@@ -169,9 +164,6 @@ def test_run_bolts_with_geoms_and_configs(tmpdir):
         name="TestFlange",
     )
 
-    # Create config dictionary
-    config_dict = {"TestFlange": config}
-
     # Setup temporary directory
     dest = Path(tmpdir, "bolts_test")
     dest.mkdir()
@@ -179,8 +171,8 @@ def test_run_bolts_with_geoms_and_configs(tmpdir):
     # Run the assessment with programmatic geometries and configurations
     run_bolts(
         dest,
+        {"TestFlange": config},
+        geoms,
         fatigue=True,
         print_recap=False,
-        geoms=geoms,
-        config_dict=config_dict,
     )

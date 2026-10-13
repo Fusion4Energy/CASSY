@@ -14,13 +14,11 @@ from cassy.additional_data import templates
 from cassy.auxiliary.types import PathLike
 from cassy.bolts.bolt_assess import FlangeAssessment
 from cassy.bolts.bolt_config import FlangeAssessmentConfig
-from cassy.bolts.geometry import read_geometries
-from cassy.designcodes.sdcic_bolts import SDC_IC_Bolts
-from cassy.designcodes.EN13445_bolts import EN_13445_Bolts
-from cassy.general.folder_tree import BoltsFolderTree
-from cassy.office.word_helper import WordOutput
-from cassy.runners.run_common import build_material_library
 from cassy.bolts.geometry import BoltLikeGeom
+from cassy.designcodes.EN13445_bolts import EN_13445_Bolts
+from cassy.designcodes.sdcic_bolts import SDC_IC_Bolts
+from cassy.general.folder_tree import FolderTree
+from cassy.office.word_helper import WordOutput
 
 # #################### Parameters #############################################
 
@@ -40,45 +38,21 @@ INPUT_TITLE = "Internal Bolt Action Used During the Assessment"
 # --- Initializations ---
 def run_bolts(
     root: PathLike,
+    configs: dict[str, FlangeAssessmentConfig],
+    geoms: dict[str, BoltLikeGeom],
     fatigue: bool = False,
-    matlib: PathLike | None = None,
     print_recap: bool = True,
     merge: bool = True,
     only_bolts: bool = False,
-    geoms: dict[str, BoltLikeGeom] | None = None,
-    config_dict: dict[str, FlangeAssessmentConfig] | None = None,
 ) -> None:
-    folder_tree = BoltsFolderTree(root)
-
-    # Generate the materials library
-    materials = build_material_library(matlib)
-
-    # Read the available geometries or use the ones provided
-    geometries = (
-        geoms
-        if geoms is not None
-        else read_geometries(folder_tree.geom_folder, materials)
-    )
+    folder_tree = FolderTree(root)
 
     recaps = {"Immediate": [], "Fatigue": []}
     connections: dict[str, FlangeAssessment] = {}
 
-    # Recover the configurations if not provided
-    if config_dict is not None:
-        configs = config_dict
-    else:
-        configs = {}
-        for connection in os.listdir(folder_tree.configurations):
-            connection_name = connection.split(".")[0]
-            config_path = os.path.join(folder_tree.configurations, connection)
-            actions_path = Path(folder_tree.actions_folder, f"{connection_name}.csv")
-            configs[connection_name] = FlangeAssessmentConfig.from_excel(
-                config_path, actions_path, fatigue=fatigue
-            )
-
     for connection_name, flange_config in configs.items():
         # perform the assessment
-        flange_assessment = FlangeAssessment(geometries, flange_config, fatigue=fatigue)
+        flange_assessment = FlangeAssessment(geoms, flange_config, fatigue=fatigue)
 
         # override insert assessment if only bolts are requested
         if only_bolts:

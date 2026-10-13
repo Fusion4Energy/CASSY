@@ -4,6 +4,7 @@ Sometimes, creating all the configuration using the GUI can be painful, especial
 This allows to programmatically create the configuration with arbitrary logic and limit the repetition of information. The following is an example on how to use cassy in this mode, the final version of the script will heavily depend on the specific application.
 
 ```python
+from cassy.auxiliary.types import LoadTerm
 from cassy.runners.run_bolts import run_bolts
 from cassy.bolts.geometry import BoltGeom, InsertGeom
 from cassy.runners.run_common import build_material_library
@@ -107,8 +108,14 @@ NO_01 = BoltReferenceEvent(
     dpa=0.0,
     load_category="II",
     service_lvl="A",
-    primary=("loads", "5-4+3-1"),
-    all_loads=("loads", "5"),
+    primary=[
+        LoadTerm("+", "loads", 5),
+        LoadTerm("-", "loads", 4),
+        LoadTerm("+", "loads", 3),
+        LoadTerm("-", "loads", 1),
+    ],
+    # terms can come from different analyses
+    all_loads=[LoadTerm("+", "loads", 5), LoadTerm("+", "thermal", 2)],
 )
 
 # REs Fatigue
@@ -122,8 +129,8 @@ NO_01_fatigue = BoltReferenceEventFatigue(
     load_category="I",
     service_lvl="A",
     n_cycles=60000,
-    delta_sigma=(("loads", "4"), ("loads", "400")),
-    sigma_sustained=("loads", "3"),
+    delta_sigma=([LoadTerm("+", "loads", 4)], [LoadTerm("+", "loads", 400)]),
+    sigma_sustained=[LoadTerm("+", "loads", 3)],
 )
 NO_02_fatigue = BoltReferenceEventFatigue(
     name="NO.02",
@@ -135,8 +142,8 @@ NO_02_fatigue = BoltReferenceEventFatigue(
     load_category="II",
     service_lvl="A",
     n_cycles=4545,
-    delta_sigma=(("loads", "5"), ("loads", "4")),
-    sigma_sustained=("loads", "3"),
+    delta_sigma=([LoadTerm("+", "loads", 5)], [LoadTerm("+", "loads", 4)]),
+    sigma_sustained=[LoadTerm("+", "loads", 3)],
 )
 
 # Now create the configurations for each flange
@@ -181,11 +188,25 @@ configs["M4"] = config
 
 # Run assessment
 run_bolts(
-    root=root,
+    root,
+    configs,
+    geometries,
     fatigue=True,
     print_recap=True,
     only_bolts=False,
-    geoms=geometries,
-    config_dict=configs,
 )
+```
+
+A project saved from the GUI can also be loaded and run from a script:
+
+```python
+import json
+
+from cassy.gui.bolts_model import build_bolts_from_project, migrate_project
+from cassy.runners.run_bolts import run_bolts
+
+with open("project.json", encoding="utf-8") as fh:
+    project = migrate_project(json.load(fh))
+configs, geometries = build_bolts_from_project(project)
+run_bolts("output", configs, geometries, fatigue=project["run_options"]["fatigue"])
 ```

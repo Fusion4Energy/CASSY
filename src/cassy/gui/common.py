@@ -436,21 +436,6 @@ class Dialog(tk.Toplevel):
         ).grid(row=row, column=1, padx=6, pady=3)
         return var
 
-    def _analysis_field(
-        self,
-        frame,
-        label: str,
-        row: int,
-        analyses: list[str],
-        default: str = "",
-        optional: bool = False,
-    ) -> tk.StringVar:
-        """Dropdown of available analyses; free entry if none could be read."""
-        if not analyses:
-            return self._entry(frame, label, row, default)
-        values = ["", *analyses] if optional else analyses
-        return self._combo(frame, label, row, values, default)
-
     def _check(
         self, frame, label: str, row: int, default: bool = False
     ) -> tk.BooleanVar:
@@ -512,6 +497,84 @@ class Dialog(tk.Toplevel):
             ),
         ).pack(side="left", padx=2)
         return var
+
+
+class LoadTermsEditor(ttk.Frame):
+    """Editable rows of signed (analysis, step) terms of a load combination."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        analyses: list[str],
+        terms: list[dict] | None = None,
+        required: bool = True,
+    ) -> None:
+        super().__init__(parent)
+        self._analyses = analyses
+        self._required = required
+        self._rows: list[
+            tuple[ttk.Frame, tk.StringVar, tk.StringVar, tk.StringVar]
+        ] = []
+        self._rows_frm = ttk.Frame(self)
+        self._rows_frm.pack(fill="x")
+        ttk.Button(self, text="+ Add term", command=self.add_row).pack(
+            anchor="w", padx=6, pady=(2, 4)
+        )
+        for term in terms or []:
+            self.add_row(term)
+        if required and not self._rows:
+            self.add_row()
+
+    def add_row(self, term: dict | None = None) -> None:
+        term = term or {}
+        frm = ttk.Frame(self._rows_frm)
+        frm.pack(fill="x", pady=1)
+        sign = tk.StringVar(value=term.get("sign", "+"))
+        ttk.Combobox(
+            frm, textvariable=sign, values=["+", "-"], state="readonly", width=3
+        ).pack(side="left", padx=(6, 4))
+        analysis = tk.StringVar(value=term.get("analysis", ""))
+        if self._analyses:
+            ttk.Combobox(
+                frm,
+                textvariable=analysis,
+                values=self._analyses,
+                state="readonly",
+                width=20,
+            ).pack(side="left", padx=2)
+        else:
+            ttk.Entry(frm, textvariable=analysis, width=22).pack(side="left", padx=2)
+        ttk.Label(frm, text="Step").pack(side="left", padx=(8, 2))
+        step = tk.StringVar(value=str(term.get("step", "")))
+        ttk.Entry(frm, textvariable=step, width=6).pack(side="left")
+        row = (frm, sign, analysis, step)
+        ttk.Button(frm, text="\u2715", width=3, command=lambda: self._remove(row)).pack(
+            side="left", padx=4
+        )
+        self._rows.append(row)
+
+    def _remove(self, row: tuple) -> None:
+        row[0].destroy()
+        self._rows.remove(row)
+
+    def get(self) -> list[dict]:
+        """Return the validated terms; raise ValueError with a user-facing message."""
+        from cassy.auxiliary.types import LoadTerm
+
+        terms = []
+        for i, (_frm, sign, analysis, step) in enumerate(self._rows, start=1):
+            ana = analysis.get().strip()
+            raw = step.get().strip()
+            if not ana or not raw:
+                raise ValueError(f"Term {i}: both analysis and step are required.")
+            try:
+                step_num = int(raw)
+            except ValueError:
+                raise ValueError(f"Term {i}: step must be an integer.")
+            terms.append(LoadTerm(sign.get(), ana, step_num).to_dict())
+        if self._required and not terms:
+            raise ValueError("At least one term is required.")
+        return terms
 
 
 # ── Table tabs ────────────────────────────────────────────────────────────────
@@ -638,6 +701,12 @@ class RunTab(ttk.Frame):
     _RUN_LABEL = "Run Assessment"
     # (project key that must be non-empty, warning title, warning message)
     _REQUIRED: tuple[str, str, str]
+    # (run_options key, label, default)
+    _BOOL_OPTIONS: tuple[tuple[str, str, bool], ...] = (
+        ("fatigue", "Fatigue assessment", False),
+        ("print_recap", "Generate Word recap", True),
+        ("merge", "Merge repeated cells in Word tables (slower)", True),
+    )
 
     def __init__(self, parent: ttk.Notebook, project: dict) -> None:
         super().__init__(parent)
@@ -653,13 +722,17 @@ class RunTab(ttk.Frame):
         frm = ttk.LabelFrame(self, text="Run Options")
         frm.pack(padx=20, pady=20, fill="x")
 
-        ttk.Label(frm, text="Fatigue assessment").grid(
-            row=0, column=0, sticky="w", padx=10, pady=6
-        )
-        self._fatigue = tk.BooleanVar(value=opts.get("fatigue", False))
-        ttk.Checkbutton(frm, variable=self._fatigue).grid(
-            row=0, column=1, sticky="w", padx=10, pady=6
-        )
+        self._flags: dict[str, tk.BooleanVar] = {}
+        for row, (key, label, default) in enumerate(self._BOOL_OPTIONS):
+            ttk.Label(frm, text=label).grid(
+                row=row, column=0, sticky="w", padx=10, pady=6
+            )
+            var = tk.BooleanVar(value=opts.get(key, default))
+            ttk.Checkbutton(frm, variable=var).grid(
+                row=row, column=1, sticky="w", padx=10, pady=6
+            )
+            self._flags[key] = var
+        self._fatigue = self._flags["fatigue"]
 
         self._matlib = tk.StringVar(value=opts.get("matlib_path", ""))
         self._root_dir = tk.StringVar(value=opts.get("root_dir", ""))
@@ -672,7 +745,7 @@ class RunTab(ttk.Frame):
                 ),
                 ("Output root folder", self._root_dir, "Select output root folder"),
             ),
-            start=1,
+            start=len(self._BOOL_OPTIONS),
         ):
             ttk.Label(frm, text=label).grid(
                 row=row, column=0, sticky="w", padx=10, pady=6
@@ -759,13 +832,15 @@ class RunTab(ttk.Frame):
 
     def sync(self) -> None:
         opts = self._project["run_options"]
-        opts["fatigue"] = self._fatigue.get()
+        for key, var in self._flags.items():
+            opts[key] = var.get()
         opts["matlib_path"] = self._matlib.get().strip()
         opts["root_dir"] = self._root_dir.get().strip()
 
     def load_from_project(self) -> None:
         opts = self._project["run_options"]
-        self._fatigue.set(opts.get("fatigue", False))
+        for key, _label, default in self._BOOL_OPTIONS:
+            self._flags[key].set(opts.get(key, default))
         self._matlib.set(opts.get("matlib_path", ""))
         self._root_dir.set(opts.get("root_dir", ""))
 
@@ -1158,6 +1233,11 @@ class ProjectApp(tk.Tk):
     def _fresh_project() -> dict:
         raise NotImplementedError
 
+    @staticmethod
+    def _migrate_project(project: dict) -> dict:
+        """Upgrade a project loaded from an older file format."""
+        return project
+
     def _build_tabs(self) -> None:
         raise NotImplementedError
 
@@ -1237,7 +1317,7 @@ class ProjectApp(tk.Tk):
             return
         try:
             with open(path, encoding="utf-8") as fh:
-                data = json.load(fh)
+                data = self._migrate_project(json.load(fh))
         except Exception as exc:
             messagebox.showerror("Open Error", str(exc))
             return

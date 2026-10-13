@@ -33,6 +33,8 @@ python -m cassy --pathsgui
 The GUI will open on the *General* Tab where the main run options can be set:
 
 * **Fatigue assessment**, controls if the fatigue assessment is performed or not
+* **Generate Word recap**, if unchecked only the Excel results are written (faster)
+* **Merge repeated cells in Word tables**, makes the Word tables more readable but is slower
 * **Additional materials folder**, allows the user to point to folder that can contain additional material files that are not included in CASSY default library. These must be in yaml format, see [materials](materials).
 * **Output root folder**, browse to a destination folder where to output all CASSY results
 
@@ -52,13 +54,15 @@ In this tab all the submodels onto which performing the assessment must be defin
 Here all single loads (i.e., their correspondent stress tensors) are classified. For each load the following input is needed:
 
 * **Name**, this is the name of the single loads that identify it.
-* **Analysis name**, the csv can contain multiple analyses with different loadsteps. This identifies the *analysis* column of the .csv inputs.
-* **Time Step**, can be a linear combination of different time steps as per what defined in the input csv. An example is `2-1`.
+* **Time steps**, linear combination of stress tensors, added with the `+ Add term` button.
+    Every term requires a sign (`+` or `-`), an **analysis** and a **step**, matching the
+    *analysis* and *loadstep* columns of the input csv. Terms can come from different
+    analyses, e.g. `+ X:2` and `- Y:1`.
 * **Stress Type**, this is the type of stress related to the specific load, 
     either P (primary) or Q (secondary).
 * **Load Type**, this is the type of the specific load, either Inertial or Volumetric.
-* **Unit**, this is the units used for the linearized stress tensors in the excel
-    load files. Typycally MPa or Pa.
+* **Unit**, this is the units used for the linearized stress tensors in the input
+    csv. Typycally MPa or Pa.
 * **Scale**, factor that scales the stress tensors related to the specific load.
 * **Spatial Recombination**, type of spatial recombination of inertial stresses,
     typically "srss" for inertial loads. Other options are "algebraic" and "abs". Do not specify anything for volumetric load, they are always algebraically combined.
