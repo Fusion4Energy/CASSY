@@ -7,6 +7,7 @@ __pycache__/
 .vscode/
 .ruff_cache/
 cassy.egg-info/
+cassy_f4e.egg-info/
 _version.py
 .coverage
 coverage.xml
