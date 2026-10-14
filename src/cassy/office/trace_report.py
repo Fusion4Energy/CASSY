@@ -94,7 +94,7 @@ function fmt(v) {
 const mpa = v => (typeof v === 'number' ? fmt(v / 1e6) : (v == null ? 'no limit' : fmt(v)));
 const level = r => (r >= 1 ? 'fail' : r >= 0.9 ? 'warn' : 'ok');
 const ratioCell = r => el('td', {class: 'num ' + (typeof r === 'number' ? level(r) : '')},
-  typeof r === 'number' ? r.toFixed(3) : '');
+  typeof r === 'number' ? r.toFixed(3) : (r === 'nan' ? 'n/a' : ''));
 const badge = r => (typeof r === 'number' ? el('span', {class: 'badge ' + level(r)}, r.toFixed(3)) : null);
 const td = (x, cls) => el('td', cls ? {class: cls} : null, x);
 function table(head, rows) {
@@ -102,7 +102,13 @@ function table(head, rows) {
   t.append(...rows);
   return t;
 }
-const value = r => (r[3] !== null ? fmt(r[3]) : s(r[4]));
+const value = r => {
+  if (r[3] !== null) return fmt(r[3]);
+  const t = s(r[4]);
+  if (t !== 'nan') return t;
+  const kind = s(r[1]);
+  return kind === 'allowable' || kind === 'result' ? 'no limit' : 'NaN (not defined)';
+};
 
 // --- indexes: events (item, position, event, analysis) and items ---
 const EV = new Map();

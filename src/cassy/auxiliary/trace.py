@@ -239,6 +239,9 @@ def load_trace(folder: os.PathLike) -> pd.DataFrame:
         os.path.join(folder, TRACE_FILE),
         compression="gzip",
         dtype={k: "string" for k in SCOPE_KEYS + RECORD_KEYS if k != "value"},
+        # keep texts such as "nan" (undefined property) instead of turning them to NA
+        keep_default_na=False,
+        na_values=[""],
     )
     meta_path = os.path.join(folder, META_FILE)
     if os.path.exists(meta_path):
