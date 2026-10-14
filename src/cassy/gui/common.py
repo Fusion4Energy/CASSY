@@ -615,6 +615,8 @@ class TableTab(ttk.Frame):
         return self._project[self._LIST_KEY]
 
     def refresh(self) -> None:
+        if not self._tree.winfo_exists():
+            return
         fill_tree(self._tree, [self._row_values(item) for item in self._list()])
 
     def _selected_index(self) -> int | None:

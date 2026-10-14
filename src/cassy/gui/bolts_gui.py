@@ -403,7 +403,7 @@ class FlangeDialog(_Dialog):
         ex = self._ex
         frm = ttk.LabelFrame(self._body, text="Flange definition")
         frm.pack(fill="both")
-        self._name = self._entry(frm, "Name *", 0, ex.get("name", ""))
+        self._name_var = self._entry(frm, "Name *", 0, ex.get("name", ""))
         default_code = ex.get(
             "design_code", BOLT_DESIGN_CODES[0] if BOLT_DESIGN_CODES else ""
         )
@@ -417,7 +417,7 @@ class FlangeDialog(_Dialog):
         )
 
     def _collect(self) -> dict | None:
-        name = self._name.get().strip()
+        name = self._name_var.get().strip()
         if not name:
             messagebox.showerror("Validation", "Name is required.", parent=self)
             return None

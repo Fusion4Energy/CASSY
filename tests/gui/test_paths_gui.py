@@ -173,7 +173,7 @@ class TestSubmodelDialog:
     def test_collect_valid(self, root):
         dlg = object.__new__(SubmodelDialog)
         dlg._ex = {}
-        dlg._name = tk.StringVar(root, value="SM1")
+        dlg._name_var = tk.StringVar(root, value="SM1")
         dlg._code = tk.StringVar(root, value="SDC-IC")
         dlg._tensors = tk.StringVar(root, value="/tmp/t.csv")
         result = dlg._collect()
@@ -186,7 +186,7 @@ class TestSubmodelDialog:
     def test_collect_empty_name(self, root):
         dlg = object.__new__(SubmodelDialog)
         dlg._ex = {}
-        dlg._name = tk.StringVar(root, value="  ")
+        dlg._name_var = tk.StringVar(root, value="  ")
         dlg._code = tk.StringVar(root, value="SDC-IC")
         dlg._tensors = tk.StringVar(root, value="")
         with patch("cassy.gui.paths_gui.messagebox") as mb:
@@ -251,7 +251,7 @@ class TestLoadDialog:
     ):
         dlg = object.__new__(LoadDialog)
         dlg._ex = {}
-        dlg._name = tk.StringVar(root, value="" if missing_name else name)
+        dlg._name_var = tk.StringVar(root, value="" if missing_name else name)
         dlg._steps = LoadTermsEditor(
             root, [], steps or [{"sign": "+", "analysis": "ana1", "step": 1}]
         )
@@ -361,7 +361,7 @@ class TestGetAvailableAnalyses:
         dlg = object.__new__(LoadDialog)
         dlg._ex = {}
         dlg._analyses = ["Inertial", "Thermal"]
-        dlg._name = tk.StringVar(root, value="LD_new")
+        dlg._name_var = tk.StringVar(root, value="LD_new")
         dlg._steps = LoadTermsEditor(
             root, dlg._analyses, [{"sign": "+", "analysis": "Inertial", "step": 2}]
         )
