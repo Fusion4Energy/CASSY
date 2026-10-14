@@ -27,6 +27,9 @@ class Rule(ABC):
 
 
 class Code:
+    # factor bringing the applied stress returned by the rules to Pa
+    APPLIED_TO_PA = 1.0
+
     def __init__(self, name: str | None = None):
         """
         Abstract class for a design code
@@ -89,12 +92,12 @@ class Code:
                 for rule_name2, rule2 in rule.items():
                     with trace.scope(rule_set=rule_name, rule=rule2.ref):
                         assessed = rule2.assess(combined_stress, material)
-                        _record_equations(rule2, assessed)
+                        _record_equations(rule2, assessed, self.APPLIED_TO_PA)
                     assessments[rule_name][rule_name2] = (assessed, rule2)
             else:
                 with trace.scope(rule_set=rule_name, rule=rule.ref):
                     assessed = rule.assess(combined_stress, material)
-                    _record_equations(rule, assessed)
+                    _record_equations(rule, assessed, self.APPLIED_TO_PA)
 
                 assessments[rule_name] = (assessed, rule)
 
@@ -108,8 +111,10 @@ def record_allowables(allowables: tuple, formulas: tuple | None = None) -> None:
         trace.record(f"allowable {i + 1}", allowable, kind="allowable", note=note)
 
 
-def _record_equations(rule: Rule, assessed: list | None) -> None:
-    """Record the (stress, allowable) couples returned by a rule."""
+def _record_equations(
+    rule: Rule, assessed: list | None, applied_to_pa: float = 1.0
+) -> None:
+    """Record the (stress, allowable) couples returned by a rule, in Pa."""
     if not trace.is_active():
         return
     if assessed is None:
@@ -124,9 +129,10 @@ def _record_equations(rule: Rule, assessed: list | None) -> None:
             if couple is None or couple[0] is None:
                 trace.record("equation", "not evaluated", kind="branch")
                 continue
-            stress, allowable = couple
-            trace.record("applied", stress, kind="result")
-            trace.record("allowable", allowable, kind="result")
+            stress = couple[0] * applied_to_pa
+            allowable = couple[1]
+            trace.record("applied", stress, kind="result", unit="Pa")
+            trace.record("allowable", allowable, kind="result", unit="Pa")
             try:
                 ratio = float(stress) / float(allowable)
             except (TypeError, ValueError, ZeroDivisionError):
@@ -135,6 +141,9 @@ def _record_equations(rule: Rule, assessed: list | None) -> None:
 
 
 class BoltCode(Code):
+    # bolt rules return the applied stress in MPa and the allowable in Pa
+    APPLIED_TO_PA = 1e6
+
     @abstractmethod
     def computeVj(
         self, bolt_assessor: "BoltActionAssessor", material: Material

@@ -70,6 +70,10 @@ def test_save_load_roundtrip_and_html(tmp_path):
 
     index = write_html(df, tmp_path, df.attrs["metadata"])
     page = (tmp_path / "C_1.html").read_text(encoding="utf-8")
-    assert "&lt;b&gt;escaped&lt;/b&gt;" in page
-    assert "fail" in page  # ratio >= 1 is flagged
-    assert "C_1.html" in open(index, encoding="utf-8").read()
+    assert "<b>escaped</b>" not in page
+    start = page.index("id='data'>") + len("id='data'>")
+    payload = json.loads(page[start : page.index("</script>", start)])
+    assert "<b>escaped</b>" in payload["strings"]
+    assert [x[3] for x in payload["summary"]] == [pytest.approx(1.2)]
+    index_page = open(index, encoding="utf-8").read()
+    assert "C_1.html" in index_page and "badge fail" in index_page
