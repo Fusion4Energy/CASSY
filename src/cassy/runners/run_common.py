@@ -1,11 +1,49 @@
+from contextlib import contextmanager
+from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import files
+import logging
 import os
+from collections.abc import Generator
 
 from cassy.additional_data import materials
+from cassy.auxiliary import trace
 from cassy.auxiliary.types import PathLike
 from cassy.general.material import Material, read_materials
+from cassy.office.trace_report import write_html
 
 MATERIALS_PATH = files(materials)
+TRACE_FOLDER = "trace"
+
+
+def new_tracer(enabled: bool, module: str) -> trace.Tracer | None:
+    """Return a tracer for the run if requested, None otherwise."""
+    if not enabled:
+        return None
+    try:
+        cassy_version = version("cassy-f4e")
+    except PackageNotFoundError:
+        cassy_version = "unknown"
+    return trace.Tracer({"module": module, "cassy version": cassy_version})
+
+
+@contextmanager
+def tracing(tracer: trace.Tracer | None) -> Generator[None, None, None]:
+    """Activate the tracer (if any) for the duration of the context."""
+    if tracer is None:
+        yield
+        return
+    with trace.activate(tracer), trace.scope(module=tracer.metadata["module"]):
+        yield
+
+
+def save_trace(tracer: trace.Tracer | None, assessment_folder: PathLike) -> None:
+    """Save the trace table and its HTML report in the assessment folder."""
+    if tracer is None:
+        return
+    folder = os.path.join(assessment_folder, TRACE_FOLDER)
+    tracer.save(folder)
+    write_html(tracer.to_dataframe(), folder, tracer.metadata)
+    logging.info("Trace of intermediate results saved in %s", folder)
 
 
 def build_material_library(

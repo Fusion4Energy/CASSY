@@ -706,6 +706,7 @@ class RunTab(ttk.Frame):
         ("fatigue", "Fatigue assessment", False),
         ("print_recap", "Generate Word recap", True),
         ("merge", "Merge repeated cells in Word tables (slower)", True),
+        ("trace", "Save trace of intermediate results (HTML + CSV)", False),
     )
 
     def __init__(self, parent: ttk.Notebook, project: dict) -> None:

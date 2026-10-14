@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 
+from cassy.auxiliary import trace
 from cassy.auxiliary.types import PathLike
 from cassy.bolts.bolt_config import (
     FlangeAssessmentConfig,
@@ -179,10 +180,12 @@ class FlangeAssessment:
         for bolt_id, assessors in assessors.items():
             dfs = []
             inputs = []
-            for _, assessor in assessors.items():
-                df = assessor.assess(code, insert=insert)
-                dfs.append(df)
-                inputs.append(assessor.get_df_actions())
+            position = "insert base material" if insert else "bolt"
+            with trace.scope(component=self.name, item=bolt_id, position=position):
+                for _, assessor in assessors.items():
+                    df = assessor.assess(code, insert=insert)
+                    dfs.append(df)
+                    inputs.append(assessor.get_df_actions())
 
             immediate_assessment = pd.concat(dfs)
             input_df = pd.concat(inputs)
@@ -190,9 +193,10 @@ class FlangeAssessment:
             # --- fatigue damage ---
             if self.assessments_fatigue and not insert:
                 rows = []
-                for assessor in self.assessments_fatigue[bolt_id].values():
-                    vj = assessor.computeVj(code)
-                    rows.append(vj)
+                with trace.scope(component=self.name, item=bolt_id, position=position):
+                    for assessor in self.assessments_fatigue[bolt_id].values():
+                        vj = assessor.computeVj(code)
+                        rows.append(vj)
                 fatigue_assessment = pd.DataFrame(rows)
             else:
                 fatigue_assessment = None

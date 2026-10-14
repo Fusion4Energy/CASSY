@@ -3,6 +3,7 @@ from importlib.resources import as_file, files
 from pathlib import Path
 
 from cassy.additional_data import materials as mat_folder
+from cassy.auxiliary.trace import load_trace
 from cassy.auxiliary.types import LoadTerm
 from cassy.gui.bolts_model import build_bolts_from_project
 from cassy.runners.run_bolts import run_bolts
@@ -44,6 +45,19 @@ def test_run_bolts_no_recap_no_merge_only_bolts(tmp_path):
         only_bolts=True,
     )
     assert not os.path.exists(Path(tmp_path, "Recap.docx"))
+
+
+def test_run_bolts_trace(tmp_path):
+    configs, geoms = _project_configs()
+    run_bolts(tmp_path, configs, geoms, fatigue=True, print_recap=False, trace=True)
+    folder = Path(tmp_path, "assessment", "trace")
+    assert os.path.exists(folder / "index.html")
+
+    df = load_trace(folder)
+    assert set(df["component"].dropna()) == set(configs)
+    assert {"material", "stress", "allowable", "result", "input"} <= set(df["kind"])
+    vj = df[(df["analysis"] == "fatigue") & (df["name"] == "Vj")]
+    assert not vj.empty
 
 
 def test_run_bolts_with_geoms_and_configs(tmpdir):

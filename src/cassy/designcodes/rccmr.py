@@ -1,5 +1,6 @@
 import math
 import logging
+from cassy.auxiliary import trace
 from cassy.designcodes.codes import Code, Rule
 from cassy.general.material import Material
 from cassy.paths.linstress import ReferenceEvent
@@ -41,6 +42,7 @@ class RCC_MR(Code):
         # ds is multiplied by f which depends on the type of joint
         f = refEvent.config.welding_f
         ds = f * refEvent.PQF
+        trace.record("ds", ds, kind="stress", unit="Pa", note="f * PQF")
         T_ds = (T, ds)
         # de calculation
         de1 = 2 / 3 * (1 + material.nu()) * (ds / material.E(T, dpa))
@@ -122,14 +124,24 @@ class RB_3251_11(Rule):
         if service_lvl == "A":
             allowable1 = n * material.Sm(T_dpa)
             allowable2 = 1.5 * n * material.Sm(T_dpa)
+            formula = "n * Sm"
         elif service_lvl == "C":
             allowable1 = min(1.35 * n * material.Sm(T_dpa), material.Sy_min(T_dpa))
             allowable2 = 1.5 * allowable1
+            formula = "min(1.35 * n * Sm, Sy_min)"
         elif service_lvl == "D":
             allowable1 = min(2.4 * n * material.Sm(T_dpa), 0.7 * material.Su_min(T_dpa))
             allowable2 = 1.5 * allowable1
+            formula = "min(2.4 * n * Sm, 0.7 * Su_min)"
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
+        trace.record(
+            "dpa for allowables", 0, kind="input", note="dpa set to 0 in RCC-MR"
+        )
+        trace.record("allowable 1", allowable1, kind="allowable", note=formula)
+        trace.record(
+            "allowable 2", allowable2, kind="allowable", note="1.5 * allowable 1"
+        )
 
         stress1 = refEvent.Pm
         stress2 = refEvent.PmPb
@@ -175,14 +187,17 @@ class RB_3261_116(Rule):
         # select allowable
         if service_lvl == "A":
             allowable1 = 3 * material.Sm(T_dpa)
+            trace.record("allowable 1", allowable1, kind="allowable", note="3 * Sm")
         elif service_lvl == "D" or service_lvl == "C":
             # warnings.warn(service_lvl +
             #               ' is not an admissible service level')
+            trace.record("rule", "not applicable for level C/D", kind="branch")
             return None
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
 
         stress1 = refEvent.PmPb + refEvent.dQ
+        trace.record("3Sm stress", stress1, kind="stress", unit="Pa", note="PmPb + dQ")
 
         # Operating period with secondary membrane stress
         # thermal loads are considered mandatory for ratcheting
@@ -197,6 +212,7 @@ class RB_3261_116(Rule):
 
         # short duration overstress
         if refEvent.Pms > 1e-6 or refEvent.PmPbs > 1e-6:
+            trace.record("short duration overstress", "yes", kind="branch")
             sigma_mb = (
                 0.5 * (refEvent.PmPb_ns + sigma_nmb)
                 + (3 * material.E(T, dpa) / Emb) * refEvent.PmPbs
@@ -207,6 +223,7 @@ class RB_3261_116(Rule):
             )
 
         else:  # no overstress of short duration
+            trace.record("short duration overstress", "no", kind="branch")
             sigma_nm = material.compute_delta_sigma_Neuber(
                 T, refEvent.PmQm, 1, dpa=dpa, monotonic=True
             )
@@ -234,6 +251,14 @@ class RB_3261_116(Rule):
 
             eff_idx.append(v)
 
+        trace.record("sigma_m", sigma_m, kind="stress", unit="Pa")
+        trace.record("sigma_mb", sigma_mb, kind="stress", unit="Pa")
+        trace.record("dq", dq, kind="stress", unit="Pa", note="dQ + PmPbs")
+        trace.record("SR1", SR1, kind="value", note="dq / sigma_m")
+        trace.record("SR2", SR2, kind="value", note="dq / sigma_mb")
+        trace.record("v1", eff_idx[0], kind="factor", note="efficiency index (SR1)")
+        trace.record("v2", eff_idx[1], kind="factor", note="efficiency index (SR2)")
+
         p1 = sigma_m / eff_idx[0]
         p2 = sigma_mb / eff_idx[1]
         T_dpa = (T, dpa)
@@ -242,5 +267,7 @@ class RB_3261_116(Rule):
         stress3 = p2
         allowable2 = 1.3 * material.Sm(T_dpa)
         allowable3 = 1.5 * allowable2
+        trace.record("allowable 2", allowable2, kind="allowable", note="1.3 * Sm")
+        trace.record("allowable 3", allowable3, kind="allowable", note="1.5 * 1.3 * Sm")
 
         return [(stress1, allowable1), (stress2, allowable2), (stress3, allowable3)]

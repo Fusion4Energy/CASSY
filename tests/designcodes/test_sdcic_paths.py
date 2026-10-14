@@ -1,9 +1,11 @@
+import json
 from importlib.resources import as_file, files
 
 import numpy as np
 import pytest
 
 from cassy.additional_data import materials as mat_folder
+from cassy.auxiliary import trace
 from cassy.designcodes.sdcic import (
     SDC_IC,
     IC3121_1_1_2a,
@@ -244,3 +246,31 @@ class TestSDCICPaths:
         assert result["Rule ID"] == "IC 3132.3.1"
         if material_fixture == "material_cucrzr":
             assert result["de2"] == 0
+
+    def test_trace_records_level_c_allowable(
+        self, ref_event: ReferenceEvent, material_ss316
+    ):
+        ref_event.config.service_lvl = "C"
+        ref_event.config.T = 200
+        ref_event.config.dpa = 0.0
+        tracer = trace.Tracer()
+        with trace.activate(tracer):
+            assessment = SDC_IC().assess(ref_event, material_ss316)
+        df = tracer.to_dataframe()
+        rule = df[df["rule"] == "IC 3121.1.1.2a"]
+
+        materials = rule[rule["kind"] == "material"]
+        assert {"Sm", "Min Yield Strength", "get_Keff"} <= set(materials["name"])
+        sm = materials[materials["name"] == "Sm"].iloc[0]
+        assert json.loads(sm["inputs"]) == [200, 0.0]
+        assert sm["source"] == material_ss316.name
+        assert {"Pm", "PmPb"} <= set(rule.loc[rule["kind"] == "stress", "name"])
+
+        returned = assessment["Immediate plastic collapse and plastic instability"][0]
+        recorded = rule[(rule["kind"] == "allowable") & (rule["name"] == "allowable 1")]
+        assert recorded["value"].iloc[0] == pytest.approx(returned[0][1])
+        assert recorded["note"].iloc[0] == "min(1.2 * n * Sm, Sy_min)"
+        eq1 = rule[
+            (rule["equation"] == "Primary membrane") & (rule["kind"] == "result")
+        ]
+        assert set(eq1["name"]) == {"applied", "allowable", "applied/allowable"}

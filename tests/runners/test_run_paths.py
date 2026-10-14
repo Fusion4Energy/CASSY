@@ -1,8 +1,10 @@
 import os
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
+from cassy.auxiliary.trace import load_trace
 from cassy.auxiliary.types import LoadTerm
 from cassy.gui.paths_model import build_configs_from_project
 from cassy.paths.paths_config import (
@@ -29,6 +31,32 @@ def test_run_paths_no_recap(tmp_path):
     configs = build_configs_from_project(load_project(RES / "project.json"))
     run_paths(tmp_path, configs, fatigue=True, print_recap=False, merge=False)
     assert not os.path.exists(Path(tmp_path, "Recap.docx"))
+    assert not os.path.exists(Path(tmp_path, "assessment", "trace"))
+
+
+def test_run_paths_trace(tmp_path):
+    configs = build_configs_from_project(load_project(RES / "project.json"))
+    run_paths(tmp_path, configs, fatigue=True, print_recap=False, trace=True)
+    folder = Path(tmp_path, "assessment", "trace")
+    assert os.path.exists(folder / "index.html")
+
+    df = load_trace(folder)
+    assert set(df["module"].dropna()) == {"paths"}
+    assert {"material", "stress", "allowable", "result", "input"} <= set(df["kind"])
+    assert set(df["analysis"].dropna()) == {"immediate", "fatigue"}
+    assert set(df["position"].dropna()) == {"begin", "end"}
+    # each html page per submodel
+    for name in configs:
+        assert any(f.startswith(name.replace(" ", "_")) for f in os.listdir(folder))
+
+    # the allowable reported for each equation matches the one built in the rule
+    keys = ["component", "item", "position", "event", "rule"]
+    rule_allowables = df[(df["kind"] == "allowable") & (df["name"] == "allowable 1")]
+    first_eq = df[(df["kind"] == "result") & (df["name"] == "allowable")]
+    first_eq = first_eq.groupby(keys, sort=False).head(1)
+    merged = rule_allowables.merge(first_eq, on=keys, suffixes=("_rule", "_eq"))
+    assert not merged.empty
+    np.testing.assert_allclose(merged["value_rule"], merged["value_eq"])
 
 
 def test_run_paths_with_programmatic_config(tmpdir):

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from cassy.bolts.code_assessor import BoltActionAssessor
     from cassy.paths.linstress import ReferenceEvent
+from cassy.auxiliary import trace
 from cassy.general.material import Material
 
 
@@ -86,14 +87,51 @@ class Code:
                 # This means that this is still not a rule
                 assessments[rule_name] = {}
                 for rule_name2, rule2 in rule.items():
-                    assessed = rule2.assess(combined_stress, material)
+                    with trace.scope(rule_set=rule_name, rule=rule2.ref):
+                        assessed = rule2.assess(combined_stress, material)
+                        _record_equations(rule2, assessed)
                     assessments[rule_name][rule_name2] = (assessed, rule2)
             else:
-                assessed = rule.assess(combined_stress, material)
+                with trace.scope(rule_set=rule_name, rule=rule.ref):
+                    assessed = rule.assess(combined_stress, material)
+                    _record_equations(rule, assessed)
 
                 assessments[rule_name] = (assessed, rule)
 
         return assessments
+
+
+def record_allowables(allowables: tuple, formulas: tuple | None = None) -> None:
+    """Record the allowables of a rule, numbered as its equations."""
+    for i, allowable in enumerate(allowables):
+        note = None if formulas is None else formulas[i]
+        trace.record(f"allowable {i + 1}", allowable, kind="allowable", note=note)
+
+
+def _record_equations(rule: Rule, assessed: list | None) -> None:
+    """Record the (stress, allowable) couples returned by a rule."""
+    if not trace.is_active():
+        return
+    if assessed is None:
+        trace.record("rule", "not applicable", kind="branch")
+        return
+    for i, couple in enumerate(assessed):
+        try:
+            equation = rule.description[i]
+        except IndexError:
+            equation = f"equation {i + 1}"
+        with trace.scope(equation=equation):
+            if couple is None or couple[0] is None:
+                trace.record("equation", "not evaluated", kind="branch")
+                continue
+            stress, allowable = couple
+            trace.record("applied", stress, kind="result")
+            trace.record("allowable", allowable, kind="result")
+            try:
+                ratio = float(stress) / float(allowable)
+            except (TypeError, ValueError, ZeroDivisionError):
+                ratio = None
+            trace.record("applied/allowable", ratio, kind="result")
 
 
 class BoltCode(Code):

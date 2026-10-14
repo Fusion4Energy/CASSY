@@ -8,6 +8,7 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
+from cassy.auxiliary import trace
 from cassy.auxiliary.types import PathLike
 from cassy.designcodes.codes import Code
 from cassy.paths.paths_config import Configuration
@@ -152,10 +153,12 @@ class Path:
         dfs_end = []
         # Standard REs
         for RE_beg, RE_end in zip(self.REs_beg, self.REs_end):
-            df_beg = RE_beg.assess(code, self.material)
+            with trace.scope(position="begin"):
+                df_beg = RE_beg.assess(code, self.material)
             dfs_beg.append(df_beg)
 
-            df_end = RE_end.assess(code, self.material)
+            with trace.scope(position="end"):
+                df_end = RE_end.assess(code, self.material)
             dfs_end.append(df_end)
 
         self.ass_beg = pd.concat(dfs_beg)
@@ -183,10 +186,12 @@ class Path:
         rows_end = []
         # Fatigue REs
         for RE_beg, RE_end in zip(self.REs_fatigue_beg, self.REs_fatigue_end):
-            row_beg = RE_beg.computeVj(code, self.material)
+            with trace.scope(position="begin"):
+                row_beg = RE_beg.computeVj(code, self.material)
             rows_beg.append(row_beg)
 
-            row_end = RE_end.computeVj(code, self.material)
+            with trace.scope(position="end"):
+                row_end = RE_end.computeVj(code, self.material)
             rows_end.append(row_end)
 
         self.ass_fatigue_beg = pd.DataFrame(rows_beg)
@@ -320,13 +325,14 @@ class Submodel:
         """
         assessments = {}
         for idx, path in self.paths.items():
-            beg, end = path.assess(code)
-            assessments[path.pnum] = {"begin": beg, "end": end}
+            with trace.scope(component=self.name, item=f"Path {path.pnum}"):
+                beg, end = path.assess(code)
+                assessments[path.pnum] = {"begin": beg, "end": end}
 
-            if fatigue:
-                beg_f, end_f = path.assess_fatigue(code)
-                assessments[path.pnum]["begin fatigue"] = beg_f
-                assessments[path.pnum]["end fatigue"] = end_f
+                if fatigue:
+                    beg_f, end_f = path.assess_fatigue(code)
+                    assessments[path.pnum]["begin fatigue"] = beg_f
+                    assessments[path.pnum]["end fatigue"] = end_f
 
         self.assessments = assessments
         self.code = code

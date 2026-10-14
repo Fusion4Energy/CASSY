@@ -19,6 +19,7 @@ from cassy.designcodes.EN13445_bolts import EN_13445_Bolts
 from cassy.designcodes.sdcic_bolts import SDC_IC_Bolts
 from cassy.general.folder_tree import FolderTree
 from cassy.office.word_helper import WordOutput
+from cassy.runners.run_common import new_tracer, save_trace, tracing
 
 # #################### Parameters #############################################
 
@@ -44,8 +45,12 @@ def run_bolts(
     print_recap: bool = True,
     merge: bool = True,
     only_bolts: bool = False,
+    trace: bool = False,
 ) -> None:
     folder_tree = FolderTree(root)
+    tracer = new_tracer(trace, "bolts")
+    if tracer is not None:
+        tracer.metadata["codes"] = sorted({c.code.name for c in configs.values()})
 
     recaps = {"Immediate": [], "Fatigue": []}
     connections: dict[str, FlangeAssessment] = {}
@@ -58,9 +63,10 @@ def run_bolts(
         if only_bolts:
             flange_assessment.config.has_insert = False
 
-        flange_assessment.assess()
-        if flange_assessment.config.has_insert:
-            flange_assessment.assess(insert=True)
+        with tracing(tracer):
+            flange_assessment.assess()
+            if flange_assessment.config.has_insert:
+                flange_assessment.assess(insert=True)
 
         # print the assessment
         assessment_folder = Path(folder_tree.assessment_folder, connection_name)
@@ -74,6 +80,8 @@ def run_bolts(
         flange_assessment.print_global_df(assessment_folder)
         if flange_assessment.config.has_insert:
             flange_assessment.print_global_df(assessment_folder, insert=True)
+
+    save_trace(tracer, folder_tree.assessment_folder)
 
     if not print_recap:
         logger.info("No word recap requested. Assessment completed")

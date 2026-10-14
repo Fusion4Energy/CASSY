@@ -663,6 +663,7 @@ class GeneralTab(RunTab):
                 print_recap=opts.get("print_recap", True),
                 merge=opts.get("merge", True),
                 only_bolts=opts.get("only_bolts", False),
+                trace=opts.get("trace", False),
             )
 
         return work

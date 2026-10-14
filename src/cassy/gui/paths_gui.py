@@ -295,6 +295,7 @@ class GeneralTab(RunTab):
         matlib = opts.get("matlib_path") or None
         print_recap = opts.get("print_recap", True)
         merge = opts.get("merge", True)
+        trace = opts.get("trace", False)
 
         def work() -> None:
             from cassy.runners.run_paths import run_paths
@@ -306,6 +307,7 @@ class GeneralTab(RunTab):
                 matlib=matlib,
                 print_recap=print_recap,
                 merge=merge,
+                trace=trace,
             )
 
         return work

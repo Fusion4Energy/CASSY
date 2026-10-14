@@ -10,6 +10,7 @@ from scipy.interpolate import LinearNDInterpolator
 from scipy.optimize import root_scalar
 from scipy.spatial import Delaunay
 
+from cassy.auxiliary import trace
 from cassy.auxiliary.custom_errors import ConfigError, OutOfBoundsError
 from cassy.auxiliary.types import PathLike
 
@@ -84,7 +85,17 @@ class Property(ABC):
                 )
 
         # if in boounds, safely call the function
-        return self._function_to_call(*args) * self.scale_result
+        with trace.nested() as outermost:
+            result = self._function_to_call(*args) * self.scale_result
+        if outermost:
+            trace.record(
+                self.name,
+                result,
+                kind="material",
+                inputs=list(args),
+                source=self.material_name,
+            )
+        return result
 
     @abstractmethod
     def _function_to_call(self, *args) -> float:
@@ -700,6 +711,7 @@ class Material:
 
         self.type: str | None = config.get("type", None)
 
+    @trace.traced_method
     def ft_star(self, T: float) -> float:
         """Compute ft_star according to EN13445 part 3, 18.10.6.2. Min temperature is
         conservatively assumed to be room T= 25 celsius"""
@@ -723,6 +735,7 @@ class Material:
             )
         return res
 
+    @trace.traced_method
     def cyclic_stress_strain(self, T: float, ds: float, dpa: float = 0) -> float:
         """returns the plastic cyclic de_strain given a d_sigma (Pa) and T"""
         E = self.E(T, dpa) * 1e-6  # convert from Pa to MPa
@@ -734,6 +747,7 @@ class Material:
 
         return de_tot / 100
 
+    @trace.traced_method
     def get_Keff(self, T: float, dpa: float, K: float) -> float:
         """Compute the effective K value for the material at given temperature and dpa."""
         # To check if it is the same for all materials
@@ -744,6 +758,7 @@ class Material:
             k_rect = 1.5
         return 1 + 2 * (K - 1) * (k_rect - 1)
 
+    @trace.traced_method
     def compute_tangent_young(self, sigma: float, T: float, dpa: float = 0) -> float:
         """Compute the tangent Young modulus for the material at given temperature and dpa.
 
@@ -770,6 +785,7 @@ class Material:
         E_tangent = (sigma_upper - sigma_lower) / (eps_upper - eps_lower)
         return E_tangent
 
+    @trace.traced_method
     def compute_delta_sigma_Neuber(
         self,
         T: float,
