@@ -1,6 +1,7 @@
 import math
 import logging
 
+from cassy.auxiliary import trace
 from cassy.designcodes.codes import Code, Rule
 from cassy.general.material import Material
 from cassy.paths.linstress import ReferenceEvent
@@ -45,6 +46,7 @@ class SDC_IC(Code):
         # ds is multiplied by f which depends on the type of joint
         f = refEvent.config.welding_f
         ds = f * refEvent.PQF
+        trace.record("ds", ds, kind="stress", unit="Pa", note="f * PQF")
         T_ds = (T, ds)
 
         # --- split in case of stress or strain based fatigue curve ---
@@ -66,6 +68,11 @@ class SDC_IC(Code):
                     logging.warning(
                         f"Cyclic stress-strain curves not implemented, de2=0"
                     )
+                    trace.record(
+                        "de2",
+                        "cyclic stress-strain curve not available: de2 = 0",
+                        kind="warning",
+                    )
             else:
                 # there is no primary stress
                 de2 = 0
@@ -78,10 +85,14 @@ class SDC_IC(Code):
             # the fatigue curve of the welded joint is obatined dividing the
             # ordinates (epsilon) by f factor
             detot = detot / f
+            trace.record(
+                "de tot", detot, kind="value", note="(de1 + de2 + de3 + de4) / f"
+            )
             N_all = material.N((T, detot))
 
         elif material.N.ftype == "stress":
             SA = ds / 2
+            trace.record("SA", SA, kind="stress", unit="Pa", note="ds / 2")
             N_all = material.N(
                 T, SA * 1e-6
             )  # convention is MPa for stress based curves
@@ -146,16 +157,25 @@ class IC3121_1_1_2a(Rule):
         # select allowable
         if service_lvl == "A":
             allowable1 = n * material.Sm(T_dpa)
+            formula = "n * Sm"
         elif service_lvl == "C":
             allowable1 = min(1.2 * n * material.Sm(T_dpa), material.Sy_min(T_dpa))
+            formula = "min(1.2 * n * Sm, Sy_min)"
         elif service_lvl == "D":
             allowable1 = min(2.4 * n * material.Sm(T_dpa), 0.7 * material.Su_min(T_dpa))
+            formula = "min(2.4 * n * Sm, 0.7 * Su_min)"
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
+        trace.record("allowable 1", allowable1, kind="allowable", note=formula)
 
         stress1 = refEvent.Pm
         stress2 = refEvent.PmPb
+        trace.equation_terms(("Pm", "allowable 1"), ("PmPb", "allowable 2"))
         allowable2 = material.get_Keff(T, dpa, K) * allowable1
+        trace.record("K", K, kind="factor")
+        trace.record(
+            "allowable 2", allowable2, kind="allowable", note="Keff * allowable 1"
+        )
 
         return [(stress1, allowable1), (stress2, allowable2)]
 
@@ -193,14 +213,19 @@ class IC3121_2_1(Rule):
         # select allowable
         if service_lvl == "A":
             allowable = material.Se(T_dpa)
+            formula = "Se"
         elif service_lvl == "C":
             allowable = 1.2 * material.Se(T_dpa)
+            formula = "1.2 * Se"
         elif service_lvl == "D":
             allowable = 2 * material.Se(T_dpa)
+            formula = "2 * Se"
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
+        trace.record("allowable", allowable, kind="allowable", note=formula)
 
         stress = refEvent.PmQm
+        trace.equation_terms(("PmQm", "allowable"))
 
         return [(stress, allowable)]
 
@@ -240,19 +265,28 @@ class IC3121_3_1(Rule):
         T_dpa = (refEvent.config.T, refEvent.config.dpa)
         # select allowable
         if service_lvl == "A":
+            factor = 1
             allowable1 = material.Sd(T_dpa)
             allowable2 = material.Sd_nopeak(T_dpa)
         elif service_lvl == "C":
+            factor = 1.2
             allowable1 = 1.2 * material.Sd(T_dpa)
             allowable2 = 1.2 * material.Sd_nopeak(T_dpa)
         elif service_lvl == "D":
+            factor = 1.35
             allowable1 = 1.35 * material.Sd(T_dpa)
             allowable2 = 1.35 * material.Sd_nopeak(T_dpa)
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
+        trace.record("service level factor", factor, kind="factor")
+        trace.record("allowable 1", allowable1, kind="allowable", note="factor * Sd")
+        trace.record(
+            "allowable 2", allowable2, kind="allowable", note="factor * Sd_nopeak"
+        )
 
         stress1 = refEvent.PQF
         stress2 = refEvent.PQ
+        trace.equation_terms(("PQF", "allowable 1"), ("PQ", "allowable 2"))
 
         return [(stress1, allowable1), (stress2, allowable2)]
 
@@ -299,18 +333,23 @@ class IC3131_1_2(Rule):
         # select allowable
         if service_lvl == "A" or service_lvl == "C":
             allowable1 = 3 * material.Sm(T_dpa)
+            trace.record("allowable 1", allowable1, kind="allowable", note="3 * Sm")
         elif service_lvl == "D":
             # warnings.warn(service_lvl +
             #               ' is not an admissible service level')
+            trace.record("rule", "not applicable for level D", kind="branch")
             return None
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
 
         stress1 = refEvent.ratcheting3Sm_SDCIC
+        trace.equation_terms(("ratcheting3Sm_SDCIC", "allowable 1"))
 
         # Perform efficiency index only if 3Sm is not passed
         if stress1 <= allowable1:
+            trace.record("efficiency index", "skipped: 3Sm satisfied", kind="branch")
             return [(stress1, allowable1), (None, None), (None, None)]
+        trace.record("efficiency index", "evaluated: 3Sm not satisfied", kind="branch")
 
         # -----IC 3131.1.1 'Efficiency Index Diagram'------#
         # Operating period with secondary membrane stress
@@ -325,6 +364,7 @@ class IC3131_1_2(Rule):
         except (NotImplementedError, OutOfBoundsError) as e:
             logging.warning(e)
             logging.warning("Efficiency index cannot be computed")
+            trace.record("efficiency index", f"not computed: {e}", kind="warning")
             return [(stress1, allowable1), (None, None), (None, None)]
 
         Em = material.compute_tangent_young(sigma_nm, T, dpa=dpa)
@@ -332,6 +372,7 @@ class IC3131_1_2(Rule):
 
         # short duration overstress
         if refEvent.Pms > 1e-6 or refEvent.PmPbs > 1e-6:
+            trace.record("short duration overstress", "yes", kind="branch")
             sigma_mb = (
                 0.5 * (refEvent.PmPb_ns + sigma_nmb)
                 + (3 * material.E(T, dpa) / Emb) * refEvent.PmPbs
@@ -342,6 +383,7 @@ class IC3131_1_2(Rule):
             )
 
         else:  # no overstress of short duration
+            trace.record("short duration overstress", "no", kind="branch")
             sigma_nm = material.compute_delta_sigma_Neuber(
                 T, refEvent.PmQm, 1, dpa=dpa, monotonic=True
             )
@@ -369,15 +411,27 @@ class IC3131_1_2(Rule):
 
             eff_idx.append(v)
 
+        trace.record("sigma_m", sigma_m, kind="stress", unit="Pa")
+        trace.record("sigma_mb", sigma_mb, kind="stress", unit="Pa")
+        trace.record("dq", dq, kind="stress", unit="Pa", note="dQ + PmPbs")
+        trace.record("SR1", SR1, kind="value", note="dq / sigma_m")
+        trace.record("SR2", SR2, kind="value", note="dq / sigma_mb")
+        trace.record("v1", eff_idx[0], kind="factor", note="efficiency index (SR1)")
+        trace.record("v2", eff_idx[1], kind="factor", note="efficiency index (SR2)")
+
         # effective primary stress intensity (IC 3131.1.1.5)
         p1 = sigma_m / eff_idx[0]
         p2 = sigma_mb / eff_idx[1]
+        trace.record("p1", p1, kind="stress", unit="Pa", note="sigma_m / v1")
+        trace.record("p2", p2, kind="stress", unit="Pa", note="sigma_mb / v2")
         T_dpa = (T, dpa)
 
         stress2 = p1
         stress3 = p2
         allowable2 = 1.3 * material.Sm(T_dpa)
         allowable3 = 1.5 * allowable2
+        trace.record("allowable 2", allowable2, kind="allowable", note="1.3 * Sm")
+        trace.record("allowable 3", allowable3, kind="allowable", note="1.5 * 1.3 * Sm")
 
         # # -------Bree diagram Rule (IC 3131.1.2)--------- #
         # # coordinates calculation
@@ -392,4 +446,9 @@ class IC3131_1_2(Rule):
 
         # allowable4 = material.Sy_min(T_dpa)
 
+        trace.equation_terms(
+            ("ratcheting3Sm_SDCIC", "allowable 1"),
+            ("p1", "allowable 2"),
+            ("p2", "allowable 3"),
+        )
         return [(stress1, allowable1), (stress2, allowable2), (stress3, allowable3)]

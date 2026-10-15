@@ -364,7 +364,7 @@ class TestFlangeDialogCollect:
     def _make(self, root, name="Flange1", code=None, actions=""):
         dlg = object.__new__(FlangeDialog)
         dlg._ex = {}
-        dlg._name = tk.StringVar(root, value=name)
+        dlg._name_var = tk.StringVar(root, value=name)
         dlg._code = tk.StringVar(root, value=code or BOLT_DESIGN_CODES[0])
         dlg._actions = tk.StringVar(root, value=actions)
         return dlg
@@ -382,7 +382,7 @@ class TestFlangeDialogCollect:
     def test_collect_preserves_existing_bolts_spec(self, root):
         dlg = object.__new__(FlangeDialog)
         dlg._ex = {"bolts_spec": [_bolt_entry()]}
-        dlg._name = tk.StringVar(root, value="F")
+        dlg._name_var = tk.StringVar(root, value="F")
         dlg._code = tk.StringVar(root, value=BOLT_DESIGN_CODES[0])
         dlg._actions = tk.StringVar(root, value="")
         result = dlg._collect()

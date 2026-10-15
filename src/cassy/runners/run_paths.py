@@ -17,7 +17,12 @@ from cassy.general.folder_tree import FolderTree
 from cassy.office.word_helper import WordOutput
 from cassy.paths.paths_config import Configuration
 from cassy.paths.submodel import Submodel
-from cassy.runners.run_common import build_material_library
+from cassy.runners.run_common import (
+    build_material_library,
+    new_tracer,
+    save_trace,
+    tracing,
+)
 
 # #################### User Inputs ############################################
 # local folders and files
@@ -44,10 +49,14 @@ def run_paths(
     matlib: PathLike | None = None,
     print_recap: bool = True,
     merge: bool = True,
+    trace: bool = False,
 ) -> None:
     folder_tree = FolderTree(root)
     # --- Initializations ---
     materials = build_material_library(matlib)
+    tracer = new_tracer(trace, "paths")
+    if tracer is not None:
+        tracer.metadata["codes"] = sorted({c.code for c in configs.values()})
 
     # --- Reorganize and create the LinStresses and Combined ones + Assessment ---
     logger.info("Assessing the results...")
@@ -66,7 +75,8 @@ def run_paths(
                     + " be set as False"
                 )
         submodel.build_REs(fatigue=fatigue)
-        submodel.assess(CODES[conf.code], fatigue=fatigue)
+        with tracing(tracer):
+            submodel.assess(CODES[conf.code], fatigue=fatigue)
         # Generate the assessment folder
         ass_path = os.path.join(folder_tree.assessment_folder, submodel.name)
         if os.path.exists(ass_path):
@@ -75,6 +85,8 @@ def run_paths(
 
         submodels.append(submodel)
         submodel.print_global_df(ass_path)
+
+    save_trace(tracer, folder_tree.assessment_folder)
 
     if not print_recap:
         logger.info("No word recap requested. Assessment completed")

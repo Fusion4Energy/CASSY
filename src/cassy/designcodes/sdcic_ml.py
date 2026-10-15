@@ -1,5 +1,6 @@
 import math
 
+from cassy.auxiliary import trace
 from cassy.designcodes.codes import Code, Rule
 from cassy.general.material import Material
 from cassy.paths.linstress import ReferenceEvent
@@ -18,9 +19,7 @@ class SDC_IC_ML(Code):
         self.damage_types = ("Immediate", "Ratcheting")
         self.fatigue = True
 
-    def computeVj(
-        self, refEvent: ReferenceEvent, material: Material
-    ):
+    def computeVj(self, refEvent: ReferenceEvent, material: Material):
         """
         Asses the Rule
         Parameters
@@ -43,6 +42,7 @@ class SDC_IC_ML(Code):
         # ds is multiplied by f which depends on the type of joint
         f = refEvent.config.welding_f
         ds = f * refEvent.PQF
+        trace.record("ds", ds, kind="stress", unit="Pa", note="f * PQF")
         T_ds = (T, ds)
         # de calculation
         de1 = 2 / 3 * (1 + material.nu()) * (ds / material.E(T))
@@ -136,7 +136,12 @@ class IC7121_3_1(Rule):
 
         stress1 = refEvent.PQF
         stress2 = refEvent.PQ
+        trace.equation_terms(("PQF", "allowable 1"), ("PQ", "allowable 2"))
         allowable2 = allowable1
+        trace.record("allowable 1", allowable1, kind="allowable", note="factor * Sd")
+        trace.record(
+            "allowable 2", allowable2, kind="allowable", note="equal to allowable 1"
+        )
 
         return [(stress1, allowable1), (stress2, allowable2)]
 
@@ -228,6 +233,8 @@ class IC7131_1_1(Rule):
         # effective primary stress intensity (IC 3131.1.1.5)
         p1 = sigma_m / eff_idx[0]
         p2 = sigma_mb / eff_idx[1]
+        trace.record("p1", p1, kind="stress", unit="Pa", note="sigma_m / v1")
+        trace.record("p2", p2, kind="stress", unit="Pa", note="sigma_mb / v2")
         T_dpa = (T, dpa)
 
         stress2 = p1

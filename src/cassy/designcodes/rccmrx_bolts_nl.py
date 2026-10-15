@@ -4,7 +4,13 @@ if TYPE_CHECKING:
     from cassy.bolts.code_assessor import BoltActionAssessor
 import logging
 
-from cassy.designcodes.codes import BoltCode, Rule
+from cassy.auxiliary import trace
+from cassy.designcodes.codes import (
+    BoltCode,
+    Rule,
+    bolt_stress_name,
+    record_allowables,
+)
 from cassy.general.material import Material
 from cassy.general.material import FatigueInconelRCCMRx
 from cassy.auxiliary.custom_errors import OutOfBoundsError
@@ -62,6 +68,9 @@ class RCCMRx_Bolts(BoltCode):
 
         # Range of total stress multiplied by the stress coefficient
         ds_tot = boltAction.poa.KF * ds_n
+        trace.record("KF", boltAction.poa.KF, kind="factor")
+        trace.record("ds_n", ds_n, kind="stress", unit="Pa")
+        trace.record("ds_tot", ds_tot, kind="stress", unit="Pa", note="KF * ds_n")
         T_ds = (ref_event.temp, ds_tot)
 
         # delta epsilon calculation
@@ -82,6 +91,7 @@ class RCCMRx_Bolts(BoltCode):
                 'Keps, Kmu not implemented for material "%s"', material.name
             )
             logging.warning("assuming de3 = 0, de4 = 0")
+            trace.record("Keps, Kmu", "not available: de3 = de4 = 0", kind="warning")
             de3 = 0
             de4 = 0
 
@@ -101,12 +111,18 @@ class RCCMRx_Bolts(BoltCode):
                     )
                 except OutOfBoundsError as e:
                     logging.warning(str(e))
+                    trace.record("N", f"not computed: {e}", kind="warning")
                     N = np.nan
             else:
                 N = material.N((ref_event.temp, detot))
         elif material.N.ftype == "stress":
             logging.warning(
                 "stress based fatigue in RCC-MRx is not orthodox, check results carefully"
+            )
+            trace.record(
+                "fatigue curve",
+                "stress based fatigue in RCC-MRx is not orthodox, check results",
+                kind="warning",
             )
             if material.N.mean_stress:
                 SA = ds_tot / 2
@@ -166,6 +182,7 @@ class RB3284_1112:
             allowable2 = min(
                 0.9 * material.Sy_min(T_dpa), 0.67 * material.Su_min(T_dpa)
             )
+            formulas = ("Smb", "min(0.9 * Sy_min, 0.67 * Su_min)")
 
         elif service_lvl == "C":
             if material.Su_min(T_dpa) >= 700e6:
@@ -173,23 +190,36 @@ class RB3284_1112:
                 allowable2 = min(
                     0.9 * material.Sy_min(T_dpa), 0.67 * material.Su_min(T_dpa)
                 )
+                formulas = (
+                    "Smb (Su_min >= 700 MPa)",
+                    "min(0.9 * Sy_min, 0.67 * Su_min)",
+                )
             else:
                 allowable = 1.5 * material.Smb(T_dpa)
                 allowable2 = "No limit"
+                formulas = ("1.5 * Smb (Su_min < 700 MPa)", "No limit")
 
         elif service_lvl == "D":
             if material.Su_min(T_dpa) <= 700e6:
                 allowable = min(2.4 * material.Smb(T_dpa), 0.7 * material.Su_min(T_dpa))
+                formula = "min(2.4 * Smb, 0.7 * Su_min) (Su_min <= 700 MPa)"
             else:
                 allowable = 2 * material.Smb(T_dpa)
+                formula = "2 * Smb (Su_min > 700 MPa)"
 
             allowable2 = "No limit"
+            formulas = (formula, "No limit")
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
+        record_allowables((allowable, allowable2), formulas)
 
         stress = boltasessor.applicable_stresses["primary"]["Mean stress"]
         stress2 = boltasessor.applicable_stresses["all"]["Mean stress"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Mean stress"), "allowable 1"),
+            (bolt_stress_name("all", "Mean stress"), "allowable 2"),
+        )
         return [(stress, allowable), (stress2, allowable2)]
 
 
@@ -228,28 +258,39 @@ class RB3284_1113:
             allowable2 = 1.33 * min(
                 0.9 * material.Sy_min(T_dpa), 0.67 * material.Su_min(T_dpa)
             )
+            formulas = ("No limit", "1.33 * min(0.9 * Sy_min, 0.67 * Su_min)")
         elif service_lvl == "C":
             allowable1 = 2.25 * material.Smb(T_dpa)
             if material.Su_min(T_dpa) >= 700e6:
                 allowable2 = 1.33 * min(
                     0.9 * material.Sy_min(T_dpa), 0.67 * material.Su_min(T_dpa)
                 )
+                formula2 = "1.33 * min(0.9 * Sy_min, 0.67 * Su_min) (Su_min >= 700 MPa)"
             else:
                 allowable2 = "No limit"
+                formula2 = "No limit (Su_min < 700 MPa)"
+            formulas = ("2.25 * Smb", formula2)
 
         elif service_lvl == "D":
             if material.Su_min(T_dpa) <= 700e6:
                 allowable1 = "No limit"
                 allowable2 = 1.5 * allowable1
+                formulas = ("No limit", "1.5 * allowable 1")
             else:
                 allowable1 = "No limit"
                 allowable2 = 3 * material.Smb(T_dpa)
+                formulas = ("No limit", "3 * Smb (Su_min > 700 MPa)")
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
+        record_allowables((allowable1, allowable2), formulas)
 
         stress1 = boltaction.applicable_stresses["primary"]["Max stress"]
         stress2 = boltaction.applicable_stresses["all"]["Max stress"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Max stress"), "allowable 1"),
+            (bolt_stress_name("all", "Max stress"), "allowable 2"),
+        )
         return [(stress1, allowable1), (stress2, allowable2)]
 
 
@@ -290,25 +331,32 @@ class RB3284_1211(Rule):
         if service_lvl == "A":
             allowable1 = allowable2 = 0.6 * material.Smb(T_dpa)
             allowable3 = allowable4 = 0.6 * material.Sy_min(T_dpa)
+            formulas = ("0.6 * Smb",) * 2 + ("0.6 * Sy_min",) * 2
 
         elif service_lvl == "C":
             if material.Su_min(T_dpa) >= 700e6:
                 allowable1 = allowable2 = 0.6 * material.Smb(T_dpa)
                 allowable3 = allowable4 = 0.6 * material.Sy_min(T_dpa)
+                formulas = ("0.6 * Smb (Su_min >= 700 MPa)",) * 2 + (
+                    "0.6 * Sy_min (Su_min >= 700 MPa)",
+                ) * 2
 
             else:
                 allowable1 = "No limit"
                 allowable2 = "No limit"
                 allowable3 = "No limit"
                 allowable4 = "No limit"
+                formulas = ("No limit (Su_min < 700 MPa)",) * 4
 
         elif service_lvl == "D":
             allowable1 = "No limit"
             allowable2 = "No limit"
             allowable3 = "No limit"
             allowable4 = "No limit"
+            formulas = ("No limit",) * 4
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
+        record_allowables((allowable1, allowable2, allowable3, allowable4), formulas)
 
         primary = boltaction.applicable_stresses["primary"]
         stress1 = primary["Avg shear stress in threads"]
@@ -318,6 +366,12 @@ class RB3284_1211(Rule):
         stress3 = _all["Avg shear stress in threads"]
         stress4 = _all["Avg shear stress in head"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Avg shear stress in threads"), "allowable 1"),
+            (bolt_stress_name("primary", "Avg shear stress in head"), "allowable 2"),
+            (bolt_stress_name("all", "Avg shear stress in threads"), "allowable 3"),
+            (bolt_stress_name("all", "Avg shear stress in head"), "allowable 4"),
+        )
         return [
             (stress1, allowable1),
             (stress2, allowable2),
@@ -361,25 +415,37 @@ class RB3284_1211_insert(Rule):
         if service_lvl == "A":
             allowable1 = 0.3 * material.Sm(T_dpa)
             allowable2 = 0.6 * material.Sy_min(T_dpa)
+            formulas = ("0.3 * Sm", "0.6 * Sy_min")
         elif service_lvl == "C":
             if material.Su_min(T_dpa) >= 700e6:
                 allowable1 = 0.3 * material.Sm(T_dpa)
                 allowable2 = 0.6 * material.Sy_min(T_dpa)
+                formulas = (
+                    "0.3 * Sm (Su_min >= 700 MPa)",
+                    "0.6 * Sy_min (Su_min >= 700 MPa)",
+                )
             else:
                 allowable1 = "No limit"
                 allowable2 = "No limit"
+                formulas = ("No limit (Su_min < 700 MPa)",) * 2
         elif service_lvl == "D":
             allowable1 = "No limit"
             allowable2 = "No limit"
+            formulas = ("No limit",) * 2
 
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
+        record_allowables((allowable1, allowable2), formulas)
 
         primary = boltaction.applicable_stresses["primary"]
         stress1 = primary["Avg shear stress in threads"]
         _all = boltaction.applicable_stresses["all"]
         stress2 = _all["Avg shear stress in threads"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Avg shear stress in threads"), "allowable 1"),
+            (bolt_stress_name("all", "Avg shear stress in threads"), "allowable 2"),
+        )
         return [(stress1, allowable1), (stress2, allowable2)]
 
 
@@ -416,18 +482,31 @@ class RB3284_1213(Rule):
         # select allowable
         if service_lvl == "A":
             allowable = 2.7 * material.Sy_min(T_dpa)
+            formula = "2.7 * Sy_min"
         elif service_lvl == "C":
             if material.Su_min(T_dpa) >= 700e6:
                 allowable = 2.7 * material.Sy_min(T_dpa)
+                formula = "2.7 * Sy_min (Su_min >= 700 MPa)"
             else:
                 allowable = "No limit"
+                formula = "No limit (Su_min < 700 MPa)"
         elif service_lvl == "D":
             allowable = "No limit"
+            formula = "No limit"
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
+        record_allowables((allowable,), (formula,))
 
         stress = boltaction.applicable_stresses["all"][
             "Avg contact pressure between head and assembly"
         ]
 
+        trace.equation_terms(
+            (
+                bolt_stress_name(
+                    "all", "Avg contact pressure between head and assembly"
+                ),
+                "allowable 1",
+            ),
+        )
         return [(stress, allowable)]

@@ -18,6 +18,7 @@ nav = [
     {"Paths" = "user_guide/paths.md"},
     {"Bolts" = "user_guide/bolts.md"},
     {"Scripting" = "user_guide/scripting.md"},
+    {"Intermediate Results Trace" = "user_guide/trace.md"},
     {"Material Properties" = "user_guide/materials.md"},
   ]},
   {"Theory"= [

@@ -31,6 +31,7 @@ EMPTY_PROJECT: dict[str, Any] = {
         "fatigue": False,
         "print_recap": True,
         "merge": True,
+        "trace": False,
         "matlib_path": "",
         "root_dir": "",
     },

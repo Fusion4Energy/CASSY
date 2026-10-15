@@ -24,6 +24,7 @@ EMPTY_BOLT_PROJECT: dict[str, Any] = {
         "print_recap": True,
         "merge": True,
         "only_bolts": False,
+        "trace": False,
         "matlib_path": "",
         "root_dir": "",
     },

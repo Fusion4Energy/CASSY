@@ -12,6 +12,8 @@ from tkinter import filedialog, messagebox, ttk
 from tkinter import font as tkfont
 from typing import Callable
 
+from cassy.runners.run_project import resolve_project_paths, save_project
+
 # ── Palette (matches the CASSY logo) ──────────────────────────────────────────
 
 BG = "#F4F6F9"
@@ -615,6 +617,8 @@ class TableTab(ttk.Frame):
         return self._project[self._LIST_KEY]
 
     def refresh(self) -> None:
+        if not self._tree.winfo_exists():
+            return
         fill_tree(self._tree, [self._row_values(item) for item in self._list()])
 
     def _selected_index(self) -> int | None:
@@ -706,6 +710,7 @@ class RunTab(ttk.Frame):
         ("fatigue", "Fatigue assessment", False),
         ("print_recap", "Generate Word recap", True),
         ("merge", "Merge repeated cells in Word tables (slower)", True),
+        ("trace", "Save trace of intermediate results (HTML + CSV)", False),
     )
 
     def __init__(self, parent: ttk.Notebook, project: dict) -> None:
@@ -1318,6 +1323,8 @@ class ProjectApp(tk.Tk):
         try:
             with open(path, encoding="utf-8") as fh:
                 data = self._migrate_project(json.load(fh))
+            # relative paths are stored relative to the project file
+            resolve_project_paths(data, os.path.dirname(os.path.abspath(path)))
         except Exception as exc:
             messagebox.showerror("Open Error", str(exc))
             return
@@ -1354,8 +1361,7 @@ class ProjectApp(tk.Tk):
                 + "\n".join(errors[:20]),
             )
         try:
-            with open(path, "w", encoding="utf-8") as fh:
-                json.dump(self._project, fh, indent=2)
+            save_project(self._project, path)
         except Exception as exc:
             messagebox.showerror("Save Error", str(exc))
             return

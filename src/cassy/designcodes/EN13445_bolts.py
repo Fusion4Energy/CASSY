@@ -1,3 +1,4 @@
+from cassy.auxiliary import trace
 from cassy.designcodes.codes import BoltCode, Rule
 from cassy.general.material import Material
 import numpy as np
@@ -33,6 +34,7 @@ class EN_13445_Bolts(BoltCode):
 
         if Rm > 785:
             Rm = 785
+            trace.record("Rm", "capped to 785 MPa", kind="branch")
 
         def _compute_fe(N: float):
             if d > 25:  # mm
@@ -53,8 +55,12 @@ class EN_13445_Bolts(BoltCode):
             return N - 285 * (Rm * fb / ds) ** 3
 
         if ds / Rm >= 0.0522:
-            N = fsolve(_compute_N, 100)[0]
+            trace.record("N", "solved: N = 285 * (Rm * fb / ds)^3", kind="branch")
+            # hide the material calls of the solver iterations
+            with trace.nested():
+                N = fsolve(_compute_N, 100)[0]
         else:
+            trace.record("N", "ds / Rm < 0.0522: N = 2e6", kind="branch")
             N = 2e6
 
         return {

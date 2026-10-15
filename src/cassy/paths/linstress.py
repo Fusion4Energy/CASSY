@@ -1,6 +1,9 @@
+import functools
+
 import pandas as pd
 import numpy as np
 from copy import deepcopy
+from cassy.auxiliary import trace
 from cassy.designcodes.codes import Code
 from cassy.general.material import Material
 from cassy.paths.paths_config import (
@@ -81,6 +84,18 @@ class LinStress:
         return df
 
 
+def _traced_stress(func):
+    """Record the combined stress each time it is accessed."""
+
+    @functools.wraps(func)
+    def wrapper(self):
+        value = func(self)
+        trace.record(func.__name__, value, kind="stress", unit="Pa")
+        return value
+
+    return wrapper
+
+
 class ReferenceEvent:
     def __init__(
         self,
@@ -123,6 +138,7 @@ class ReferenceEvent:
         return von_mises(vol, ine)
 
     @property
+    @_traced_stress
     def Pm(self) -> float:
         """primary membrane stress"""
         if "Pm" not in self._cache:
@@ -138,6 +154,7 @@ class ReferenceEvent:
         return self._cache["Pm"]
 
     @property
+    @_traced_stress
     def Pms(self) -> float:
         """primary membrane overstress from short duration loads"""
         if "Pms" not in self._cache:
@@ -155,6 +172,7 @@ class ReferenceEvent:
         return self._cache["Pms"]
 
     @property
+    @_traced_stress
     def Pm_ns(self) -> float:
         """primary membrane stress not from short duration loads"""
         if "Pm_ns" not in self._cache:
@@ -172,6 +190,7 @@ class ReferenceEvent:
         return self._cache["Pm_ns"]
 
     @property
+    @_traced_stress
     def Pb(self) -> float:
         """primary bending stress"""
         if "Pb" not in self._cache:
@@ -187,6 +206,7 @@ class ReferenceEvent:
         return self._cache["Pb"]
 
     @property
+    @_traced_stress
     def PmPb(self) -> float:
         """primary membrane + bending stress"""
         if "PmPb" not in self._cache:
@@ -201,6 +221,7 @@ class ReferenceEvent:
         return self._cache["PmPb"]
 
     @property
+    @_traced_stress
     def PmPbs(self) -> float:
         """primary membrane + bending overstress from short duration load"""
         if "PmPbs" not in self._cache:
@@ -218,6 +239,7 @@ class ReferenceEvent:
         return self._cache["PmPbs"]
 
     @property
+    @_traced_stress
     def PmPb_ns(self) -> float:
         """primary membrane + bending stress not from short duration loads"""
         if "PmPb_ns" not in self._cache:
@@ -235,6 +257,7 @@ class ReferenceEvent:
         return self._cache["PmPb_ns"]
 
     @property
+    @_traced_stress
     def PmQm(self) -> float:
         """total membrane stress (primary + secondary)"""
         if "PmQm" not in self._cache:
@@ -251,6 +274,7 @@ class ReferenceEvent:
         return self._cache["PmQm"]
 
     @property
+    @_traced_stress
     def PmQm_ns(self) -> float:
         """total membrane stress (primary + secondary) not from short duration loads"""
         if "PmQm_ns" not in self._cache:
@@ -269,6 +293,7 @@ class ReferenceEvent:
         return self._cache["PmQm_ns"]
 
     @property
+    @_traced_stress
     def PQ(self) -> float:
         """total stress, excluding peaks (primary + secondary)"""
         if "PQ" not in self._cache:
@@ -285,6 +310,7 @@ class ReferenceEvent:
         return self._cache["PQ"]
 
     @property
+    @_traced_stress
     def PQF(self) -> float:
         """total stress, including peaks (primary + secondary)"""
         if "PQF" not in self._cache:
@@ -301,6 +327,7 @@ class ReferenceEvent:
         return self._cache["PQF"]
 
     @property
+    @_traced_stress
     def PF(self) -> float:
         """total primary stress (Pm+Pb+F)"""
         if "PF" not in self._cache:
@@ -315,6 +342,7 @@ class ReferenceEvent:
         return self._cache["PF"]
 
     @property
+    @_traced_stress
     def PmPbQm(self) -> float:
         """Primary membrane + bending and secondary membrane stresses"""
         if "PmPbQm" not in self._cache:
@@ -331,6 +359,7 @@ class ReferenceEvent:
         return self._cache["PmPbQm"]
 
     @property
+    @_traced_stress
     def PmPbQm_ns(self) -> float:
         """Primary membrane + bending and secondary membrane stresses not from short duration loads"""
         if "PmPbQm_ns" not in self._cache:
@@ -349,6 +378,7 @@ class ReferenceEvent:
         return self._cache["PmPbQm_ns"]
 
     @property
+    @_traced_stress
     def tresca(self) -> float:
         """Pm + 0.67*Pb"""
         # first, isolate primary bending and membrane
@@ -366,6 +396,7 @@ class ReferenceEvent:
         return self._cache["tresca"]
 
     @property
+    @_traced_stress
     def dQ(self) -> float:
         """cyclic secondary stress range (no peak)"""
         if "dQ" not in self._cache:
@@ -380,6 +411,7 @@ class ReferenceEvent:
         return self._cache["dQ"]
 
     @property
+    @_traced_stress
     def ratcheting3Sm_SDCIC(self) -> float:
         """3Sm according to SDC-IC"""
         if "ratcheting3Sm_SDCIC" not in self._cache:
@@ -429,7 +461,9 @@ class ReferenceEvent:
           dataframe containing the result of the assessement
 
         """
-        assessment = code.assess(self, material)
+        with trace.scope(event=self.config.re_ID, analysis="immediate"):
+            self._record_inputs()
+            assessment = code.assess(self, material)
         rows = []
         for rulename, vals in assessment.items():
             assessed = vals[0]
@@ -526,7 +560,16 @@ class ReferenceEvent:
             contains all infos of the performed assessment, Vj included.
 
         """
-        assessment = code.computeVj(self, material)
+        with trace.scope(event=self.config.re_ID, analysis="fatigue"):
+            self._record_inputs()
+            with trace.scope(rule_set="Fatigue"):
+                assessment = code.computeVj(self, material)
+                for key, val in assessment.items():
+                    trace.record(key, val, kind="result")
+            trace.record("n cycles", self.config.ncycles, kind="input")
+            trace.record(
+                "Vj", self.config.ncycles / assessment["N"], kind="result", note="n/N"
+            )
         assessment["n"] = self.config.ncycles
         assessment["ID"] = self.config.re_ID
         assessment["Range"] = self.config.ce
@@ -540,6 +583,22 @@ class ReferenceEvent:
         self.fatigue_assessment = assessment
 
         return assessment
+
+    def _record_inputs(self) -> None:
+        if not trace.is_active():
+            return
+        cfg = self.config
+        trace.record("T", cfg.T, kind="input", unit="°C")
+        trace.record("dpa", cfg.dpa, kind="input")
+        trace.record("service level", cfg.service_lvl, kind="input")
+        trace.record("loading category", cfg.load_ctg, kind="input")
+        trace.record("welding n", cfg.welding_n, kind="input")
+        trace.record("welding f", cfg.welding_f, kind="input")
+        trace.record(
+            "loads",
+            ", ".join(str(s.config.name) for s in self.stresses),
+            kind="input",
+        )
 
 
 def _combine_linstresses(

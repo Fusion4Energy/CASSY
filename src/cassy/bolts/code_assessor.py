@@ -3,9 +3,10 @@ from math import pi
 import numpy as np
 import pandas as pd
 
+from cassy.auxiliary import trace
 from cassy.bolts.bolt_config import BoltReferenceEventFatigue, Event
 from cassy.bolts.geometry import BoltGeom, BoltLikeGeom
-from cassy.designcodes.codes import BoltCode
+from cassy.designcodes.codes import BoltCode, bolt_stress_name
 
 
 class BoltActionAssessor:
@@ -48,6 +49,7 @@ class BoltActionAssessor:
         self.loads_type = ["Preload", "primary", "all"]
 
         # Compute applicable stresses
+        self.stress_components: dict[str, dict[str, float]] = {}
         primary_stresses = self._compute_applicable_stresses(
             self.primary, group="primary"
         )
@@ -87,6 +89,28 @@ class BoltActionAssessor:
 
         return primary_dic, all_loads_dic
 
+    def _record_inputs(self) -> None:
+        if not trace.is_active():
+            return
+        ev = self.ref_event
+        trace.record("T", ev.temp, kind="input", unit="°C")
+        trace.record("dpa", ev.dpa, kind="input")
+        trace.record("service level", ev.service_lvl, kind="input")
+        trace.record("loading category", ev.load_category, kind="input")
+        trace.record("preload", self.preload, kind="input", unit="N")
+        trace.record("material", self.poa.material.name, kind="input")
+        units = {"N": "N", "N_nopreload": "N", "T": "N", "M": "N m"}
+        for group, actions in (("primary", self.primary), ("all", self.all_loads)):
+            for key, val in actions.items():
+                trace.record(f"{key} ({group})", val, kind="input", unit=units.get(key))
+        for group, components in self.stress_components.items():
+            for key, val in components.items():
+                trace.record(f"{key} ({group})", val, kind="stress", unit="MPa")
+        for group, stresses in self.applicable_stresses.items():
+            for key, val in stresses.items():
+                name = bolt_stress_name(group, key)
+                trace.record(name, val, kind="stress", unit="MPa")
+
     def assess(self, code: BoltCode, insert=False):
         """
         Assess a Reference Event with a specific code and material
@@ -103,17 +127,19 @@ class BoltActionAssessor:
           dataframe containing the result of the assessement
 
         """
-        if insert:
-            assessment = code.assess(
-                self,
-                self.poa.material,
-                selection="Insert",
-            )
-        else:
-            assessment = code.assess(
-                self,
-                self.poa.material,
-            )
+        with trace.scope(event=self.ref_event.name, analysis="immediate"):
+            self._record_inputs()
+            if insert:
+                assessment = code.assess(
+                    self,
+                    self.poa.material,
+                    selection="Insert",
+                )
+            else:
+                assessment = code.assess(
+                    self,
+                    self.poa.material,
+                )
         rows = []
         for mainrulename, rules in assessment.items():
             for rulename, vals in rules.items():
@@ -191,14 +217,21 @@ class BoltActionAssessor:
         assert isinstance(self.poa, BoltLikeGeom), (
             "Only Bolts can be assessed for fatigue usage fraction"
         )
-        assessment = code.computeVj(
-            self,
-            self.poa.material,
-        )
-        try:
-            vj = self.ref_event.n_cycles / assessment["N"]
-        except ZeroDivisionError:
-            vj = 1e5  # infinity
+        with trace.scope(event=self.ref_event.name, analysis="fatigue"):
+            self._record_inputs()
+            with trace.scope(rule_set="Fatigue"):
+                assessment = code.computeVj(
+                    self,
+                    self.poa.material,
+                )
+                for key, val in assessment.items():
+                    trace.record(key, val, kind="result")
+            try:
+                vj = self.ref_event.n_cycles / assessment["N"]
+            except ZeroDivisionError:
+                vj = 1e5  # infinity
+            trace.record("n cycles", self.ref_event.n_cycles, kind="input")
+            trace.record("Vj", vj, kind="result", note="n/N")
         assessment["n"] = self.ref_event.n_cycles
         assessment["ID"] = self.ref_event.name
         assessment["Range"] = (
@@ -340,6 +373,24 @@ class BoltActionAssessor:
         if isinstance(bolt, BoltGeom):
             # can be computed only for bolts
             applicables["Avg contact pressure between head and assembly"] = ph_N + ph_M
+
+        components = {
+            "sigma_N": sigma_N,
+            "sigma_M": sigma_M,
+            "tau_th_N": tth_N,
+            "tau_th_M": tth_M,
+            "tau_h_N": th_N,
+            "tau_h_M": th_M,
+            "p_th_N": pth_N,
+            "p_th_M": pth_M,
+            "tau_T": tau_T,
+            "tau_Cr": tau_Cr,
+            "tau_Ct": tau_Ct,
+        }
+        if isinstance(bolt, BoltGeom):
+            components["p_h_N"] = ph_N
+            components["p_h_M"] = ph_M
+        self.stress_components[group] = components
         return applicables
 
     def get_df_actions(self):

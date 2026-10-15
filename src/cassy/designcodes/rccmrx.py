@@ -1,6 +1,7 @@
 import math
 import logging
 
+from cassy.auxiliary import trace
 from cassy.designcodes.codes import Code, Rule
 from cassy.general.material import Material
 from cassy.paths.linstress import ReferenceEvent
@@ -42,6 +43,7 @@ class RCC_MRx(Code):
         # ds is multiplied by f which depends on the type of joint
         f = refEvent.config.welding_f
         ds = f * refEvent.PQF
+        trace.record("ds", ds, kind="stress", unit="Pa", note="f * PQF")
         T_ds = (T, ds)
         # de calculation
         de1 = 2 / 3 * (1 + material.nu()) * (ds / material.E(T, dpa))
@@ -58,6 +60,11 @@ class RCC_MRx(Code):
             except NotImplementedError as e:
                 de2 = 0
                 logging.warning(f"Cyclic stress-strain curves not implemented, de2=0")
+                trace.record(
+                    "de2",
+                    "cyclic stress-strain curve not available: de2 = 0",
+                    kind="warning",
+                )
         else:
             # there is no primary stress
             de2 = 0
@@ -122,17 +129,25 @@ class RB_3251_112(Rule):
         if service_lvl == "A":
             allowable1 = n * material.Sm(T_dpa)
             allowable2 = 1.5 * n * material.Sm(T_dpa)
+            formula = "n * Sm"
         elif service_lvl == "C":
             allowable1 = min(1.35 * n * material.Sm(T_dpa), material.Sy_min(T_dpa))
             allowable2 = 1.5 * allowable1
+            formula = "min(1.35 * n * Sm, Sy_min)"
         elif service_lvl == "D":
             allowable1 = min(2.4 * n * material.Sm(T_dpa), 0.7 * material.Su_min(T_dpa))
             allowable2 = 1.5 * allowable1
+            formula = "min(2.4 * n * Sm, 0.7 * Su_min)"
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
+        trace.record("allowable 1", allowable1, kind="allowable", note=formula)
+        trace.record(
+            "allowable 2", allowable2, kind="allowable", note="1.5 * allowable 1"
+        )
 
         stress1 = refEvent.Pm
         stress2 = refEvent.PmPb
+        trace.equation_terms(("Pm", "allowable 1"), ("PmPb", "allowable 2"))
 
         return [(stress1, allowable1), (stress2, allowable2)]
 
@@ -176,13 +191,17 @@ class RB_3261_111(Rule):
         # select allowable
         if service_lvl == "A":
             allowable1 = 3 * material.Sm(T_dpa)
+            trace.record("allowable 1", allowable1, kind="allowable", note="3 * Sm")
         elif service_lvl == "D" or service_lvl == "C":
             # warnings.warn(service_lvl +
             #               ' is not an admissible service level')
+            trace.record("rule", "not applicable for level C/D", kind="branch")
             return None
         else:
             raise KeyError(service_lvl + " is not an admissible service level")
 
         stress1 = refEvent.PmPb + refEvent.dQ
+        trace.record("3Sm stress", stress1, kind="stress", unit="Pa", note="PmPb + dQ")
+        trace.equation_terms(("3Sm stress", "allowable 1"))
 
         return [(stress1, allowable1)]

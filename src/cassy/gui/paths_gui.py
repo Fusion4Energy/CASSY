@@ -61,7 +61,7 @@ class SubmodelDialog(_Dialog):
         ex = self._ex
         frm = ttk.LabelFrame(self._body, text="Submodel definition")
         frm.pack(fill="both")
-        self._name = self._entry(frm, "Name *", 0, ex.get("name", ""))
+        self._name_var = self._entry(frm, "Name *", 0, ex.get("name", ""))
         default_code = ex.get("design_code", DESIGN_CODES[0] if DESIGN_CODES else "")
         self._code = self._combo(frm, "Design Code", 1, DESIGN_CODES, default_code)
         self._tensors = self._file_entry(
@@ -73,7 +73,7 @@ class SubmodelDialog(_Dialog):
         )
 
     def _collect(self) -> dict | None:
-        name = self._name.get().strip()
+        name = self._name_var.get().strip()
         if not name:
             messagebox.showerror("Validation", "Name is required.", parent=self)
             return None
@@ -102,7 +102,7 @@ class LoadDialog(_Dialog):
         ex = self._ex
         frm = ttk.LabelFrame(self._body, text="Load definition")
         frm.pack(fill="both")
-        self._name = self._entry(frm, "Name *", 0, ex.get("name", ""))
+        self._name_var = self._entry(frm, "Name *", 0, ex.get("name", ""))
         self._stype = self._combo(
             frm, "Stress type", 1, STRESS_TYPES, ex.get("stress_type", "P")
         )
@@ -133,7 +133,7 @@ class LoadDialog(_Dialog):
         self._steps.pack(fill="x")
 
     def _collect(self) -> dict | None:
-        name = self._name.get().strip()
+        name = self._name_var.get().strip()
         if not name:
             messagebox.showerror("Validation", "Name is required.", parent=self)
             return None
@@ -295,6 +295,7 @@ class GeneralTab(RunTab):
         matlib = opts.get("matlib_path") or None
         print_recap = opts.get("print_recap", True)
         merge = opts.get("merge", True)
+        trace = opts.get("trace", False)
 
         def work() -> None:
             from cassy.runners.run_paths import run_paths
@@ -306,6 +307,7 @@ class GeneralTab(RunTab):
                 matlib=matlib,
                 print_recap=print_recap,
                 merge=merge,
+                trace=trace,
             )
 
         return work
