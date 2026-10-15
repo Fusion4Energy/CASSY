@@ -16,7 +16,7 @@ from cassy.paths.paths_config import (
     StressClassification,
 )
 from cassy.runners.run_paths import run_paths
-from tests.helpers import load_project
+from tests.helpers import assert_equation_terms_linked, load_project
 
 RES = Path(__file__).parent / "paths"
 
@@ -57,6 +57,9 @@ def test_run_paths_trace(tmp_path):
     merged = rule_allowables.merge(first_eq, on=keys, suffixes=("_rule", "_eq"))
     assert not merged.empty
     np.testing.assert_allclose(merged["value_rule"], merged["value_eq"])
+    assert_equation_terms_linked(df)
+    damage = df.attrs["metadata"]["damage types"]
+    assert set(damage.values()) == {"Immediate", "Ratcheting"}
 
 
 def test_run_paths_with_programmatic_config(tmpdir):

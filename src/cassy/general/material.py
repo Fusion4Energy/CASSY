@@ -88,13 +88,7 @@ class Property(ABC):
         with trace.nested() as outermost:
             result = self._function_to_call(*args) * self.scale_result
         if outermost:
-            trace.record(
-                self.name,
-                result,
-                kind="material",
-                inputs=list(args),
-                source=self.material_name,
-            )
+            trace.record_property(self.name, result, args, self.material_name)
         return result
 
     @abstractmethod
@@ -397,6 +391,12 @@ class Fatigue(Property):
                 logging.warning(
                     f"Mean stress {s_mean} is above the maximum defined in the "
                     f"fatigue table. Using the last interpolator."
+                )
+                trace.record(
+                    "mean stress",
+                    f"{s_mean} above the fatigue table maximum: last curve used",
+                    kind="warning",
+                    source=self.material_name,
                 )
                 interpolator = interpolator_s
 

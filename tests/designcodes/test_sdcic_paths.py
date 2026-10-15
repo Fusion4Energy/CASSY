@@ -262,7 +262,8 @@ class TestSDCICPaths:
         materials = rule[rule["kind"] == "material"]
         assert {"Sm", "Min Yield Strength", "get_Keff"} <= set(materials["name"])
         sm = materials[materials["name"] == "Sm"].iloc[0]
-        assert json.loads(sm["inputs"]) == [200, 0.0]
+        assert json.loads(sm["inputs"]) == {"T": 200, "dpa": 0.0}
+        assert sm["unit"] == "Pa"
         assert sm["source"] == material_ss316.name
         assert {"Pm", "PmPb"} <= set(rule.loc[rule["kind"] == "stress", "name"])
 

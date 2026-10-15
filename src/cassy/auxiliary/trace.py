@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import datetime
 import functools
+import inspect
 import json
 import math
 import os
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from collections.abc import Callable, Generator
 from typing import Any
 
 import numpy as np
@@ -38,6 +39,28 @@ COLUMNS = ("seq",) + SCOPE_KEYS + RECORD_KEYS
 TRACE_FILE = "trace.csv.gz"
 META_FILE = "trace_meta.json"
 
+# Unit and argument names of the material properties, used to make the recorded
+# lookups readable. Properties not listed are recorded without unit and with
+# positional inputs.
+_STRESS_PROPERTY = ("Pa", ("T", "dpa"))
+PROPERTY_INFO: dict[str, tuple[str | None, tuple[str, ...]]] = {
+    "Sm": _STRESS_PROPERTY,
+    "Smb": _STRESS_PROPERTY,
+    "Sd": _STRESS_PROPERTY,
+    "Sd_nopeak": _STRESS_PROPERTY,
+    "Se": _STRESS_PROPERTY,
+    "Min Yield Strength": _STRESS_PROPERTY,
+    "Mean Yield Strength": _STRESS_PROPERTY,
+    "Min Tensile Strength": _STRESS_PROPERTY,
+    "Young Modulus": _STRESS_PROPERTY,
+    "Poisson Ratio": (None, ()),
+    "Keps": (None, ("T", "delta sigma [Pa]")),
+    "Kmu": (None, ("T", "delta sigma [Pa]")),
+    "Fatigue": ("cycles", ("T", "delta eps")),
+}
+# default unit of the record kinds whose values are always given in Pa
+_KIND_UNITS = {"allowable": "Pa"}
+
 
 class Tracer:
     def __init__(self, metadata: dict | None = None) -> None:
@@ -49,6 +72,10 @@ class Tracer:
             General information on the run (code, project, etc.), by default None
         """
         self.records: list[dict] = []
+        # identical records issued in the same scope are stored only once
+        self._seen: set[tuple] = set()
+        # quantities compared by the equations of the rule being assessed
+        self.pending_terms: list = []
         self.metadata = dict(metadata or {})
         self.metadata.setdefault("created", datetime.datetime.now().isoformat())
 
@@ -167,9 +194,9 @@ def record(
         numeric value or text (e.g. the selected branch).
     kind : str, optional
         category of the record: input, stress, material, factor, allowable,
-        result, branch, value. By default 'value'.
+        result, branch, warning, value. By default 'value'.
     unit : str | None, optional
-        unit of measure of the value.
+        unit of measure of the value. Allowables default to Pa.
     inputs : Any, optional
         inputs used to compute the value (JSON serialized).
     source : str | None, optional
@@ -182,10 +209,11 @@ def record(
         return
     number, text = _to_number(value)
     if number is not None and math.isnan(number):
-        text = "nan"
+        number, text = None, "nan"
+    if unit is None:
+        unit = _KIND_UNITS.get(kind)
     row = dict(_scope.get())
     row.update(
-        seq=len(tracer.records),
         kind=kind,
         name=name,
         value=number,
@@ -195,7 +223,62 @@ def record(
         source=source,
         note=note,
     )
+    key = tuple(sorted(row.items()))
+    if key in tracer._seen:
+        return
+    tracer._seen.add(key)
+    row["seq"] = len(tracer.records)
     tracer.records.append(row)
+
+
+def rule_damage_type(rule: str, damage_type: str | None) -> None:
+    """Store in the metadata the damage type (Immediate, Ratcheting) under which the
+    results of a rule are reported, used to group the results in the HTML report."""
+    tracer = _active.get()
+    if tracer is not None and damage_type is not None:
+        tracer.metadata.setdefault("damage types", {})[str(rule)] = damage_type
+
+
+def equation_terms(*terms: tuple[str | None, str | None] | None) -> None:
+    """Declare the quantities compared by each equation of the rule being assessed.
+
+    Call it in ``Rule.assess`` with one ``(applied stress name, allowable name)`` per
+    returned equation, in the same order. The names are those of the recorded values
+    (e.g. ``("PmPb", "allowable 2")``) and end up in the ``source`` column of the
+    ``applied`` and ``allowable`` results.
+    """
+    tracer = _active.get()
+    if tracer is not None:
+        tracer.pending_terms = list(terms)
+
+
+def take_equation_terms() -> list:
+    """Return and clear the terms declared with :func:`equation_terms`."""
+    tracer = _active.get()
+    if tracer is None:
+        return []
+    terms, tracer.pending_terms = tracer.pending_terms, []
+    return terms
+
+
+def named_inputs(names: tuple[str, ...], args: tuple) -> list | dict:
+    """Label the positional inputs of a lookup when their names are known."""
+    if len(names) != len(args):
+        return list(args)
+    return dict(zip(names, args))
+
+
+def record_property(name: str, value: Any, args: tuple, material: str | None) -> None:
+    """Record a material property lookup, with unit and named inputs if known."""
+    unit, names = PROPERTY_INFO.get(name, (None, ()))
+    record(
+        name,
+        value,
+        kind="material",
+        unit=unit,
+        inputs=named_inputs(names, args),
+        source=material,
+    )
 
 
 def traced_method(func: Callable) -> Callable:
@@ -209,7 +292,11 @@ def traced_method(func: Callable) -> Callable:
         with nested() as outermost:
             result = func(self, *args, **kwargs)
         if outermost:
-            inputs = {"args": list(args), **kwargs} if kwargs else list(args)
+            try:
+                bound = inspect.signature(func).bind(self, *args, **kwargs)
+                inputs = dict(list(bound.arguments.items())[1:])
+            except TypeError:
+                inputs = {"args": list(args), **kwargs} if kwargs else list(args)
             record(
                 func.__name__,
                 result,

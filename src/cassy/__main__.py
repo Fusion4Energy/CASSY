@@ -1,9 +1,15 @@
+from __future__ import annotations
+
+import logging
+import sys
 from argparse import ArgumentParser
 
 
-def main():
+def _parser() -> ArgumentParser:
     parser = ArgumentParser(
-        description="CASSY. Assessments are configured and run from the GUIs."
+        prog="cassy",
+        description="CASSY. Assessments are configured in the GUIs and saved as .json "
+        "project files, which can be run here without opening the GUIs.",
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
@@ -16,16 +22,38 @@ def main():
         help="Run the GUI for bolts assessment",
         action="store_true",
     )
-    args = parser.parse_args()
+    group.add_argument(
+        "--run",
+        metavar="PROJECT",
+        help="Run the paths or bolts assessment saved in a GUI project .json file, "
+        "with the run options saved in it. Relative paths in the project are taken "
+        "from the project folder.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = _parser()
+    args = parser.parse_args(argv)
 
     if args.pathsgui:
         from cassy.gui.paths_gui import main as run_paths_gui
 
         run_paths_gui()
-    else:
+    elif args.boltsgui:
         from cassy.gui.bolts_gui import main as run_bolts_gui
 
         run_bolts_gui()
+    else:
+        from cassy.runners.run_project import run_project
+
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+        try:
+            root = run_project(args.run)
+        # configuration errors (missing files, wrong project) without traceback
+        except (ValueError, OSError) as e:
+            sys.exit(f"cassy: error: {e}")
+        print(f"Assessment completed. Results in {root}")
 
 
 if __name__ == "__main__":

@@ -136,6 +136,7 @@ class IC7121_3_1(Rule):
 
         stress1 = refEvent.PQF
         stress2 = refEvent.PQ
+        trace.equation_terms(("PQF", "allowable 1"), ("PQ", "allowable 2"))
         allowable2 = allowable1
         trace.record("allowable 1", allowable1, kind="allowable", note="factor * Sd")
         trace.record(
@@ -232,6 +233,8 @@ class IC7131_1_1(Rule):
         # effective primary stress intensity (IC 3131.1.1.5)
         p1 = sigma_m / eff_idx[0]
         p2 = sigma_mb / eff_idx[1]
+        trace.record("p1", p1, kind="stress", unit="Pa", note="sigma_m / v1")
+        trace.record("p2", p2, kind="stress", unit="Pa", note="sigma_mb / v2")
         T_dpa = (T, dpa)
 
         stress2 = p1

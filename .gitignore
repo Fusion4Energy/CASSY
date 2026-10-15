@@ -13,3 +13,4 @@ _version.py
 coverage.xml
 prof/
 site/**
+cassy_test

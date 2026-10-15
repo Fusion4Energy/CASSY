@@ -60,6 +60,11 @@ class RCC_MRx(Code):
             except NotImplementedError as e:
                 de2 = 0
                 logging.warning(f"Cyclic stress-strain curves not implemented, de2=0")
+                trace.record(
+                    "de2",
+                    "cyclic stress-strain curve not available: de2 = 0",
+                    kind="warning",
+                )
         else:
             # there is no primary stress
             de2 = 0
@@ -142,6 +147,7 @@ class RB_3251_112(Rule):
 
         stress1 = refEvent.Pm
         stress2 = refEvent.PmPb
+        trace.equation_terms(("Pm", "allowable 1"), ("PmPb", "allowable 2"))
 
         return [(stress1, allowable1), (stress2, allowable2)]
 
@@ -196,5 +202,6 @@ class RB_3261_111(Rule):
 
         stress1 = refEvent.PmPb + refEvent.dQ
         trace.record("3Sm stress", stress1, kind="stress", unit="Pa", note="PmPb + dQ")
+        trace.equation_terms(("3Sm stress", "allowable 1"))
 
         return [(stress1, allowable1)]

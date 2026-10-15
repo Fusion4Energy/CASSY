@@ -10,7 +10,7 @@ from cassy.runners.run_bolts import run_bolts
 from cassy.bolts.bolt_config import FlangeAssessmentConfig
 from cassy.bolts.geometry import BoltGeom, InsertGeom
 from cassy.general.material import Material
-from tests.helpers import load_project
+from tests.helpers import assert_equation_terms_linked, load_project
 
 RES = Path(__file__).parent / "bolts"
 
@@ -58,6 +58,7 @@ def test_run_bolts_trace(tmp_path):
     assert {"material", "stress", "allowable", "result", "input"} <= set(df["kind"])
     vj = df[(df["analysis"] == "fatigue") & (df["name"] == "Vj")]
     assert not vj.empty
+    assert_equation_terms_linked(df)
 
 
 def test_run_bolts_with_geoms_and_configs(tmpdir):

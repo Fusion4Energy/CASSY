@@ -4,7 +4,12 @@ import numpy as np
 if TYPE_CHECKING:
     from cassy.bolts.code_assessor import BoltActionAssessor
 from cassy.auxiliary import trace
-from cassy.designcodes.codes import BoltCode, Rule, record_allowables
+from cassy.designcodes.codes import (
+    BoltCode,
+    Rule,
+    bolt_stress_name,
+    record_allowables,
+)
 from cassy.general.material import Material
 
 ASSESSMENTS = {
@@ -201,6 +206,9 @@ class IC6113(Rule):
 
         stress1 = boltaction.applicable_stresses["primary"]["Primary stress"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Primary stress"), "allowable 1"),
+        )
         return [(stress1, allowable1)]
 
 
@@ -254,6 +262,10 @@ class IC6121_1_3_1(Rule):
         stress1 = boltaction.applicable_stresses["primary"]["Mean stress"]
         stress2 = boltaction.applicable_stresses["all"]["Mean stress"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Mean stress"), "allowable 1"),
+            (bolt_stress_name("all", "Mean stress"), "allowable 2"),
+        )
         return [(stress1, allowable1), (stress2, allowable2)]
 
 
@@ -303,6 +315,10 @@ class IC6121_1_3_2(Rule):
         stress1 = boltaction.applicable_stresses["primary"]["Max stress"]
         stress2 = boltaction.applicable_stresses["all"]["Max stress"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Max stress"), "allowable 1"),
+            (bolt_stress_name("all", "Max stress"), "allowable 2"),
+        )
         return [(stress1, allowable1), (stress2, allowable2)]
 
 
@@ -363,6 +379,12 @@ class IC6121_1_3_3(Rule):
         stress3 = _all["Avg shear stress in threads"]
         stress4 = _all["Avg shear stress in head"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Avg shear stress in threads"), "allowable 1"),
+            (bolt_stress_name("primary", "Avg shear stress in head"), "allowable 2"),
+            (bolt_stress_name("all", "Avg shear stress in threads"), "allowable 3"),
+            (bolt_stress_name("all", "Avg shear stress in head"), "allowable 4"),
+        )
         return [
             (stress1, allowable1),
             (stress2, allowable2),
@@ -422,6 +444,10 @@ class IC6121_1_3_3_insert(Rule):
         stress1 = primary["Avg shear stress in threads"]
         stress2 = _all["Avg shear stress in threads"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Avg shear stress in threads"), "allowable 1"),
+            (bolt_stress_name("all", "Avg shear stress in threads"), "allowable 2"),
+        )
         return [(stress1, allowable1), (stress2, allowable2)]
 
 
@@ -473,6 +499,10 @@ class IC6121_1_3_4(Rule):
         stress1 = boltaction.applicable_stresses["all"][sdesc1]
         stress2 = boltaction.applicable_stresses["all"][sdesc2]
 
+        trace.equation_terms(
+            (bolt_stress_name("all", sdesc1), "allowable 1"),
+            (bolt_stress_name("all", sdesc2), "allowable 2"),
+        )
         return [(stress1, allowable1), (stress2, allowable2)]
 
 
@@ -520,6 +550,9 @@ class IC6121_1_3_4_insert(Rule):
         sdesc = "Avg contact pressure betweeen threads"
         stress1 = boltaction.applicable_stresses["all"][sdesc]
 
+        trace.equation_terms(
+            (bolt_stress_name("all", sdesc), "allowable 1"),
+        )
         return [(stress1, allowable1)]
 
 
@@ -575,6 +608,9 @@ class IC6122_1_1(Rule):
 
         stress1 = boltaction.applicable_stresses["all"]["Mean stress"]
 
+        trace.equation_terms(
+            (bolt_stress_name("all", "Mean stress"), "allowable 1"),
+        )
         return [(stress1, allowable1)]
 
 
@@ -643,4 +679,8 @@ class IC6122_1_2(Rule):
             note="KF * Max stress (all)",
         )
 
+        trace.equation_terms(
+            (bolt_stress_name("all", "Max stress"), "allowable 1"),
+            ("Max stress with concentrations", "allowable 2"),
+        )
         return [(stress1, allowable1), (stress2, allowable2)]

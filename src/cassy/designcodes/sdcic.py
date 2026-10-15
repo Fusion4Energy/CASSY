@@ -68,6 +68,11 @@ class SDC_IC(Code):
                     logging.warning(
                         f"Cyclic stress-strain curves not implemented, de2=0"
                     )
+                    trace.record(
+                        "de2",
+                        "cyclic stress-strain curve not available: de2 = 0",
+                        kind="warning",
+                    )
             else:
                 # there is no primary stress
                 de2 = 0
@@ -165,6 +170,7 @@ class IC3121_1_1_2a(Rule):
 
         stress1 = refEvent.Pm
         stress2 = refEvent.PmPb
+        trace.equation_terms(("Pm", "allowable 1"), ("PmPb", "allowable 2"))
         allowable2 = material.get_Keff(T, dpa, K) * allowable1
         trace.record("K", K, kind="factor")
         trace.record(
@@ -219,6 +225,7 @@ class IC3121_2_1(Rule):
         trace.record("allowable", allowable, kind="allowable", note=formula)
 
         stress = refEvent.PmQm
+        trace.equation_terms(("PmQm", "allowable"))
 
         return [(stress, allowable)]
 
@@ -279,6 +286,7 @@ class IC3121_3_1(Rule):
 
         stress1 = refEvent.PQF
         stress2 = refEvent.PQ
+        trace.equation_terms(("PQF", "allowable 1"), ("PQ", "allowable 2"))
 
         return [(stress1, allowable1), (stress2, allowable2)]
 
@@ -335,6 +343,7 @@ class IC3131_1_2(Rule):
             raise KeyError(service_lvl + " is not an admissible service level")
 
         stress1 = refEvent.ratcheting3Sm_SDCIC
+        trace.equation_terms(("ratcheting3Sm_SDCIC", "allowable 1"))
 
         # Perform efficiency index only if 3Sm is not passed
         if stress1 <= allowable1:
@@ -355,7 +364,7 @@ class IC3131_1_2(Rule):
         except (NotImplementedError, OutOfBoundsError) as e:
             logging.warning(e)
             logging.warning("Efficiency index cannot be computed")
-            trace.record("efficiency index", f"not computed: {e}", kind="branch")
+            trace.record("efficiency index", f"not computed: {e}", kind="warning")
             return [(stress1, allowable1), (None, None), (None, None)]
 
         Em = material.compute_tangent_young(sigma_nm, T, dpa=dpa)
@@ -413,6 +422,8 @@ class IC3131_1_2(Rule):
         # effective primary stress intensity (IC 3131.1.1.5)
         p1 = sigma_m / eff_idx[0]
         p2 = sigma_mb / eff_idx[1]
+        trace.record("p1", p1, kind="stress", unit="Pa", note="sigma_m / v1")
+        trace.record("p2", p2, kind="stress", unit="Pa", note="sigma_mb / v2")
         T_dpa = (T, dpa)
 
         stress2 = p1
@@ -435,4 +446,9 @@ class IC3131_1_2(Rule):
 
         # allowable4 = material.Sy_min(T_dpa)
 
+        trace.equation_terms(
+            ("ratcheting3Sm_SDCIC", "allowable 1"),
+            ("p1", "allowable 2"),
+            ("p2", "allowable 3"),
+        )
         return [(stress1, allowable1), (stress2, allowable2), (stress3, allowable3)]

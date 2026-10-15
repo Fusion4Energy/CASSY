@@ -5,7 +5,12 @@ if TYPE_CHECKING:
 import logging
 
 from cassy.auxiliary import trace
-from cassy.designcodes.codes import BoltCode, Rule, record_allowables
+from cassy.designcodes.codes import (
+    BoltCode,
+    Rule,
+    bolt_stress_name,
+    record_allowables,
+)
 from cassy.general.material import Material
 from cassy.general.material import FatigueInconelRCCMRx
 from cassy.auxiliary.custom_errors import OutOfBoundsError
@@ -86,7 +91,7 @@ class RCCMRx_Bolts(BoltCode):
                 'Keps, Kmu not implemented for material "%s"', material.name
             )
             logging.warning("assuming de3 = 0, de4 = 0")
-            trace.record("Keps, Kmu", "not available: de3 = de4 = 0", kind="branch")
+            trace.record("Keps, Kmu", "not available: de3 = de4 = 0", kind="warning")
             de3 = 0
             de4 = 0
 
@@ -106,12 +111,18 @@ class RCCMRx_Bolts(BoltCode):
                     )
                 except OutOfBoundsError as e:
                     logging.warning(str(e))
+                    trace.record("N", f"not computed: {e}", kind="warning")
                     N = np.nan
             else:
                 N = material.N((ref_event.temp, detot))
         elif material.N.ftype == "stress":
             logging.warning(
                 "stress based fatigue in RCC-MRx is not orthodox, check results carefully"
+            )
+            trace.record(
+                "fatigue curve",
+                "stress based fatigue in RCC-MRx is not orthodox, check results",
+                kind="warning",
             )
             if material.N.mean_stress:
                 SA = ds_tot / 2
@@ -205,6 +216,10 @@ class RB3284_1112:
         stress = boltasessor.applicable_stresses["primary"]["Mean stress"]
         stress2 = boltasessor.applicable_stresses["all"]["Mean stress"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Mean stress"), "allowable 1"),
+            (bolt_stress_name("all", "Mean stress"), "allowable 2"),
+        )
         return [(stress, allowable), (stress2, allowable2)]
 
 
@@ -272,6 +287,10 @@ class RB3284_1113:
         stress1 = boltaction.applicable_stresses["primary"]["Max stress"]
         stress2 = boltaction.applicable_stresses["all"]["Max stress"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Max stress"), "allowable 1"),
+            (bolt_stress_name("all", "Max stress"), "allowable 2"),
+        )
         return [(stress1, allowable1), (stress2, allowable2)]
 
 
@@ -347,6 +366,12 @@ class RB3284_1211(Rule):
         stress3 = _all["Avg shear stress in threads"]
         stress4 = _all["Avg shear stress in head"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Avg shear stress in threads"), "allowable 1"),
+            (bolt_stress_name("primary", "Avg shear stress in head"), "allowable 2"),
+            (bolt_stress_name("all", "Avg shear stress in threads"), "allowable 3"),
+            (bolt_stress_name("all", "Avg shear stress in head"), "allowable 4"),
+        )
         return [
             (stress1, allowable1),
             (stress2, allowable2),
@@ -417,6 +442,10 @@ class RB3284_1211_insert(Rule):
         _all = boltaction.applicable_stresses["all"]
         stress2 = _all["Avg shear stress in threads"]
 
+        trace.equation_terms(
+            (bolt_stress_name("primary", "Avg shear stress in threads"), "allowable 1"),
+            (bolt_stress_name("all", "Avg shear stress in threads"), "allowable 2"),
+        )
         return [(stress1, allowable1), (stress2, allowable2)]
 
 
@@ -472,4 +501,12 @@ class RB3284_1213(Rule):
             "Avg contact pressure between head and assembly"
         ]
 
+        trace.equation_terms(
+            (
+                bolt_stress_name(
+                    "all", "Avg contact pressure between head and assembly"
+                ),
+                "allowable 1",
+            ),
+        )
         return [(stress, allowable)]

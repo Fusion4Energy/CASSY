@@ -59,6 +59,11 @@ class RCC_MR(Code):
             except NotImplementedError as e:
                 de2 = 0
                 logging.warning(f"Cyclic stress-strain curves not implemented, de2=0")
+                trace.record(
+                    "de2",
+                    "cyclic stress-strain curve not available: de2 = 0",
+                    kind="warning",
+                )
         else:
             # there is no primary stress
             de2 = 0
@@ -145,6 +150,7 @@ class RB_3251_11(Rule):
 
         stress1 = refEvent.Pm
         stress2 = refEvent.PmPb
+        trace.equation_terms(("Pm", "allowable 1"), ("PmPb", "allowable 2"))
 
         return [(stress1, allowable1), (stress2, allowable2)]
 
@@ -198,6 +204,7 @@ class RB_3261_116(Rule):
 
         stress1 = refEvent.PmPb + refEvent.dQ
         trace.record("3Sm stress", stress1, kind="stress", unit="Pa", note="PmPb + dQ")
+        trace.equation_terms(("3Sm stress", "allowable 1"))
 
         # Operating period with secondary membrane stress
         # thermal loads are considered mandatory for ratcheting
@@ -261,6 +268,8 @@ class RB_3261_116(Rule):
 
         p1 = sigma_m / eff_idx[0]
         p2 = sigma_mb / eff_idx[1]
+        trace.record("p1", p1, kind="stress", unit="Pa", note="sigma_m / v1")
+        trace.record("p2", p2, kind="stress", unit="Pa", note="sigma_mb / v2")
         T_dpa = (T, dpa)
 
         stress2 = p1
@@ -270,4 +279,7 @@ class RB_3261_116(Rule):
         trace.record("allowable 2", allowable2, kind="allowable", note="1.3 * Sm")
         trace.record("allowable 3", allowable3, kind="allowable", note="1.5 * 1.3 * Sm")
 
+        trace.equation_terms(
+            ("3Sm stress", "allowable 1"), ("p1", "allowable 2"), ("p2", "allowable 3")
+        )
         return [(stress1, allowable1), (stress2, allowable2), (stress3, allowable3)]

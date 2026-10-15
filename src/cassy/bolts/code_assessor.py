@@ -6,7 +6,7 @@ import pandas as pd
 from cassy.auxiliary import trace
 from cassy.bolts.bolt_config import BoltReferenceEventFatigue, Event
 from cassy.bolts.geometry import BoltGeom, BoltLikeGeom
-from cassy.designcodes.codes import BoltCode
+from cassy.designcodes.codes import BoltCode, bolt_stress_name
 
 
 class BoltActionAssessor:
@@ -108,7 +108,8 @@ class BoltActionAssessor:
                 trace.record(f"{key} ({group})", val, kind="stress", unit="MPa")
         for group, stresses in self.applicable_stresses.items():
             for key, val in stresses.items():
-                trace.record(f"{key} ({group})", val, kind="stress", unit="MPa")
+                name = bolt_stress_name(group, key)
+                trace.record(name, val, kind="stress", unit="MPa")
 
     def assess(self, code: BoltCode, insert=False):
         """
