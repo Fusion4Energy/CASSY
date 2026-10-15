@@ -17,6 +17,18 @@ BOLT_DESIGN_CODES: list[str] = list(_BOLT_CODES.keys())
 GEOM_TYPES: list[str] = ["bolt", "insert"]
 SERVICE_LEVELS: list[str] = ["A", "C", "D"]
 LOAD_CATEGORIES: list[str] = ["I", "II", "III", "IV"]
+# Columns read from the actions CSVs; any other column is ignored
+ACTIONS_COLUMNS: list[str] = [
+    "boltID",
+    "analysis",
+    "loadstep",
+    "Fx",
+    "Fy",
+    "Fz",
+    "Mx",
+    "My",
+    "Mz",
+]
 
 EMPTY_BOLT_PROJECT: dict[str, Any] = {
     "run_options": {
@@ -190,6 +202,13 @@ def build_bolts_from_project(
                 f"Actions CSV not found for flange '{flange_name}': '{actions_file}'"
             )
         actions = pd.read_csv(actions_file)
+        missing = [c for c in ACTIONS_COLUMNS if c not in actions.columns]
+        if missing:
+            raise ValueError(
+                f"Actions CSV for flange '{flange_name}' is missing columns "
+                f"{missing}: '{actions_file}'"
+            )
+        actions = actions[ACTIONS_COLUMNS].copy()
         actions["boltID"] = actions["boltID"].astype(str)
         actions.set_index(["boltID", "analysis", "loadstep"], inplace=True)
 

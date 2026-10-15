@@ -107,3 +107,20 @@ def test_non_numeric_actions_raise():
     )
     with pytest.raises(ConfigError, match="'1,5' at bolt 1, analysis 'X'"):
         FlangeAssessmentConfig(actions, BOLT_CODES["SDC-IC"], bolts_spec, REs={})
+
+
+def test_extra_actions_columns_are_ignored(tmp_path, mat_lib):
+    df = pd.read_csv(RES / "Flange1.csv")
+    df["comment"] = "some text"
+    csv_file = tmp_path / "Flange1.csv"
+    df.to_csv(csv_file, index=False)
+    project = load_project(RES / "Flange1.json")
+    project["flanges"][0]["actions_file"] = str(csv_file)
+
+    configs, _ = build_bolts_from_project(project, materials=mat_lib)
+    assert "comment" not in configs["Flange1"].actions.columns
+
+    df.drop(columns="Mz").to_csv(csv_file, index=False)
+    project["flanges"][0]["actions_file"] = str(csv_file)
+    with pytest.raises(ValueError, match="missing columns"):
+        build_bolts_from_project(project, materials=mat_lib)
