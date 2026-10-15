@@ -740,6 +740,13 @@ class RunTab(ttk.Frame):
         self._fatigue = self._flags["fatigue"]
 
         self._matlib = tk.StringVar(value=opts.get("matlib_path", ""))
+        # keep the project up to date, the material lists of the other tabs use it
+        self._matlib.trace_add(
+            "write",
+            lambda *_: self._project["run_options"].__setitem__(
+                "matlib_path", self._matlib.get().strip()
+            ),
+        )
         self._root_dir = tk.StringVar(value=opts.get("root_dir", ""))
         for row, (label, var, title) in enumerate(
             (

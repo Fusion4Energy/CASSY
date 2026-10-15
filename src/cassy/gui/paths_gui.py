@@ -564,11 +564,24 @@ class PathsTab(GroupedTableTab):
 
     def __init__(self, parent: ttk.Notebook, project: dict) -> None:
         self._mat_names: list[str] = []
+        self._mat_path: str | None = None
         super().__init__(parent, project)
-        self.after(200, self._load_materials)
 
-    def _load_materials(self) -> None:
-        self._mat_names = _get_material_names()
+    def _material_names(self) -> list[str]:
+        """Material names, reloaded when the additional materials folder changes."""
+        path = self._project["run_options"].get("matlib_path", "")
+        if self._mat_path != path or not self._mat_names:
+            try:
+                self._mat_names = _get_material_names(path)
+            except OSError as exc:
+                messagebox.showwarning(
+                    "Additional materials",
+                    f"Cannot read the additional materials folder:\n{exc}",
+                    parent=self,
+                )
+                self._mat_names = _get_material_names()
+            self._mat_path = path
+        return self._mat_names
 
     def _group_names(self) -> list[str]:
         return [s["name"] for s in self._project["submodels"]]
@@ -590,7 +603,7 @@ class PathsTab(GroupedTableTab):
         if not sm:
             messagebox.showwarning("No Submodel", "Select or create a submodel first.")
             return
-        mat_names = self._mat_names or _get_material_names()
+        mat_names = self._material_names()
         dlg = PathDialog(self, mat_names)
         if dlg.result is None:
             return
@@ -612,7 +625,7 @@ class PathsTab(GroupedTableTab):
             messagebox.showwarning("Selection", "Select a path to edit.")
             return
         paths = self._project["paths"].get(sm, [])
-        mat_names = self._mat_names or _get_material_names()
+        mat_names = self._material_names()
         dlg = PathDialog(self, mat_names, existing=paths[idx])
         if dlg.result:
             paths[idx] = dlg.result

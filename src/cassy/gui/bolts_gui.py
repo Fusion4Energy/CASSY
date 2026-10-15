@@ -692,13 +692,24 @@ class GeometriesTab(_TableTab):
 
     def __init__(self, parent: ttk.Notebook, project: dict) -> None:
         self._mat_names: list[str] = []
+        self._mat_path: str | None = None
         super().__init__(parent, project)
-        self.after(200, self._load_materials)
 
-    def _load_materials(self) -> None:
-        self._mat_names = _get_material_names(
-            self._project["run_options"].get("matlib_path", "")
-        )
+    def _material_names(self) -> list[str]:
+        """Material names, reloaded when the additional materials folder changes."""
+        path = self._project["run_options"].get("matlib_path", "")
+        if self._mat_path != path or not self._mat_names:
+            try:
+                self._mat_names = _get_material_names(path)
+            except OSError as exc:
+                messagebox.showwarning(
+                    "Additional materials",
+                    f"Cannot read the additional materials folder:\n{exc}",
+                    parent=self,
+                )
+                self._mat_names = _get_material_names()
+            self._mat_path = path
+        return self._mat_names
 
     def _extra_toolbar(self, toolbar: ttk.Frame) -> None:
         ttk.Separator(toolbar, orient="vertical").pack(
@@ -725,7 +736,7 @@ class GeometriesTab(_TableTab):
         )
 
     def _add(self) -> None:
-        mat_names = self._mat_names or _get_material_names()
+        mat_names = self._material_names()
         dlg = GeomDialog(self, mat_names)
         if dlg.result is None:
             return
@@ -751,7 +762,7 @@ class GeometriesTab(_TableTab):
         if idx is None:
             messagebox.showwarning("Selection", "Select a geometry to edit.")
             return
-        mat_names = self._mat_names or _get_material_names()
+        mat_names = self._material_names()
         base_name = self._project["geometries"][idx]["base_name"]
         bolt_entry = next(
             (

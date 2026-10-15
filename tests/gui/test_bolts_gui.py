@@ -1066,9 +1066,7 @@ class TestBuildBoltsFromProject:
         import pandas as pd
 
         # Create a minimal actions CSV
-        actions_df = pd.DataFrame(
-            [_actions_row()]
-        )
+        actions_df = pd.DataFrame([_actions_row()])
         actions_file = tmp_path / "actions.csv"
         actions_df.to_csv(actions_file, index=False)
 
@@ -1096,9 +1094,7 @@ class TestBuildBoltsFromProject:
     def test_fatigue_res_built_when_fatigue_enabled(self, tmp_path):
         import pandas as pd
 
-        actions_df = pd.DataFrame(
-            [_actions_row()]
-        )
+        actions_df = pd.DataFrame([_actions_row()])
         actions_file = tmp_path / "actions.csv"
         actions_df.to_csv(actions_file, index=False)
 
@@ -1128,9 +1124,7 @@ class TestBuildBoltsFromProject:
     def test_fatigue_res_none_when_fatigue_disabled(self, tmp_path):
         import pandas as pd
 
-        actions_df = pd.DataFrame(
-            [_actions_row()]
-        )
+        actions_df = pd.DataFrame([_actions_row()])
         actions_file = tmp_path / "actions.csv"
         actions_df.to_csv(actions_file, index=False)
 
@@ -1157,9 +1151,7 @@ class TestBuildBoltsFromProject:
         import pandas as pd
         from cassy.bolts.bolt_config import BoltReferenceEventFatigue
 
-        actions_df = pd.DataFrame(
-            [_actions_row()]
-        )
+        actions_df = pd.DataFrame([_actions_row()])
         actions_file = tmp_path / "actions.csv"
         actions_df.to_csv(actions_file, index=False)
 

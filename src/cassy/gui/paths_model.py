@@ -66,11 +66,12 @@ def bool_label(v: bool) -> str:
     return "Yes" if v else "No"
 
 
-def get_material_names() -> list[str]:
-    """Return available material names from the built-in library."""
+def get_material_names(matlib_path: str = "") -> list[str]:
+    """Return available material names from the built-in library and the
+    additional materials folder."""
     from cassy.runners.run_common import build_material_library
 
-    return sorted(build_material_library().keys())
+    return sorted(build_material_library(matlib_path or None).keys())
 
 
 def get_available_analyses(project: dict) -> list[str]:

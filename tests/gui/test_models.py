@@ -1,12 +1,16 @@
 """Tests for the Tk-free GUI project models (run without a display)."""
 
 import copy
+import shutil
+from pathlib import Path
 
+from cassy.additional_data import materials as mat_folder
 from cassy.gui.bolts_model import EMPTY_BOLT_PROJECT, get_analysis_names
 from cassy.gui.bolts_model import fresh_project as fresh_bolt_project
 from cassy.gui.bolts_model import migrate_project as migrate_bolt_project
 from cassy.gui.paths_model import EMPTY_PROJECT
 from cassy.gui.paths_model import fresh_project as fresh_paths_project
+from cassy.gui.paths_model import get_material_names as get_paths_material_names
 from cassy.gui.paths_model import migrate_project as migrate_paths_project
 
 
@@ -91,3 +95,12 @@ def test_get_analysis_names_from_actions_files(tmp_path):
         ]
     }
     assert get_analysis_names(proj) == ["Dead", "Seismic", "Thermal"]
+
+
+def test_paths_material_names_include_additional_folder(tmp_path):
+    builtin = Path(mat_folder.__file__).parent / "Inconel 718 RCC-MRx.yaml"
+    shutil.copy(builtin, tmp_path / "My custom steel.yaml")
+    assert "My custom steel" not in get_paths_material_names()
+    names = get_paths_material_names(str(tmp_path))
+    assert "My custom steel" in names
+    assert "Inconel 718 RCC-MRx" in names
