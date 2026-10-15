@@ -170,6 +170,7 @@ class FlangeAssessmentConfig:
         name : str, optional
             Name of the flange assessment, by default "Flange XXX".
         """
+        self._check_actions(actions, name)
         self.actions = actions
         self.code = code
         self.bolts_spec = bolts_spec
@@ -180,6 +181,26 @@ class FlangeAssessmentConfig:
             self.has_insert = True
         else:
             self.has_insert = False
+
+    @staticmethod
+    def _check_actions(actions: pd.DataFrame, name: str) -> None:
+        """Raise a ConfigError if any action value is not numeric."""
+        for column in actions.columns:
+            if pd.api.types.is_numeric_dtype(actions[column]):
+                continue
+            converted = pd.to_numeric(actions[column], errors="coerce")
+            bad = actions[column][converted.isna() & actions[column].notna()]
+            if bad.empty:
+                continue
+            row, value = next(iter(bad.items()))
+            if isinstance(row, tuple) and len(row) == 3:
+                row = f"bolt {row[0]}, analysis '{row[1]}', load step {row[2]}"
+            raise ConfigError(
+                f"Actions of '{name}': column '{column}' contains non-numeric "
+                f"values ({len(bad)} rows), e.g. {value!r} at {row}. Only boltID, "
+                "analysis, loadstep and numeric action columns are allowed; "
+                "check decimal separators and stray text in the CSV."
+            )
 
     def get_actions(self, bolt_id: str, terms: list[LoadTerm]) -> pd.Series:
         """

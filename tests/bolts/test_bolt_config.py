@@ -89,3 +89,21 @@ def test_get_actions_across_analyses():
 
     with pytest.raises(ConfigError):
         config.get_actions("1", [_t("+", "Y", 1)])
+
+
+def test_non_numeric_actions_raise():
+    actions = pd.DataFrame(
+        {
+            "boltID": ["1", "1"],
+            "analysis": ["X", "X"],
+            "loadstep": [1, 2],
+            "Fx": ["10.0", "1,5"],
+            "Fz": [100.0, 200.0],
+        }
+    ).set_index(["boltID", "analysis", "loadstep"])
+    bolts_spec = pd.DataFrame(
+        {"Geom type": ["bolt"], "Geom data": ["M12"], "Preload [N]": [0.0]},
+        index=pd.Index(["1"], name="Bolt ID"),
+    )
+    with pytest.raises(ConfigError, match="'1,5' at bolt 1, analysis 'X'"):
+        FlangeAssessmentConfig(actions, BOLT_CODES["SDC-IC"], bolts_spec, REs={})
