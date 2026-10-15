@@ -45,13 +45,16 @@ def main(argv: list[str] | None = None) -> None:
 
         run_bolts_gui()
     else:
-        from cassy.runners.run_project import run_project
+        import json
+
+        from cassy.runners.run_project import ProjectError, run_project
 
         logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
         try:
             root = run_project(args.run)
-        # configuration errors (missing files, wrong project) without traceback
-        except (ValueError, OSError) as e:
+        # configuration errors (missing files, wrong project) without traceback;
+        # any other error is raised with its full traceback
+        except (ProjectError, FileNotFoundError, json.JSONDecodeError) as e:
             sys.exit(f"cassy: error: {e}")
         print(f"Assessment completed. Results in {root}")
 

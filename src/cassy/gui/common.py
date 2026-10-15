@@ -826,7 +826,9 @@ class RunTab(ttk.Frame):
                     ),
                 )
             except Exception as exc:
-                msg = str(exc)
+                # full traceback to the log window, short message to the status bar
+                root_logger.exception("Assessment failed")
+                msg = f"{type(exc).__name__}: {exc}"
                 self.after(0, lambda: self._status_var.set(f"Error: {msg}"))
                 self.after(0, lambda: log_win.set_done(False, f"Error: {msg}"))
             finally:

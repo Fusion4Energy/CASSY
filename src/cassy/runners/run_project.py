@@ -7,6 +7,7 @@ import copy
 import json
 import ntpath
 import os
+from contextlib import contextmanager
 
 from cassy.auxiliary.types import PathLike
 
@@ -75,6 +76,16 @@ def portable_path(value: str, folder: PathLike) -> str:
     if not inside:
         return path
     return os.path.relpath(path, folder).replace(os.sep, "/")
+
+
+@contextmanager
+def _config_errors():
+    """Report the invalid entries found while building the configurations as
+    ProjectError, to tell them apart from the errors of the assessment itself."""
+    try:
+        yield
+    except ValueError as e:
+        raise ProjectError(str(e)) from e
 
 
 def load_project(path: PathLike) -> dict:
@@ -156,9 +167,11 @@ def run_project(path: PathLike) -> str:
 
         if not project.get("submodels"):
             raise ProjectError("The project has no submodels.")
+        with _config_errors():
+            configs = build_configs_from_project(project)
         run_paths(
             root_dir,
-            build_configs_from_project(project),
+            configs,
             fatigue=opts.get("fatigue", False),
             matlib=opts.get("matlib_path") or None,
             print_recap=opts.get("print_recap", True),
@@ -171,7 +184,8 @@ def run_project(path: PathLike) -> str:
 
         if not project.get("flanges"):
             raise ProjectError("The project has no flanges.")
-        configs, geoms = build_bolts_from_project(project)
+        with _config_errors():
+            configs, geoms = build_bolts_from_project(project)
         run_bolts(
             root_dir,
             configs,
