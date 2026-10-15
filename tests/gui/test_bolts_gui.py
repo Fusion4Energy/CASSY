@@ -142,6 +142,14 @@ def _bolt_entry(bolt_id: str = "B1") -> dict:
     return {"bolt_id": bolt_id, "geom_data": "M8", "preload": 5000.0}
 
 
+def _actions_row() -> dict:
+    """A row of a minimal actions CSV (only an axial force)."""
+    row = {"boltID": "B1", "analysis": "Inertial", "loadstep": 1}
+    row.update(dict.fromkeys(["Fx", "Fy", "Fz", "Mx", "My", "Mz"], 0.0))
+    row["Fz"] = 1000.0
+    return row
+
+
 def _project() -> dict:
     """Return a fully populated project dict suitable for most tests."""
     p = _fresh_project()
@@ -1059,7 +1067,7 @@ class TestBuildBoltsFromProject:
 
         # Create a minimal actions CSV
         actions_df = pd.DataFrame(
-            [{"boltID": "B1", "analysis": "Inertial", "loadstep": 1, "Fz": 1000.0}]
+            [_actions_row()]
         )
         actions_file = tmp_path / "actions.csv"
         actions_df.to_csv(actions_file, index=False)
@@ -1089,7 +1097,7 @@ class TestBuildBoltsFromProject:
         import pandas as pd
 
         actions_df = pd.DataFrame(
-            [{"boltID": "B1", "analysis": "Inertial", "loadstep": 1, "Fz": 1000.0}]
+            [_actions_row()]
         )
         actions_file = tmp_path / "actions.csv"
         actions_df.to_csv(actions_file, index=False)
@@ -1121,7 +1129,7 @@ class TestBuildBoltsFromProject:
         import pandas as pd
 
         actions_df = pd.DataFrame(
-            [{"boltID": "B1", "analysis": "Inertial", "loadstep": 1, "Fz": 1000.0}]
+            [_actions_row()]
         )
         actions_file = tmp_path / "actions.csv"
         actions_df.to_csv(actions_file, index=False)
@@ -1150,7 +1158,7 @@ class TestBuildBoltsFromProject:
         from cassy.bolts.bolt_config import BoltReferenceEventFatigue
 
         actions_df = pd.DataFrame(
-            [{"boltID": "B1", "analysis": "Inertial", "loadstep": 1, "Fz": 1000.0}]
+            [_actions_row()]
         )
         actions_file = tmp_path / "actions.csv"
         actions_df.to_csv(actions_file, index=False)
