@@ -16,12 +16,17 @@ from importlib.resources import files
 
 import pandas as pd
 
+from cassy.office.geometry_view import geometry_payload
+
 GROUP_LEVELS = ("item", "position", "event", "analysis", "rule_set", "rule", "equation")
 RECORD_COLUMNS = ("kind", "name", "value", "text", "unit", "inputs", "source", "note")
 RATIO = "applied/allowable"
 FATIGUE_NAMES = ("N", "n cycles", "Vj")
 MAX_ROWS = 500
 WARN_RATIO = 0.9
+# three.js of the 3D location map, loaded from a CDN (the rest of the report works
+# offline)
+THREE_URL = "https://cdn.jsdelivr.net/npm/three@0.170.0/"
 
 # verdicts of an equation, same wording of the excel/word outputs
 OK, FAILED, NOT_REQUIRED = 0, 1, 2
@@ -222,6 +227,17 @@ def _component_page(title: str, payload: dict, metadata: dict | None) -> str:
     payload = dict(payload, summary=_summary(payload), title=title)
     payload["meta"] = metadata or {}
     payload["config"] = {"maxRows": MAX_ROWS, "warnRatio": WARN_RATIO}
+    view3d = ""
+    if payload.get("geometry"):
+        imports = {
+            "three": THREE_URL + "build/three.module.min.js",
+            "three/addons/": THREE_URL + "examples/jsm/",
+        }
+        view3d = (
+            "<script type='importmap'>"
+            f"{_json_for_script({'imports': imports})}</script>"
+            f"<script type='module'>{_asset('trace_report_3d.js')}</script>"
+        )
     return (
         "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
@@ -233,7 +249,7 @@ def _component_page(title: str, payload: dict, metadata: dict | None) -> str:
         "<main id='app'><p class='hint pad'>Loading…</p></main>"
         f"<script type='application/json' id='data'>{_json_for_script(payload)}"
         f"</script><script>{_asset('trace_report.js')}</script>"
-        "</body></html>"
+        f"{view3d}</body></html>"
     )
 
 
@@ -302,7 +318,12 @@ def _index_page(components: list[tuple[str, str, dict]], metadata: dict | None) 
     )
 
 
-def write_html(df: pd.DataFrame, folder: os.PathLike, metadata: dict | None = None):
+def write_html(
+    df: pd.DataFrame,
+    folder: os.PathLike,
+    metadata: dict | None = None,
+    geometry: dict | None = None,
+):
     """Write one HTML report per component plus an index page.
 
     Parameters
@@ -313,6 +334,9 @@ def write_html(df: pd.DataFrame, folder: os.PathLike, metadata: dict | None = No
         output folder.
     metadata : dict | None, optional
         run information shown in the pages.
+    geometry : dict | None, optional
+        {component: (locations csv, geometry file)} of the components with a 3D
+        location map (see cassy.office.geometry_view). The geometry file can be None.
 
     Returns
     -------
@@ -327,6 +351,13 @@ def write_html(df: pd.DataFrame, folder: os.PathLike, metadata: dict | None = No
     for component, group in df.groupby(components, sort=False):
         filename = _safe_filename(str(component)) + ".html"
         payload = _payload(group, (metadata or {}).get("damage types"))
+        if str(component) in (geometry or {}):
+            locations, mesh = geometry[str(component)]
+            items = [str(i) for i in group["item"].dropna().unique()]
+            module = (metadata or {}).get("module", "")
+            payload["geometry"] = geometry_payload(
+                locations, mesh, module, items, str(component)
+            )
         page = _component_page(str(component), payload, metadata)
         with open(os.path.join(folder, filename), "w", encoding="utf-8") as f:
             f.write(page)

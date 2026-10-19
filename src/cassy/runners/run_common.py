@@ -36,13 +36,26 @@ def tracing(tracer: trace.Tracer | None) -> Generator[None, None, None]:
         yield
 
 
-def save_trace(tracer: trace.Tracer | None, assessment_folder: PathLike) -> None:
-    """Save the trace table and its HTML report in the assessment folder."""
+def save_trace(
+    tracer: trace.Tracer | None,
+    assessment_folder: PathLike,
+    geometry: dict | None = None,
+) -> None:
+    """Save the trace table and its HTML report in the assessment folder.
+
+    ``geometry`` ({component: (locations csv, geometry file)}) adds the 3D location
+    map to the report of those components.
+    """
     if tracer is None:
+        if geometry:
+            logging.warning(
+                "Locations and geometry files are only used in the HTML report of "
+                "the trace: enable the trace to get the 3D location map."
+            )
         return
     folder = os.path.join(assessment_folder, TRACE_FOLDER)
     tracer.save(folder)
-    write_html(tracer.to_dataframe(), folder, tracer.metadata)
+    write_html(tracer.to_dataframe(), folder, tracer.metadata, geometry)
     logging.info("Trace of intermediate results saved in %s", folder)
 
 

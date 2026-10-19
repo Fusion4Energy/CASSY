@@ -12,7 +12,12 @@ from tkinter import filedialog, messagebox, ttk
 from tkinter import font as tkfont
 from typing import Callable
 
-from cassy.runners.run_project import resolve_project_paths, save_project
+from cassy.runners.run_project import (
+    GEOMETRY_KEY,
+    LOCATIONS_KEY,
+    resolve_project_paths,
+    save_project,
+)
 
 # ── Palette (matches the CASSY logo) ──────────────────────────────────────────
 
@@ -500,6 +505,26 @@ class Dialog(tk.Toplevel):
         ).pack(side="left", padx=2)
         return var
 
+    def _geometry_file(self, existing: dict) -> Callable[[], dict]:
+        """Optional visualization-only geometry of the 3D location map of the trace
+        report (the locations csv is a run option). Returns the function collecting
+        it, if set."""
+        frm = ttk.LabelFrame(
+            self._body, text="3D location map in the trace report (optional)"
+        )
+        frm.pack(fill="both", pady=(8, 0))
+        var = self._file_entry(
+            frm,
+            "Geometry (STL)",
+            0,
+            existing.get(GEOMETRY_KEY, ""),
+            filetypes=[
+                ("Meshes", "*.stl *.vtk *.vtp *.vtu *.obj *.ply"),
+                ("All files", "*.*"),
+            ],
+        )
+        return lambda: {GEOMETRY_KEY: var.get().strip()} if var.get().strip() else {}
+
 
 class LoadTermsEditor(ttk.Frame):
     """Editable rows of signed (analysis, step) terms of a load combination."""
@@ -748,6 +773,7 @@ class RunTab(ttk.Frame):
             ),
         )
         self._root_dir = tk.StringVar(value=opts.get("root_dir", ""))
+        self._locations = tk.StringVar(value=opts.get(LOCATIONS_KEY, ""))
         for row, (label, var, title) in enumerate(
             (
                 (
@@ -756,6 +782,11 @@ class RunTab(ttk.Frame):
                     "Select additional materials folder",
                 ),
                 ("Output root folder", self._root_dir, "Select output root folder"),
+                (
+                    "Locations CSV (3D map of the trace, optional)",
+                    self._locations,
+                    None,
+                ),
             ),
             start=len(self._BOOL_OPTIONS),
         ):
@@ -768,7 +799,9 @@ class RunTab(ttk.Frame):
             ttk.Button(
                 frm,
                 text="Browse…",
-                command=lambda v=var, t=title: self._browse_dir(v, t),
+                command=lambda v=var, t=title: (
+                    self._browse_dir(v, t) if t else self._browse_csv(v)
+                ),
             ).grid(row=row, column=2, padx=4, pady=6)
         frm.columnconfigure(1, weight=1)
 
@@ -790,6 +823,14 @@ class RunTab(ttk.Frame):
         d = filedialog.askdirectory(title=title)
         if d:
             var.set(d)
+
+    @staticmethod
+    def _browse_csv(var: tk.StringVar) -> None:
+        f = filedialog.askopenfilename(
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+        )
+        if f:
+            var.set(f)
 
     def _run_assessment(self) -> None:
         self.sync()
@@ -850,6 +891,7 @@ class RunTab(ttk.Frame):
             opts[key] = var.get()
         opts["matlib_path"] = self._matlib.get().strip()
         opts["root_dir"] = self._root_dir.get().strip()
+        opts[LOCATIONS_KEY] = self._locations.get().strip()
 
     def load_from_project(self) -> None:
         opts = self._project["run_options"]
@@ -857,6 +899,7 @@ class RunTab(ttk.Frame):
             self._flags[key].set(opts.get(key, default))
         self._matlib.set(opts.get("matlib_path", ""))
         self._root_dir.set(opts.get("root_dir", ""))
+        self._locations.set(opts.get(LOCATIONS_KEY, ""))
 
 
 # ── T & DPA grid ──────────────────────────────────────────────────────────────

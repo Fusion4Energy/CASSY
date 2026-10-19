@@ -9,6 +9,7 @@ from cassy.__main__ import main
 from cassy.runners.run_project import (
     ProjectError,
     load_project,
+    location_maps,
     portable_path,
     project_module,
     run_project,
@@ -70,6 +71,32 @@ def test_run_project_paths(tmp_path):
     assert Path(root) == folder / "out"
     assert (folder / "out" / "assessment" / "trace" / "index.html").exists()
     assert not (folder / "out" / "Recap.docx").exists()
+
+
+def test_run_project_location_map(tmp_path):
+    folder = tmp_path / "project"
+    path = _copy_project(
+        PATHS_PROJECT, folder, root_dir="out", print_recap=False, trace=True
+    )
+    (folder / "locations.csv").write_text(
+        "component,path_number,xi,yi,zi,xj,yj,zj\nModel_B,1,0,0,0,0,0,1\n"
+    )
+    project = json.loads(path.read_text())
+    project["run_options"]["locations_file"] = "locations.csv"
+    path.write_text(json.dumps(project))
+
+    # relative to the project folder, as the other data files
+    maps = location_maps(load_project(path))
+    assert maps == {"Model_B": (str(folder / "locations.csv"), None)}
+    save_project(load_project(path), path)
+    saved = json.loads(path.read_text())
+    assert saved["run_options"]["locations_file"] == "locations.csv"
+    # no locations csv, no location map
+    assert location_maps(load_project(PATHS_PROJECT)) == {}
+
+    run_project(path)
+    page = folder / "out" / "assessment" / "trace" / "Model_B.html"
+    assert '"geometry":{"items":{"Path 1":' in page.read_text(encoding="utf-8")
 
 
 def test_run_project_needs_root():

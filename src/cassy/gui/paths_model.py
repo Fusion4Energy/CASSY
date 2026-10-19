@@ -34,6 +34,7 @@ EMPTY_PROJECT: dict[str, Any] = {
         "trace": False,
         "matlib_path": "",
         "root_dir": "",
+        "locations_file": "",
     },
     "loads": [],
     "reference_events": [],

@@ -148,6 +148,18 @@ const DAMAGES = ['Immediate', 'Ratcheting', FATIGUE];
 const damageOf = g => D.damage[g[G.RULE]] || 'Immediate';
 for (const d of Object.values(D.damage)) if (!DAMAGES.includes(d)) DAMAGES.splice(DAMAGES.length - 1, 0, d);
 
+// ---------- 3D location map ----------
+// drawn by trace_report_3d.js (only when locations were given) in the .view3d
+// containers: this is the data it needs and the route it follows
+const HAS_GEOMETRY = Boolean(D.geometry);
+const view3d = (cls, ...kids) => (HAS_GEOMETRY ? el('div', {class: 'view3d ' + (cls || '')},
+  el('p', {class: 'hint pad'}, 'Loading the 3D view (it needs internet access to load the three.js library)…'), ...kids) : null);
+if (HAS_GEOMETRY) window.CASSY = {
+  geometry: D.geometry, warnRatio: WARN, route: {view: null, item: null},
+  items: new Map([...ITEMS.values()].map(it => [itemName(it.id), {max: it.max, failed: it.failed}])),
+  open: name => go(itemHash(sid(name))),
+};
+
 // ---------- routing ----------
 const enc = i => encodeURIComponent(i < 0 ? '-' : S[i]);
 const dec = t => (t === '-' ? -1 : sid(t));
@@ -185,6 +197,11 @@ function route() {
   if (r.view === 'explore' || r.view === 'item' || r.view === 'event') { const v = view('explore', buildExplore); v.state.show(r); }
   else view('summary', buildSummary);
   window.scrollTo(0, 0);
+  if (HAS_GEOMETRY) {
+    const item = (r.view === 'item' || r.view === 'event') && r.args[0] !== '-' ? r.args[0] : null;
+    window.CASSY.route = {view: item ? 'explore' : r.view === 'explore' ? 'explore' : 'summary', item};
+    document.dispatchEvent(new CustomEvent('cassy:route', {detail: window.CASSY.route}));
+  }
 }
 window.addEventListener('hashchange', route);
 
@@ -228,6 +245,12 @@ function buildSummary(v) {
   bar.append(tile('Near the limit', String(near), link('ratio ≥ ' + WARN + ' and < 1', '#/explore' + qs({min: WARN}))));
   bar.append(tile('Warnings', String(sm.warnings), sm.warnings ? 'see below' : 'none', sm.warnings ? 'warnbox' : ''));
   root.append(bar);
+  if (HAS_GEOMETRY) {
+    root.append(el('h2', null, 'Location map'));
+    root.append(el('p', {class: 'hint'}, 'Location of the items on the model, coloured by their maximum applied/allowable ratio (or ΣVj). ' +
+      'Hover a marker to see the item, click it to open it.'));
+    root.append(view3d('large'));
+  }
   buildRecap(root);
 
   // needs attention
@@ -405,6 +428,7 @@ function buildExplore(v) {
   const browse = el('div'), detail = el('div');
   panel.append(browse, detail);
   root.append(side, panel);
+  if (HAS_GEOMETRY) root.append(el('aside', {id: 'locator'}, view3d()));
   const fText = el('input', {type: 'search', placeholder: 'Filter items'});
   const fSort = el('select', null, el('option', {value: 'name'}, 'assessment order'), el('option', {value: 'worst'}, 'worst first'));
   const list = el('div');

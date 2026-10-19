@@ -182,6 +182,54 @@ index) is marked as *screening* and, as in the Word recap, does not count in the
     The trace of large submodels can contain hundreds of thousands of rows. The HTML report
     can then become slow to open, while the CSV remains easy to handle with pandas.
 
+## 3D location map
+
+Paths and bolts are identified only by their IDs. To see where they are, a locations
+CSV can be given in the *General* tab of the GUIs: a single file with the locations of
+the items of all the submodels/flanges. Optionally, a geometry of each submodel/flange
+can be given in the *Submodels* (paths) or *Flanges* (bolts) tab. These files are only
+used to draw the report: they have no effect on the assessment. They are stored in the
+project file (``locations_file`` of the run options, ``geometry_file`` of each
+submodel/flange) and, from a script, are passed to the runners as
+``geometry={name: (locations csv, geometry file)}``.
+
+The **locations CSV** of the paths has one row per path, drawn as the segment from
+point i to point j:
+
+| Column | Meaning |
+| --- | --- |
+| ``component`` | submodel name: only the rows of the submodel are used, so one file can hold the paths of all the submodels |
+| ``path_number`` | path number, as in the assessment |
+| ``xi``, ``yi``, ``zi`` | first point of the path, in the units of the geometry |
+| ``xj``, ``yj``, ``zj`` | second point of the path |
+
+The **locations CSV** of the bolts has one row per bolt:
+
+| Column | Meaning |
+| --- | --- |
+| ``flange`` | flange name: only the rows of the flange are used, so one file can hold the bolts of all the flanges |
+| ``boltID`` | bolt ID, as in the assessment and in the actions file |
+| ``x``, ``y``, ``z`` | position of the bolt, in the units of the geometry |
+| ``nx``, ``ny``, ``nz`` | optional, axis of the bolt |
+
+Any other column is ignored. Items without a location are reported in the log and not
+drawn. The **geometry** is any surface or volume mesh readable by pyvista (STL, VTK,
+OBJ, PLY, ...); it is decimated to 50,000 triangles at most to keep the report light.
+Without a geometry only the items are drawn.
+
+The map is part of the HTML report, so the trace option must be enabled. It appears
+in the *Summary* tab, with the items coloured by their highest applied/allowable ratio
+(or ΣVj), and next to the item and event pages of the *Explore* tab, where the item
+open is highlighted and the view zooms on it. Hovering an item shows its name and
+ratio, clicking it opens it. The model can be shown as x-ray (default, to see the
+paths through the thickness), solid or hidden.
+
+!!! note
+
+    The 3D view loads the [three.js](https://threejs.org) library from the internet
+    when the report is opened. Without internet access the rest of the report works as
+    usual and the 3D view is not shown.
+
 ## Adding a rule
 
 When writing a new rule, record its allowables (``record_allowables``) and declare the

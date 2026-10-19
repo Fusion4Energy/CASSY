@@ -50,6 +50,7 @@ def run_paths(
     print_recap: bool = True,
     merge: bool = True,
     trace: bool = False,
+    geometry: dict | None = None,
 ) -> None:
     folder_tree = FolderTree(root)
     # --- Initializations ---
@@ -86,7 +87,7 @@ def run_paths(
         submodels.append(submodel)
         submodel.print_global_df(ass_path)
 
-    save_trace(tracer, folder_tree.assessment_folder)
+    save_trace(tracer, folder_tree.assessment_folder, geometry)
 
     if not print_recap:
         logger.info("No word recap requested. Assessment completed")
