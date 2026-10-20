@@ -151,6 +151,11 @@ def run_paths(
                         pnum, pos, complete=True, assessment=dtype
                     )
                     df = df.copy()
+                    if "Superseded" in df.columns:
+                        superseded_failed = df["Superseded"].eq(True) & df[
+                            "Result"
+                        ].eq("FAILED")
+                        df.loc[superseded_failed, "Result"] = "FAILED (superseded)"
                     df = df.drop(columns=["Superseded"], errors="ignore")
                     for col in ["Applied [MPa]", "Allowable [MPa]"]:
                         if col in df.columns:
