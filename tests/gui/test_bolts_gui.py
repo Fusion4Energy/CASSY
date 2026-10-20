@@ -206,6 +206,7 @@ class TestFreshProject:
         assert p["run_options"]["fatigue"] is False
         assert p["run_options"]["matlib_path"] == ""
         assert p["run_options"]["root_dir"] == ""
+        assert p["run_options"]["locations_file"] == ""
 
     def test_lists_and_dicts_are_empty(self):
         p = _fresh_project()
@@ -375,6 +376,7 @@ class TestFlangeDialogCollect:
         dlg._name_var = tk.StringVar(root, value=name)
         dlg._code = tk.StringVar(root, value=code or BOLT_DESIGN_CODES[0])
         dlg._actions = tk.StringVar(root, value=actions)
+        dlg._geometry = lambda: {}
         return dlg
 
     def test_collect_valid(self, root):
@@ -393,8 +395,14 @@ class TestFlangeDialogCollect:
         dlg._name_var = tk.StringVar(root, value="F")
         dlg._code = tk.StringVar(root, value=BOLT_DESIGN_CODES[0])
         dlg._actions = tk.StringVar(root, value="")
+        dlg._geometry = lambda: {}
         result = dlg._collect()
         assert len(result["bolts_spec"]) == 1
+
+    def test_collect_geometry_file(self, root):
+        dlg = self._make(root)
+        dlg._geometry = lambda: {"geometry_file": "/tmp/f.stl"}
+        assert dlg._collect()["geometry_file"] == "/tmp/f.stl"
 
     def test_collect_empty_name_returns_none(self, root):
         dlg = self._make(root, name="")

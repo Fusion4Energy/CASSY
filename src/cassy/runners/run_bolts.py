@@ -46,6 +46,7 @@ def run_bolts(
     merge: bool = True,
     only_bolts: bool = False,
     trace: bool = False,
+    geometry: dict | None = None,
 ) -> None:
     folder_tree = FolderTree(root)
     tracer = new_tracer(trace, "bolts")
@@ -81,7 +82,7 @@ def run_bolts(
         if flange_assessment.config.has_insert:
             flange_assessment.print_global_df(assessment_folder, insert=True)
 
-    save_trace(tracer, folder_tree.assessment_folder)
+    save_trace(tracer, folder_tree.assessment_folder, geometry)
 
     if not print_recap:
         logger.info("No word recap requested. Assessment completed")

@@ -46,6 +46,7 @@ from cassy.gui.common import (
 )
 from cassy.gui.common import Dialog as _Dialog
 from cassy.gui.common import TableTab as _TableTab
+from cassy.runners.run_project import location_maps
 
 # ── Geometry field definitions ────────────────────────────────────────────────
 
@@ -415,6 +416,7 @@ class FlangeDialog(_Dialog):
             ex.get("actions_file", ""),
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
         )
+        self._geometry = self._geometry_file(ex)
 
     def _collect(self) -> dict | None:
         name = self._name_var.get().strip()
@@ -426,6 +428,7 @@ class FlangeDialog(_Dialog):
             "design_code": self._code.get(),
             "actions_file": self._actions.get().strip(),
             "bolts_spec": self._ex.get("bolts_spec", []),
+            **self._geometry(),
         }
 
 
@@ -651,6 +654,7 @@ class GeneralTab(RunTab):
         configs, geoms = _build_bolts_from_project(self._project)
         opts = self._project["run_options"]
         root_dir = opts["root_dir"]
+        geometry = location_maps(self._project)
 
         def work() -> None:
             from cassy.runners.run_bolts import run_bolts
@@ -664,6 +668,7 @@ class GeneralTab(RunTab):
                 merge=opts.get("merge", True),
                 only_bolts=opts.get("only_bolts", False),
                 trace=opts.get("trace", False),
+                geometry=geometry,
             )
 
         return work

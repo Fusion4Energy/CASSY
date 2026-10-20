@@ -176,11 +176,13 @@ class TestSubmodelDialog:
         dlg._name_var = tk.StringVar(root, value="SM1")
         dlg._code = tk.StringVar(root, value="SDC-IC")
         dlg._tensors = tk.StringVar(root, value="/tmp/t.csv")
+        dlg._geometry = lambda: {"geometry_file": "/tmp/sm1.stl"}
         result = dlg._collect()
         assert result == {
             "name": "SM1",
             "design_code": "SDC-IC",
             "tensors_file": "/tmp/t.csv",
+            "geometry_file": "/tmp/sm1.stl",
         }
 
     def test_collect_empty_name(self, root):
@@ -189,6 +191,7 @@ class TestSubmodelDialog:
         dlg._name_var = tk.StringVar(root, value="  ")
         dlg._code = tk.StringVar(root, value="SDC-IC")
         dlg._tensors = tk.StringVar(root, value="")
+        dlg._geometry = lambda: {}
         with patch("cassy.gui.paths_gui.messagebox") as mb:
             result = dlg._collect()
         assert result is None
@@ -512,22 +515,26 @@ class TestGeneralTab:
         tab._fatigue.set(True)
         tab._flags["merge"].set(False)
         tab._matlib.set("/some/path")
+        tab._locations.set("/some/loc.csv")
         tab.sync()
         assert proj["run_options"]["fatigue"] is True
         assert proj["run_options"]["merge"] is False
         assert proj["run_options"]["print_recap"] is True
         assert "only_bolts" not in proj["run_options"]
         assert proj["run_options"]["matlib_path"] == "/some/path"
+        assert proj["run_options"]["locations_file"] == "/some/loc.csv"
 
     def test_load_from_project(self, root):
         proj = _fresh_project()
         proj["run_options"]["fatigue"] = True
         proj["run_options"]["matlib_path"] = "/libs"
+        proj["run_options"]["locations_file"] = "/loc.csv"
         nb = tk.ttk.Notebook(root)
         tab = GeneralTab(nb, proj)
         tab.load_from_project()
         assert tab._fatigue.get() is True
         assert tab._matlib.get() == "/libs"
+        assert tab._locations.get() == "/loc.csv"
 
 
 # ---------------------------------------------------------------------------

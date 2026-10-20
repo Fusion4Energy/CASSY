@@ -134,6 +134,37 @@ tr.k-allowable td { background: #fffaf0; }
 tr.k-branch td { font-style: italic; color: var(--muted); }
 tr.k-warning td { background: var(--warn-bg); color: var(--warn); }
 .warnbox { border-left: 4px solid var(--warn); background: var(--warn-bg); padding: 4px 10px; margin: 6px 0; }
+
+/* --- 3D location map --- */
+#locator { width: 38%; min-width: 300px; max-width: 640px; flex: none; border-left: 1px solid var(--line); }
+.view3d { position: relative; height: 100%; background: #f7f8fa; overflow: hidden; }
+.view3d.large { height: 480px; border: 1px solid var(--line); border-radius: 6px; margin: 4px 0 10px; }
+.view3d.missing::after { content: attr(data-missing); position: absolute; left: 50%; top: 44px;
+  transform: translateX(-50%); padding: 3px 10px; background: var(--warn-bg); color: var(--warn);
+  border-radius: 4px; pointer-events: none; }
+.v3d { position: absolute; inset: 0; }
+.v3d canvas { display: block; width: 100%; height: 100%; }
+.v3d-bar { position: absolute; top: 6px; left: 6px; right: 6px; display: flex; flex-wrap: wrap; gap: 4px;
+  align-items: center; pointer-events: none; }
+.v3d-bar > * { pointer-events: auto; }
+.v3d-bar button { background: #ffffffd9; }
+.v3d-legend { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-left: 6px; font-size: 11px; color: var(--muted);
+  background: #ffffffd9; padding: 2px 6px; border-radius: 4px; }
+.v3d-legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  margin-right: 3px; background: var(--c); vertical-align: -1px; }
+.v3d-help { position: absolute; bottom: 4px; left: 8px; font-size: 11px; color: var(--muted); pointer-events: none; }
+.v3d-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.v3d-labels span { position: absolute; left: 0; top: 0; font-size: 11px; white-space: nowrap; padding: 0 3px;
+  background: #ffffffcc; border-radius: 3px; }
+.v3d-labels span.sel { font-size: 13px; font-weight: 600; color: #fff; background: #e0119d; }
+.v3d-tip { position: absolute; left: 0; top: 0; pointer-events: none; background: var(--fg); color: #fff;
+  padding: 2px 7px; border-radius: 3px; font-size: 12px; white-space: nowrap; }
+@media (max-width: 1100px) {
+  #explore { flex-wrap: wrap; }
+  #locator { order: -1; width: 100%; max-width: none; height: 300px; border-left: none;
+    border-bottom: 1px solid var(--line); }
+  #side, #panel { height: calc(100% - 300px); }
+}
 @media (max-width: 700px) {
   #explore { flex-direction: column; height: auto; }
   #side { width: auto; max-height: 40vh; border-right: none; border-bottom: 1px solid var(--line); }

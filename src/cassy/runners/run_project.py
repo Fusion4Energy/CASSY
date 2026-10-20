@@ -13,7 +13,11 @@ from cassy.auxiliary.types import PathLike
 
 PATHS, BOLTS = "paths", "bolts"
 # keys of the data files referenced by the project, per section
-_FILE_KEYS = {"submodels": "tensors_file", "flanges": "actions_file"}
+LOCATIONS_KEY, GEOMETRY_KEY = "locations_file", "geometry_file"
+_FILE_KEYS = {
+    "submodels": ("tensors_file", GEOMETRY_KEY),
+    "flanges": ("actions_file", GEOMETRY_KEY),
+}
 
 
 class ProjectError(ValueError):
@@ -34,10 +38,11 @@ def project_module(project: dict) -> str:
 
 def _path_fields(project: dict):
     """Yield (container, key) of every file or folder path stored in a project."""
-    for section, key in _FILE_KEYS.items():
+    for section, keys in _FILE_KEYS.items():
         for entry in project.get(section, []):
-            yield entry, key
-    for key in ("matlib_path", "root_dir"):
+            for key in keys:
+                yield entry, key
+    for key in ("matlib_path", "root_dir", LOCATIONS_KEY):
         yield project.get("run_options", {}), key
 
 
@@ -76,6 +81,23 @@ def portable_path(value: str, folder: PathLike) -> str:
     if not inside:
         return path
     return os.path.relpath(path, folder).replace(os.sep, "/")
+
+
+def location_maps(project: dict) -> dict:
+    """Visualization-only files of the submodels/flanges of a project, for the 3D
+    location map of the trace report: {name: (locations csv, geometry file)}.
+
+    The locations csv is shared by all the submodels/flanges (run option), the
+    geometry is optional and given for each of them. Empty without locations csv.
+    """
+    locations = project.get("run_options", {}).get(LOCATIONS_KEY)
+    if not locations:
+        return {}
+    return {
+        entry["name"]: (locations, entry.get(GEOMETRY_KEY) or None)
+        for section in _FILE_KEYS
+        for entry in project.get(section, [])
+    }
 
 
 @contextmanager
@@ -177,6 +199,7 @@ def run_project(path: PathLike) -> str:
             print_recap=opts.get("print_recap", True),
             merge=opts.get("merge", True),
             trace=opts.get("trace", False),
+            geometry=location_maps(project),
         )
     else:
         from cassy.gui.bolts_model import build_bolts_from_project
@@ -195,5 +218,6 @@ def run_project(path: PathLike) -> str:
             merge=opts.get("merge", True),
             only_bolts=opts.get("only_bolts", False),
             trace=opts.get("trace", False),
+            geometry=location_maps(project),
         )
     return root_dir

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pyvista as pv
 
 from cassy.auxiliary.trace import load_trace
 from cassy.auxiliary.types import LoadTerm
@@ -34,6 +35,41 @@ def test_run_paths_no_recap(tmp_path):
     assert not os.path.exists(Path(tmp_path, "assessment", "trace"))
 
 
+def _location_files(folder: Path) -> tuple[Path, Path]:
+    """Locations of the paths of the test project and a mesh around them."""
+    locations = folder / "locations.csv"
+    locations.write_text(
+        "component,path_number,xi,yi,zi,xj,yj,zj\n"
+        "Model_B,1,0,0,0,0,0,1\n"
+        "Model_B,2,1,0,0,1,0,1\n"
+    )
+    mesh = folder / "model.stl"
+    pv.Cube(center=(0.5, 0, 0.5), x_length=2).save(mesh)
+    return locations, mesh
+
+
+def test_run_paths_location_map(tmp_path, caplog):
+    configs = build_configs_from_project(load_project(RES / "project.json"))
+    geometry = {"Model_B": _location_files(tmp_path)}
+    run_paths(
+        tmp_path / "out",
+        configs,
+        print_recap=False,
+        trace=True,
+        geometry=geometry,
+    )
+    page = Path(tmp_path, "out", "assessment", "trace", "Model_B.html")
+    page = page.read_text(encoding="utf-8")
+    assert "importmap" in page and "three.module.min.js" in page
+    assert '"geometry":{"items":{"Path 1":' in page
+    assert '"mesh":{"vertices":' in page
+
+    # the location map is part of the trace report
+    run_paths(tmp_path / "no_trace", configs, print_recap=False, geometry=geometry)
+    assert not os.path.exists(Path(tmp_path, "no_trace", "assessment", "trace"))
+    assert "enable the trace" in caplog.text
+
+
 def test_run_paths_trace(tmp_path):
     configs = build_configs_from_project(load_project(RES / "project.json"))
     run_paths(tmp_path, configs, fatigue=True, print_recap=False, trace=True)
@@ -48,6 +84,9 @@ def test_run_paths_trace(tmp_path):
     # each html page per submodel
     for name in configs:
         assert any(f.startswith(name.replace(" ", "_")) for f in os.listdir(folder))
+    # no locations given: no 3D location map
+    page = (folder / "Model_B.html").read_text(encoding="utf-8")
+    assert "importmap" not in page
 
     # the allowable reported for each equation matches the one built in the rule
     keys = ["component", "item", "position", "event", "rule"]

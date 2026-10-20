@@ -36,6 +36,7 @@ The GUI will open on the *General* Tab where the main run options can be set:
 * **Generate Word recap**, if unchecked only the Excel results are written (faster)
 * **Merge repeated cells in Word tables**, makes the Word tables more readable but is slower
 * **Assess only bolts (skip inserts)**, skip the assessment of the base material threads
+* **Locations CSV**, optional, coordinates of the bolts of all the flanges, used only to show where they are in the HTML report of the trace. See [3D location map](trace#3d-location-map).
 * **Additional materials folder**, allows the user to point to folder that can contain additional material files that are not included in CASSY default library. These must be in yaml format, see [materials](materials).
 * **Output root folder**, browse to a destination folder where to output all CASSY results
 
@@ -54,6 +55,7 @@ In this tab, all flanges/submodels will need to be defined. The GUI will ask for
 * **Name**, name of the submodel that will be used in the outputs
 * **Design Code**, drop-down menu that allows you to select one of the available design codes.
 * **Stress tensor CSV**, browse to link each submodel with its forces and moments input .csv as discussed [above](#the-actions-file).
+* **Geometry (STL)**, optional, used only to show where the bolts are in the HTML report of the trace, together with the locations CSV of the General tab. See [3D location map](trace#3d-location-map).
 
 ## Bolts Specs Tab
 For each of the flanges/submodel, a number of bolts to assess needs to be defined. For each bolt an ID (use progressive integers), a geometry and a preload value must be assigned.

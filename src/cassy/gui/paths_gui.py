@@ -47,6 +47,7 @@ from cassy.gui.paths_model import fresh_project as _fresh_project
 from cassy.gui.paths_model import get_available_analyses as _get_available_analyses
 from cassy.gui.paths_model import get_material_names as _get_material_names
 from cassy.gui.paths_model import migrate_project as _migrate_project
+from cassy.runners.run_project import location_maps
 
 
 # ── Submodel dialog ───────────────────────────────────────────────────────────
@@ -71,6 +72,7 @@ class SubmodelDialog(_Dialog):
             ex.get("tensors_file", ""),
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
         )
+        self._geometry = self._geometry_file(ex)
 
     def _collect(self) -> dict | None:
         name = self._name_var.get().strip()
@@ -81,6 +83,7 @@ class SubmodelDialog(_Dialog):
             "name": name,
             "design_code": self._code.get(),
             "tensors_file": self._tensors.get().strip(),
+            **self._geometry(),
         }
 
 
@@ -296,6 +299,7 @@ class GeneralTab(RunTab):
         print_recap = opts.get("print_recap", True)
         merge = opts.get("merge", True)
         trace = opts.get("trace", False)
+        geometry = location_maps(self._project)
 
         def work() -> None:
             from cassy.runners.run_paths import run_paths
@@ -308,6 +312,7 @@ class GeneralTab(RunTab):
                 print_recap=print_recap,
                 merge=merge,
                 trace=trace,
+                geometry=geometry,
             )
 
         return work
