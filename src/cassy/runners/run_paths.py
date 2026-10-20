@@ -151,7 +151,7 @@ def run_paths(
                         pnum, pos, complete=True, assessment=dtype
                     )
                     df = df.copy()
-                    df = df.drop(columns=["Screening"], errors="ignore")
+                    df = df.drop(columns=["Superseded"], errors="ignore")
                     for col in ["Applied [MPa]", "Allowable [MPa]"]:
                         if col in df.columns:
                             df[col] = df[col].apply(

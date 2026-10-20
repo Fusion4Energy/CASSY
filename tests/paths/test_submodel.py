@@ -74,7 +74,7 @@ class TestSubmodel:
         from cassy.designcodes.sdcic import SDC_IC
 
         # Build a mock assessment df that mirrors the scenario in issue #49:
-        # - 3Sm rule FAILED (Screening=True, because EI rows exist)
+        # - 3Sm rule FAILED (Superseded=True, EI has the lower ratio)
         # - Efficiency Index rows both OK
         mock_ratcheting_df = pd.DataFrame(
             [
@@ -95,7 +95,7 @@ class TestSubmodel:
                     "Result": "FAILED",
                     "Safety Margin": 0.99,
                     "Damage Type": "Ratcheting",
-                    "Screening": True,
+                    "Superseded": True,
                 },
                 {
                     "ID": "RE1",
@@ -114,7 +114,7 @@ class TestSubmodel:
                     "Result": "OK",
                     "Safety Margin": 1.01,
                     "Damage Type": "Ratcheting",
-                    "Screening": False,
+                    "Superseded": False,
                 },
                 {
                     "ID": "RE1",
@@ -133,7 +133,7 @@ class TestSubmodel:
                     "Result": "OK",
                     "Safety Margin": 1.46,
                     "Damage Type": "Ratcheting",
-                    "Screening": False,
+                    "Superseded": False,
                 },
             ]
         )

@@ -81,7 +81,7 @@ def test_save_load_roundtrip_and_html(tmp_path):
     assert "<b>escaped</b>" not in page
     payload = _embedded_payload(page)
     assert "<b>escaped</b>" in payload["strings"]
-    # [group, applied, allowable, ratio, verdict, screening]
+    # [group, applied, allowable, ratio, verdict, superseded]
     assert payload["equations"][0][1:] == [1.2e6, 1e6, pytest.approx(1.2), 1, 0]
     assert payload["summary"]["failed"]
     assert payload["summary"]["counts"]["FAILED"] == 1
@@ -90,10 +90,10 @@ def test_save_load_roundtrip_and_html(tmp_path):
     assert "url=C_1.html" in index_page and "FAILED" in index_page
 
 
-def _equation(applied, allowable, screening=False):
+def _equation(applied, allowable, superseded=False):
     with trace.scope(equation="eq"):
-        if screening:
-            trace.record("screening", "yes", kind="branch")
+        if superseded:
+            trace.record("superseded", "yes", kind="branch")
         trace.record("applied", applied, kind="result", unit="Pa")
         trace.record("allowable", allowable, kind="result", unit="Pa")
 
@@ -103,7 +103,7 @@ def test_html_verdicts_and_index(tmp_path):
     with trace.activate(tracer):
         with trace.scope(component="A", item="P1", position="begin", event="LS1"):
             with trace.scope(analysis="immediate", rule="R1"):
-                _equation(2.0, 1.0, screening=True)  # superseded: not counted
+                _equation(2.0, 1.0, superseded=True)  # not counted
             with trace.scope(analysis="immediate", rule="R2"):
                 _equation(1.0, float("nan"))  # no limit
             with trace.scope(analysis="immediate", rule="R3"):
@@ -122,7 +122,7 @@ def test_html_verdicts_and_index(tmp_path):
         "OK": 1,
         "FAILED": 0,
         "Assessment not required": 1,
-        "screening": 1,
+        "superseded": 1,
     }
     assert summ_a["worst_ratio"] == pytest.approx(0.5)
     assert summ_a["warnings"] == 1
@@ -158,7 +158,24 @@ def test_duplicates_units_and_named_inputs():
     assert json.loads(df.loc[4, "inputs"]) == [20, 0.0]
 
 
-def test_record_equations_unique_names_and_screening():
+def test_superseded_equations():
+    from types import SimpleNamespace
+
+    from cassy.designcodes.codes import superseded_equations
+
+    rule = SimpleNamespace(sequential=True)
+    # screening failed, follow-ups govern (lower max ratio)
+    assert superseded_equations(rule, [(3.0, 2.0), (1.0, 2.0), (2.5, 2.0)]) == {0}
+    # everything failed but the screening has the lowest ratio: it governs
+    assert superseded_equations(rule, [(3.0, 2.0), (1.0, 2.0), (4.0, 2.0)]) == {1, 2}
+    # follow-ups not evaluated
+    assert superseded_equations(rule, [(1.0, 2.0), (None, None), (None, None)]) == set()
+    assert superseded_equations(rule, None) == set()
+    # not a sequential rule
+    assert superseded_equations(SimpleNamespace(), [(3.0, 2.0), (1.0, 2.0)]) == set()
+
+
+def test_record_equations_unique_names_and_superseded():
     from types import SimpleNamespace
 
     from cassy.designcodes.codes import _record_equations
@@ -181,9 +198,9 @@ def test_record_equations_unique_names_and_screening():
         "Efficiency Index (eq. 2)",
         "Efficiency Index (eq. 3)",
     }
-    screening = df[df["name"] == "screening"]
-    assert list(screening["item"]) == ["evaluated"]
-    assert list(screening["equation"]) == ["3Sm rule"]
+    superseded = df[df["name"] == "superseded"]
+    assert list(superseded["item"]) == ["evaluated"]
+    assert list(superseded["equation"]) == ["3Sm rule"]
     assert (df[df["item"] == "skipped"]["name"] == "equation").sum() == 2
     # declared terms go to the source of the results and are consumed by the rule
     applied = df[(df["name"] == "applied") & (df["item"] == "evaluated")]
