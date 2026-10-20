@@ -3,7 +3,7 @@
 // Data layout (see trace_report.py):
 //   rows      [group, kind, name, value, text, unit, inputs, source, note]
 //   groups    [item, position, event, analysis, rule_set, rule, equation]
-//   equations [group, applied [Pa], allowable [Pa], ratio, verdict, screening]
+//   equations [group, applied [Pa], allowable [Pa], ratio, verdict, superseded]
 //   fatigue   [item, position, event, analysis, n cycles, N, Vj]
 // All the text fields are indexes in D.strings (-1 when missing).
 const D = JSON.parse(document.getElementById('data').textContent);
@@ -44,13 +44,13 @@ const ratioTxt = r => (typeof r === 'number' ? r.toFixed(3) : '');
 const ratioCell = r => td(typeof r === 'number' ? ratioTxt(r) : '–', 'num ' + (typeof r === 'number' ? level(r) : 'na'));
 const badge = r => (typeof r === 'number' ? el('span', {class: 'badge ' + level(r)}, r.toFixed(2)) : null);
 function verdictChip(verdict, screening) {
-  if (verdict === FAILED && screening) return el('span', {class: 'verdict screening', title: 'Screening equation: superseded by the following equations of the rule, not counted in the verdict'}, 'screening');
+  if (verdict === FAILED && screening) return el('span', {class: 'verdict screening', title: 'Superseded by the governing equations of the sequential rule (lower ratio), not counted in the verdict'}, 'superseded');
   if (verdict === FAILED) return el('span', {class: 'verdict failed'}, 'FAILED');
   if (verdict === OK) return el('span', {class: 'verdict ok'}, 'OK');
   if (verdict === NOT_REQUIRED) return el('span', {class: 'verdict notreq', title: 'No allowable defined (no limit)'}, 'not required');
   return null;
 }
-const verdictText = (v, sc) => (v === FAILED && sc ? 'screening' : v === FAILED ? 'FAILED' : v === OK ? 'OK' : v === NOT_REQUIRED ? 'Assessment not required' : '');
+const verdictText = (v, sc) => (v === FAILED && sc ? 'superseded' : v === FAILED ? 'FAILED' : v === OK ? 'OK' : v === NOT_REQUIRED ? 'Assessment not required' : '');
 function displayValue(r) {
   // returns [value text, unit]
   const unit = s(r[R.UNIT]);
@@ -102,7 +102,7 @@ D.rows.forEach((r, i) => {
   ev.rows.push(i);
   if (r[R.KIND] === KIND_WARNING) ev.warnings++;
 });
-// effective ratio: a failed screening equation is superseded and not counted
+// effective ratio: a failed superseded equation of a sequential rule is not counted
 const effective = e => (e[E.SCREEN] && e[E.VERD] === FAILED ? null : e[E.RATIO]);
 const higher = (a, b) => (typeof b === 'number' && (a === null || b > a) ? b : a);
 D.equations.forEach(e => {
@@ -240,7 +240,7 @@ function buildSummary(v) {
     link(itemName(worstUse.it.id) + ' / ' + s(worstUse.pos), itemHash(worstUse.it.id))));
   bar.append(tile('Equations', String(c.FAILED + c.OK + c['Assessment not required']),
     el('span', null, link(c.FAILED + ' failed', '#/explore' + qs({verdict: 'FAILED'})), ' · ', c.OK + ' OK · ',
-      c['Assessment not required'] + ' not required', c.screening ? ' · ' + c.screening + ' screening superseded' : '')));
+      c['Assessment not required'] + ' not required', c.superseded ? ' · ' + c.superseded + ' superseded' : '')));
   const near = D.equations.filter(e => { const r = effective(e); return typeof r === 'number' && r >= WARN && r < 1; }).length;
   bar.append(tile('Near the limit', String(near), link('ratio ≥ ' + WARN + ' and < 1', '#/explore' + qs({min: WARN}))));
   bar.append(tile('Warnings', String(sm.warnings), sm.warnings ? 'see below' : 'none', sm.warnings ? 'warnbox' : ''));
@@ -281,7 +281,7 @@ function buildSummary(v) {
   }
   if (!att.length) root.append(el('p', {class: 'hint'}, 'No failed equations, no fatigue usage above 1 and no warnings.'));
   else {
-    root.append(el('p', {class: 'hint'}, 'Failed equations (screening equations superseded by the following ones are excluded, as in the Word recap), fatigue usage ≥ 1 and calculation warnings. Click a row to open the calculation.'));
+    root.append(el('p', {class: 'hint'}, 'Failed equations (superseded equations of sequential rules are excluded, as in the Word recap), fatigue usage ≥ 1 and calculation warnings. Click a row to open the calculation.'));
     root.append(table(['', 'Item', 'Position', 'Event', 'Rule', 'Equation / quantity', 'Value', 'Detail'],
       att.slice(0, MAX).map(a => el('tr', {class: 'link', onclick: () => go(a.h)}, td(a.type), td(itemName(a.g[0])), td(s(a.g[1])), td(evLabel(a.g)),
         td(s(a.g[G.RULE])), td(a.what), td(a.value, 'num'), td(a.note)))));
@@ -296,7 +296,7 @@ function buildSummary(v) {
   const fSort = el('select', null, el('option', {value: 'worst'}, 'worst first'), el('option', {value: 'name'}, 'assessment order'));
   root.append(el('div', {class: 'toolbar'}, el('label', null, 'Items ', fText), el('label', null, 'Only max ≥ ', fMin), el('label', null, 'Sort ', fSort),
     el('div', {class: 'legend'}, el('span', {class: 'l-ok'}, '< ' + WARN), el('span', {class: 'l-warn'}, '≥ ' + WARN), el('span', {class: 'l-fail'}, '≥ 1'),
-      el('span', {class: 'l-screen'}, 'only failed screening (superseded)'), el('span', null, '– not required / not evaluated'))));
+      el('span', {class: 'l-screen'}, 'only failed superseded'), el('span', null, '– not required / not evaluated'))));
   const out = el('div');
   root.append(out);
   // cell values
@@ -327,8 +327,8 @@ function buildSummary(v) {
         const h = c.at ? groupHash(c.at) : itemHash(it.id);
         const title = itemName(it.id) + ' – ' + s(COLS[i].rule) + ' ' + s(COLS[i].eq);
         if (c.eff === null && c.scr === null) return el('td', {class: 'cell na', title: title + ': not required / not evaluated', onclick: () => go(itemHash(it.id))}, '–');
-        if (c.eff === null) return el('td', {class: 'cell screen', title: title + ': only failed screening checks (superseded), max ' + ratioTxt(c.scr), onclick: () => go(h)}, c.scr.toFixed(2));
-        const extra = c.nscr ? ' (' + c.nscr + ' screening failures superseded, max ' + ratioTxt(c.scr) + ')' : '';
+        if (c.eff === null) return el('td', {class: 'cell screen', title: title + ': only failed superseded checks, max ' + ratioTxt(c.scr), onclick: () => go(h)}, c.scr.toFixed(2));
+        const extra = c.nscr ? ' (' + c.nscr + ' failures superseded, max ' + ratioTxt(c.scr) + ')' : '';
         return el('td', {class: 'cell ' + level(c.eff), title: title + ': max ' + ratioTxt(c.eff) + ' at ' + s(c.at[1]) + ' ' + evLabel(c.at) + extra, onclick: () => go(h)},
           c.eff.toFixed(2) + (c.nscr ? '*' : ''));
       });
@@ -340,7 +340,7 @@ function buildSummary(v) {
       return el('tr', null, el('td', {class: 'item'}, link(itemName(it.id), itemHash(it.id)), it.warnings ? el('span', {class: 'warn', title: it.warnings + ' warnings'}, ' ⚠') : null), tds);
     });
     const t = el('table', {class: 'heat'}, el('thead', null, el('tr', null, el('th', {rowspan: 2}, 'Item (' + items.length + ')'), groupsHead), el('tr', null, eqHead)), el('tbody', null, rows));
-    out.replaceChildren(el('div', {class: 'scroll'}, t), COLS.length ? el('p', {class: 'hint'}, '* some screening checks of this equation failed but were superseded by the following equations of the rule.') : null);
+    out.replaceChildren(el('div', {class: 'scroll'}, t), COLS.length ? el('p', {class: 'hint'}, '* some checks of this equation failed but were superseded by the governing equations of the sequential rule.') : null);
   }
   const r = debounce(render, 150);
   fText.addEventListener('input', r); fMin.addEventListener('input', r); fSort.addEventListener('change', render);
@@ -348,7 +348,7 @@ function buildSummary(v) {
 }
 
 // recap of each item by damage type, as the word recap: worst result of each damage
-// type over positions and reference events (failed screening equations superseded)
+// type over positions and reference events (failed superseded equations excluded)
 function buildRecap(root) {
   const recap = new Map();
   const cell = (item, d) => {
@@ -378,8 +378,8 @@ function buildRecap(root) {
 
   root.append(el('h2', null, 'Recap by damage type'));
   root.append(el('p', {class: 'hint'}, 'For each item, the verdict of each damage type over all positions and reference events, with the highest ' +
-    'applied/allowable ratio (cumulative usage \u03a3Vj for fatigue) and where it occurs. As in the Word recap, a failed screening equation ' +
-    'superseded by the following ones does not fail the item. Click a cell to open the driving calculation.'));
+    'applied/allowable ratio (cumulative usage \u03a3Vj for fatigue) and where it occurs. As in the Word recap, a failed equation of a sequential rule ' +
+    'superseded by the governing ones does not fail the item. Click a cell to open the driving calculation.'));
   const fText = el('input', {type: 'search', placeholder: 'Filter items', size: 18});
   const fFail = el('input', {type: 'checkbox'});
   const fSort = el('select', null, el('option', {value: 'order'}, 'assessment order'), el('option', {value: 'failed'}, 'failed first'));
@@ -398,7 +398,7 @@ function buildRecap(root) {
     const notes = [];
     if (c.failed > 1 && !fatigue) notes.push(c.failed + ' failed equations');
     if (c.failed > 1 && fatigue) notes.push(c.failed + ' positions');
-    if (c.screening) notes.push(c.screening + ' screening superseded');
+    if (c.screening) notes.push(c.screening + ' superseded');
     return el('td', {class: 'recap link', onclick: () => go(h), title: 'open the driving calculation'},
       el('div', {class: 'recap-top'}, chip, value), where ? el('div', {class: 'sub'}, where) : null,
       notes.length ? el('div', {class: 'sub'}, notes.join(', ')) : null);
@@ -520,7 +520,7 @@ function renderItem(panel, it, ordered) {
       })));
     }
   }
-  panel.append(el('p', {class: 'hint'}, 'n.r. = assessment not required (no limit); s = screening equation failed, superseded by the following equations.'));
+  panel.append(el('p', {class: 'hint'}, 'n.r. = assessment not required (no limit); s = failed equation superseded by the governing equations of the sequential rule.'));
 }
 function valuesTable(rows, focusRow) {
   return table(['Kind', 'Name', 'Value', 'Unit', 'Inputs', 'Source', 'Note'], rows.map(i => {
@@ -639,7 +639,7 @@ function buildBrowse(root, itemQuery) {
   const gcols = [['Item', g => itemName(g[0])], ['Position', g => s(g[1])], ['Event', g => evLabel(g)],
     ['Rule', g => s(g[G.RULE])], ['Equation', g => s(g[G.EQ])]];
   const col = (h, get, o) => Object.assign({h, get}, o);
-  const fVerd = el('select', null, ['', 'FAILED', 'OK', 'Assessment not required', 'screening'].map(o => el('option', {value: o}, o || 'All')));
+  const fVerd = el('select', null, ['', 'FAILED', 'OK', 'Assessment not required', 'superseded'].map(o => el('option', {value: o}, o || 'All')));
   const fMin = el('input', {type: 'number', step: 'any', placeholder: 'e.g. 0.9', style: 'width:80px'});
   const fKind = el('select', null, el('option', {value: ''}, 'All'),
     [...new Set(D.rows.map(r => r[R.KIND]))].filter(k => k >= 0).map(k => el('option', {value: s(k)}, s(k))));

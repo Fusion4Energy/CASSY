@@ -22,6 +22,8 @@ GROUP_LEVELS = ("item", "position", "event", "analysis", "rule_set", "rule", "eq
 RECORD_COLUMNS = ("kind", "name", "value", "text", "unit", "inputs", "source", "note")
 RATIO = "applied/allowable"
 FATIGUE_NAMES = ("N", "n cycles", "Vj")
+# "screening" is the name used by older traces
+SUPERSEDED_NAMES = ("superseded", "screening")
 MAX_ROWS = 500
 WARN_RATIO = 0.9
 # three.js of the 3D location map, loaded from a CDN (the rest of the report works
@@ -109,8 +111,8 @@ def _payload(df: pd.DataFrame, damage_types: dict | None = None) -> dict:
         )
         if scope[6] >= 0 and kind == "result" and name in ("applied", "allowable"):
             equations.setdefault(g, {})[name] = number
-        elif scope[6] >= 0 and kind == "branch" and name == "screening":
-            equations.setdefault(g, {})["screening"] = True
+        elif scope[6] >= 0 and kind == "branch" and name in SUPERSEDED_NAMES:
+            equations.setdefault(g, {})["superseded"] = True
         if rec[3] == "fatigue" and name in FATIGUE_NAMES and number is not None:
             fatigue.setdefault(scope[:4], {})[name] = number
 
@@ -127,7 +129,7 @@ def _payload(df: pd.DataFrame, damage_types: dict | None = None) -> dict:
             ratio = applied / allowable
         eq_rows.append(
             [g, rounded(applied), rounded(allowable), rounded(ratio)]
-            + [_verdict(applied, allowable), int(e.get("screening", False))]
+            + [_verdict(applied, allowable), int(e.get("superseded", False))]
         )
     damage_types = damage_types or {}
     damage = {
@@ -139,7 +141,7 @@ def _payload(df: pd.DataFrame, damage_types: dict | None = None) -> dict:
         "rows": rows,
         # {rule: damage type}
         "damage": damage,
-        # [group, applied [Pa], allowable [Pa], ratio, verdict, screening]
+        # [group, applied [Pa], allowable [Pa], ratio, verdict, superseded]
         "equations": eq_rows,
         # [item, position, event, analysis, n cycles, N, Vj]
         "fatigue": [
@@ -152,23 +154,24 @@ def _payload(df: pd.DataFrame, damage_types: dict | None = None) -> dict:
 def _summary(payload: dict) -> dict:
     """Overall verdict of a component, shared by the index and the component page.
 
-    Screening equations that failed are superseded by the following equations of the
-    rule and do not affect the verdict (same as the word recap).
+    The failed equations of a sequential rule superseded by the governing ones (the
+    screening or the following equations, whichever has the lower ratio) do not
+    affect the verdict (same as the word recap).
     """
     strings, groups = payload["strings"], payload["groups"]
     counts = dict.fromkeys(VERDICTS, 0)
-    counts["screening"] = 0
+    counts["superseded"] = 0
     worst, failed_items = None, set()
     # assessed and failed items for each damage type
     assessed: dict[str, set] = {}
     failed: dict[str, set] = {}
-    for g, _, _, ratio, verdict, screening in payload["equations"]:
+    for g, _, _, ratio, verdict, superseded in payload["equations"]:
         if verdict is None:
             continue
         item, damage = groups[g][0], payload["damage"].get(groups[g][5], IMMEDIATE)
         assessed.setdefault(damage, set()).add(item)
-        if screening and verdict == FAILED:
-            counts["screening"] += 1
+        if superseded and verdict == FAILED:
+            counts["superseded"] += 1
             continue
         counts[VERDICTS[verdict]] += 1
         if verdict == FAILED:

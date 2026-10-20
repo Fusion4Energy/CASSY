@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from copy import deepcopy
 from cassy.auxiliary import trace
-from cassy.designcodes.codes import Code
+from cassy.designcodes.codes import Code, superseded_equations
 from cassy.general.material import Material
 from cassy.paths.paths_config import (
     LinStressConfig,
@@ -468,6 +468,7 @@ class ReferenceEvent:
         for rulename, vals in assessment.items():
             assessed = vals[0]
             rule = vals[1]
+            superseded = superseded_equations(rule, assessed)
             for i, subrulename in enumerate(rule.description):
                 try:
                     applied = assessed[i][0] * 1e-6
@@ -476,17 +477,9 @@ class ReferenceEvent:
                     # valid. Go the next one
                     continue
 
-                # Mark as screening when this is a sequential rule's first
-                # sub-rule AND follow-up sub-rules have actual values.
-                # A screening failure is superseded by the follow-up results.
-                is_screening = (
-                    getattr(rule, "sequential", False)
-                    and i == 0
-                    and any(
-                        assessed[j] is not None and assessed[j][0] is not None
-                        for j in range(1, len(assessed))
-                    )
-                )
+                # In a sequential rule (e.g. 3Sm screening before EI) the side
+                # with the higher ratio is superseded by the other one.
+                is_superseded = i in superseded
 
                 allowable = assessed[i][1]
                 if isinstance(allowable, np.ndarray) and len(allowable) == 1:
@@ -533,7 +526,7 @@ class ReferenceEvent:
                     "Result": res,
                     "Safety Margin": sm,
                     "Damage Type": rule.damage_type,
-                    "Screening": is_screening,
+                    "Superseded": is_superseded,
                 }
                 rows.append(row)
 

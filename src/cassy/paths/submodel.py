@@ -475,11 +475,12 @@ class Submodel:
                         recap_rows[sheet] = []
 
                     # For sequential rules (e.g., 3Sm screening before EI):
-                    # exclude screening FAILED rows from the verdict.
-                    # The follow-up sub-rules (e.g., EI) are the final determination.
-                    if "Screening" in df.columns and df["Screening"].any():
+                    # exclude the superseded FAILED rows from the verdict, the
+                    # governing ratio is the minimum between the screening and
+                    # the follow-up sub-rules.
+                    if "Superseded" in df.columns and df["Superseded"].any():
                         df_verdict = df[
-                            ~((df["Screening"]) & (df["Result"] == "FAILED"))
+                            ~((df["Superseded"]) & (df["Result"] == "FAILED"))
                         ]
                     else:
                         df_verdict = df

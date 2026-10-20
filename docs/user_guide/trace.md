@@ -74,8 +74,8 @@ In particular, the trace contains:
   named ``applied`` and ``allowable`` in Pa, and ``applied/allowable``), linked to the
   quantities they come from. Rules not applicable and equations not evaluated are
   recorded as a ``branch``;
-- the screening equations of sequential rules (e.g. the SDC-IC 3Sm rule, superseded by
-  the efficiency index), recorded as a ``screening`` branch;
+- the superseded equations of sequential rules (e.g. the SDC-IC 3Sm rule followed by
+  the efficiency index), recorded as a ``superseded`` branch;
 - the calculation warnings (``kind == "warning"``), e.g. a property out of its bounds
   or a curve not available for the material, with the assumption made;
 - all fatigue intermediate values and the resulting Vj.
@@ -143,8 +143,8 @@ event, an equation or a filtered table can be shared.
     - the *Utilisation map*: one row per path/bolt and one column per rule equation
       (plus fatigue ΣVj). Each cell holds the highest ratio over all positions and
       reference events. Cells are coloured green, amber (≥ 0.9) or red (≥ 1); cells
-      where only a superseded screening equation failed are marked separately, and a
-      ``*`` flags superseded screening failures. Items can be filtered by name and by
+      where only superseded equations failed are marked separately, and a ``*`` flags
+      superseded failures. Items can be filtered by name and by
       minimum ratio, and sorted worst first.
 - **Explore**: the list of items on the left (filter by name, sort in assessment order
   or worst first) and, until an item is opened, a table with two modes:
@@ -162,7 +162,7 @@ event, an equation or a filtered table can be shared.
     - the *item page* has one section per position, with a table with events as rows
       and equations as columns, together with the event inputs (T, dpa, service level,
       loading category, loads). Each cell gives the ratio (``n.r.`` when not required,
-      ``s`` for a superseded screening equation) and opens its calculation. For fatigue,
+      ``s`` for a superseded equation) and opens its calculation. For fatigue,
       the n cycles, N allowable and Vj of each event and the cumulative usage ΣVj;
     - the *event page* shows the warnings, the reference event inputs and each rule as a
       calculation: the applied stress and allowable (with the quantity and formula they
@@ -174,8 +174,11 @@ event, an equation or a filtered table can be shared.
 
 Verdicts use the same definitions as the Excel and Word outputs: ``FAILED`` when the
 applied stress is not lower than the allowable, ``Assessment not required`` when there is
-no limit. A failed screening equation (e.g. the 3Sm rule followed by the efficiency
-index) is marked as *screening* and, as in the Word recap, does not count in the verdict.
+no limit. A sequential rule (e.g. the SDC-IC 3Sm rule followed by the efficiency index)
+is satisfied if either the screening equation or all the following ones are, hence its
+governing ratio is the minimum between the screening ratio and the maximum ratio of the
+following equations. The failed equations on the other side are marked as *superseded*
+and, as in the Word recap, do not count in the verdict nor in the maximum ratio.
 
 !!! note
 

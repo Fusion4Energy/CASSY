@@ -1,3 +1,4 @@
+import math
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
@@ -129,17 +130,19 @@ def _record_equations(
         return
     names = _equation_names(rule.description, len(assessed))
     evaluated = [c is not None and c[0] is not None for c in assessed]
+    superseded = superseded_equations(rule, assessed)
     for i, couple in enumerate(assessed):
         with trace.scope(equation=names[i]):
             if not evaluated[i]:
                 trace.record("equation", "not evaluated", kind="branch")
                 continue
-            # same definition used for the excel/word outputs: the first equation of
-            # a sequential rule is a screening, superseded by the following ones
-            if getattr(rule, "sequential", False) and i == 0 and any(evaluated[1:]):
+            # same definition used for the excel/word outputs
+            if i in superseded:
                 trace.record(
-                    "screening",
-                    "yes: superseded by the following equations",
+                    "superseded",
+                    "yes: superseded by the screening equation"
+                    if i > 0
+                    else "yes: superseded by the following equations",
                     kind="branch",
                 )
             stress = couple[0] * applied_to_pa
@@ -158,6 +161,39 @@ def _record_equations(
             except (TypeError, ValueError, ZeroDivisionError):
                 ratio = None
             trace.record("applied/allowable", ratio, kind="result")
+
+
+def _ratio(couple) -> float | None:
+    try:
+        ratio = float(couple[0]) / float(couple[1])
+    except (TypeError, ValueError, ZeroDivisionError, IndexError):
+        return None
+    return None if math.isnan(ratio) else ratio
+
+
+def superseded_equations(rule: Rule, assessed: list | None) -> set[int]:
+    """Indices of the equations of a sequential rule that do not govern its result.
+
+    In a sequential rule (e.g. SDC-IC 3Sm rule followed by the efficiency index)
+    the first equation is a screening and the rule is satisfied if either the
+    screening or all the following equations are. The governing applied/allowable
+    ratio is therefore the minimum between the screening ratio and the maximum
+    ratio of the following equations; the other side is superseded.
+    """
+    if not getattr(rule, "sequential", False) or not assessed:
+        return set()
+    following = [
+        i
+        for i in range(1, len(assessed))
+        if assessed[i] is not None and assessed[i][0] is not None
+    ]
+    if not following:
+        return set()
+    screening = _ratio(assessed[0])
+    ratios = [r for r in (_ratio(assessed[i]) for i in following) if r is not None]
+    if screening is not None and ratios and screening < max(ratios):
+        return set(following)
+    return {0}
 
 
 def bolt_stress_name(group: str, key: str) -> str:
