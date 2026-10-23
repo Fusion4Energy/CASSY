@@ -11,6 +11,7 @@ headless CI servers without python3-tk or a DISPLAY).
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -659,8 +660,16 @@ class TestGeneralTab:
             tab._run_assessment()
         mb.showwarning.assert_called_once()
 
+    def test_preprocess_no_root_dir_shows_warning(self, root):
+        tab = GeneralTab(tk.ttk.Notebook(root), _fresh_project())
+        tab._root_dir.set("")
+        with patch("cassy.gui.common.messagebox") as mb:
+            tab._preprocess_geometries()
+        mb.showwarning.assert_called_once()
+
     def test_preprocess_no_geometries_shows_info(self, root):
         tab = GeneralTab(tk.ttk.Notebook(root), _fresh_project())
+        tab._root_dir.set("/out")
         with patch("cassy.gui.common.messagebox") as mb:
             tab._preprocess_geometries()
         mb.showinfo.assert_called_once()
@@ -672,6 +681,7 @@ class TestGeneralTab:
             {"name": "F2", "geometry_file": "/a.stl"},
         ]
         tab = GeneralTab(tk.ttk.Notebook(root), proj)
+        tab._root_dir.set("/out")
         with (
             patch.object(tab, "_run_with_log") as run,
             patch("cassy.office.geometry_view.preprocess_geometries") as pre,
@@ -680,7 +690,7 @@ class TestGeneralTab:
             work, what = run.call_args.args
             work()
         assert what == "Geometry pre-processing"
-        pre.assert_called_once_with(["/a.stl"])
+        pre.assert_called_once_with(["/a.stl"], os.path.join("/out", "_cached_stl"))
 
     def test_run_no_flanges_shows_warning(self, root):
         proj = _fresh_project()

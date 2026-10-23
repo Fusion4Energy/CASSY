@@ -235,7 +235,10 @@ def test_html_bolts_context_geometries(tmp_path):
     out = tmp_path / "trace"
     (out / "geometry").mkdir(parents=True)
     (out / "geometry" / "stale.js").write_text("")
-    write_html(tracer.to_dataframe(), out, tracer.metadata, geometry)
+    cache = tmp_path / "_cached_stl"
+    write_html(tracer.to_dataframe(), out, tracer.metadata, geometry, cache)
+    # each geometry processed once and cached
+    assert len(list(cache.glob("*.npz"))) == 2
 
     page = (out / "F1.html").read_text("utf-8")
     payload = _embedded_payload(page)["geometry"]

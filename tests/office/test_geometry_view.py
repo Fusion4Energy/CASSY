@@ -1,7 +1,7 @@
 import base64
 import json
 import logging
-import os
+import shutil
 
 import numpy as np
 import pytest
@@ -113,13 +113,14 @@ def test_geometry_payload(tmp_path, caplog):
 
 def test_mesh_cache(tmp_path, monkeypatch, caplog):
     file = tmp_path / "sphere.stl"
+    cache = tmp_path / "_cached_stl"
     pv.Sphere(theta_resolution=60, phi_resolution=60).save(file)
     monkeypatch.setattr(geometry_view, "MAX_TRIANGLES", 1000)
-    assert not geometry_view.is_cached(file)
+    assert not geometry_view.is_cached(file, cache)
     with caplog.at_level(logging.INFO):
-        first = mesh_payload(file)
+        first = mesh_payload(file, cache)
     assert "Simplifying the geometry 'sphere.stl'" in caplog.text
-    assert geometry_view.is_cached(file)
+    assert geometry_view.is_cached(file, cache)
 
     # the cached mesh is used, no processing
     calls = []
@@ -129,39 +130,55 @@ def test_mesh_cache(tmp_path, monkeypatch, caplog):
     )
     caplog.clear()
     with caplog.at_level(logging.INFO):
-        assert mesh_payload(file) == first
+        assert mesh_payload(file, cache) == first
     assert not calls
     assert "Using the pre-processed geometry 'sphere.stl'" in caplog.text
 
-    # a changed file is processed again, its old entry removed
+    # the entry follows the content, not the path: a copy elsewhere (e.g. the same
+    # share mounted on another machine) uses it too
+    copy = tmp_path / "elsewhere" / "sphere.stl"
+    copy.parent.mkdir()
+    shutil.copy(file, copy)
+    assert mesh_payload(copy, cache) == first
+    assert not calls
+
+    # a changed file is processed again, the old entry is removed with the others
     pv.Cube().save(file)
-    assert not geometry_view.is_cached(file)
-    _, faces = _decode(mesh_payload(file))
+    assert not geometry_view.is_cached(file, cache)
+    _, faces = _decode(mesh_payload(file, cache))
     assert len(faces) == 12 and len(calls) == 1
-    cached = list(os.scandir(geometry_view.cache_folder()))
-    assert len(cached) == 1
+    assert len(list(cache.glob("sphere_*.npz"))) == 2
+    geometry_view.remove_stale_cache([file], cache)
+    assert len(list(cache.glob("sphere_*.npz"))) == 1
+    assert geometry_view.is_cached(file, cache)
+
+    # no cache folder, no cache
+    mesh_payload(file)
+    assert len(calls) == 2
 
 
-def test_mesh_cache_not_writable(tmp_path, monkeypatch, caplog):
+def test_mesh_cache_not_writable(tmp_path, caplog):
     file = tmp_path / "cube.stl"
     pv.Cube().save(file)
     blocker = tmp_path / "blocker"
     blocker.write_text("")
-    monkeypatch.setenv(geometry_view.CACHE_ENV, str(blocker / "cache"))
     with caplog.at_level(logging.WARNING):
-        _, faces = _decode(mesh_payload(file))
+        _, faces = _decode(mesh_payload(file, blocker / "cache"))
     assert len(faces) == 12
     assert "Cannot cache the simplified geometry" in caplog.text
 
 
 def test_preprocess_geometries(tmp_path, caplog):
     cube, sphere = tmp_path / "cube.stl", tmp_path / "sphere.stl"
+    cache = tmp_path / "_cached_stl"
     pv.Cube().save(cube)
     pv.Sphere().save(sphere)
-    assert geometry_view.preprocess_geometries([cube, str(cube), None, sphere]) == 2
-    assert geometry_view.is_cached(cube) and geometry_view.is_cached(sphere)
+    files = [cube, str(cube), None, sphere]
+    assert geometry_view.preprocess_geometries(files, cache) == 2
+    assert geometry_view.is_cached(cube, cache)
+    assert geometry_view.is_cached(sphere, cache)
     with caplog.at_level(logging.INFO):
-        assert geometry_view.preprocess_geometries([cube, sphere]) == 0
+        assert geometry_view.preprocess_geometries([cube, sphere], cache) == 0
     assert "0 geometries pre-processed, 2 already up to date" in caplog.text
 
 

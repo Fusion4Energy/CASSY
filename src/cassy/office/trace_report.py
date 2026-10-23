@@ -16,7 +16,11 @@ from importlib.resources import files
 
 import pandas as pd
 
-from cassy.office.geometry_view import geometry_payload, mesh_script
+from cassy.office.geometry_view import (
+    geometry_payload,
+    mesh_script,
+    remove_stale_cache,
+)
 
 GROUP_LEVELS = ("item", "position", "event", "analysis", "rule_set", "rule", "equation")
 RECORD_COLUMNS = ("kind", "name", "value", "text", "unit", "inputs", "source", "note")
@@ -329,7 +333,9 @@ def _index_page(components: list[tuple[str, str, dict]], metadata: dict | None) 
     )
 
 
-def _context(component: str, others: dict, folder: os.PathLike) -> list[dict]:
+def _context(
+    component: str, others: dict, folder: os.PathLike, cache: os.PathLike | None
+) -> list[dict]:
     """Meshes of the other flanges shown with ``component`` (only their geometry, no
     items): [{"name": flange, "key": mesh script key}]. A file shared with the
     component or with another flange is shown once."""
@@ -340,7 +346,7 @@ def _context(component: str, others: dict, folder: os.PathLike) -> list[dict]:
         if name == component or mesh in seen:
             continue
         seen.add(mesh)
-        key = mesh_script(mesh, os.path.join(folder, CONTEXT_FOLDER))
+        key = mesh_script(mesh, os.path.join(folder, CONTEXT_FOLDER), cache)
         context.append({"name": name, "key": key})
     return context
 
@@ -350,6 +356,7 @@ def write_html(
     folder: os.PathLike,
     metadata: dict | None = None,
     geometry: dict | None = None,
+    stl_cache: os.PathLike | None = None,
 ):
     """Write one HTML report per component plus an index page.
 
@@ -366,6 +373,8 @@ def write_html(
         location map (see cassy.office.geometry_view). The geometry file can be None.
         In the bolts reports, the geometries of the other flanges are shown as
         context, to help finding the way in the model.
+    stl_cache : os.PathLike | None, optional
+        folder where the simplified geometries are cached, by default no cache.
 
     Returns
     -------
@@ -400,16 +409,18 @@ def write_html(
             locations, mesh = geometry[str(component)]
             items = [str(i) for i in group["item"].dropna().unique()]
             payload["geometry"] = geometry_payload(
-                locations, mesh, module, items, str(component)
+                locations, mesh, module, items, str(component), stl_cache
             )
             if payload["geometry"] is not None:
-                context = _context(str(component), others, folder)
+                context = _context(str(component), others, folder, stl_cache)
                 if context:
                     payload["geometry"]["context"] = context
         page = _component_page(str(component), payload, metadata)
         with open(os.path.join(folder, filename), "w", encoding="utf-8") as f:
             f.write(page)
         pages.append((str(component), filename, _summary(payload)))
+    if stl_cache:
+        remove_stale_cache([g[1] for g in (geometry or {}).values()], stl_cache)
 
     index = os.path.join(folder, "index.html")
     with open(index, "w", encoding="utf-8") as f:

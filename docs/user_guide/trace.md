@@ -221,14 +221,17 @@ OBJ, PLY, ...); it is decimated to 50,000 triangles at most to keep the report l
 Without a geometry only the items are drawn.
 
 Reading and decimating a large geometry can take a while (the log tells when it is
-going on). The decimated geometries are therefore cached and reused by the following
-runs, as long as the geometry file is not changed (same path, size and modification
-time). The *Pre-process geometries* button of the *General* tab fills the cache in
-advance with the geometries of all the submodels/flanges, skipping the ones already
-up to date; from a script, call ``cassy.office.geometry_view.preprocess_geometries``.
-The cache is in the user cache folder (``%LOCALAPPDATA%\cassy\geometry`` on Windows,
-``~/.cache/cassy/geometry`` elsewhere), or in the folder set by the
-``CASSY_CACHE_DIR`` environment variable. It can be deleted at any time.
+going on). The decimated geometries are therefore cached in the ``_cached_stl``
+folder of the output root folder, created automatically, and reused by the following
+runs as long as the geometry files are not changed. The cache entries are identified
+by the content of the geometry files, not by their paths: whoever runs the assessment
+in the same output folder reuses them, even accessing the geometries through a
+different path (e.g. a network drive mounted on Windows and on Linux). The
+*Pre-process geometries* button of the *General* tab fills the cache in advance with
+the geometries of all the submodels/flanges, skipping the ones already up to date; from
+a script, call ``cassy.office.geometry_view.preprocess_geometries(files,
+cache_folder)``. The entries of older versions of the geometries are removed
+automatically, and the folder can be deleted at any time.
 
 The map is part of the HTML report, so the trace option must be enabled. It appears
 in the *Summary* tab, with the items coloured by their highest applied/allowable ratio

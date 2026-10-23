@@ -63,6 +63,8 @@ def test_run_paths_location_map(tmp_path, caplog):
     assert "importmap" in page and "three.module.min.js" in page
     assert '"geometry":{"items":{"Path 1":' in page
     assert '"mesh":{"vertices":' in page
+    # the simplified geometry is cached in the output root folder
+    assert list(Path(tmp_path, "out", "_cached_stl").glob("*.npz"))
 
     # the location map is part of the trace report
     run_paths(tmp_path / "no_trace", configs, print_recap=False, geometry=geometry)

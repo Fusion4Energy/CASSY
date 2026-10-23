@@ -40,11 +40,13 @@ def save_trace(
     tracer: trace.Tracer | None,
     assessment_folder: PathLike,
     geometry: dict | None = None,
+    stl_cache: PathLike | None = None,
 ) -> None:
     """Save the trace table and its HTML report in the assessment folder.
 
     ``geometry`` ({component: (locations csv, geometry file)}) adds the 3D location
-    map to the report of those components.
+    map to the report of those components, ``stl_cache`` is the folder where their
+    simplified geometries are cached.
     """
     if tracer is None:
         if geometry:
@@ -55,7 +57,7 @@ def save_trace(
         return
     folder = os.path.join(assessment_folder, TRACE_FOLDER)
     tracer.save(folder)
-    write_html(tracer.to_dataframe(), folder, tracer.metadata, geometry)
+    write_html(tracer.to_dataframe(), folder, tracer.metadata, geometry, stl_cache)
     logging.info("Trace of intermediate results saved in %s", folder)
 
 

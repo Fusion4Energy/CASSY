@@ -12,6 +12,7 @@ from tkinter import filedialog, messagebox, ttk
 from tkinter import font as tkfont
 from typing import Callable
 
+from cassy.general.folder_tree import STL_CACHE_FOLDER, stl_cache_folder
 from cassy.runners.run_project import (
     GEOMETRY_KEY,
     LOCATIONS_KEY,
@@ -863,9 +864,18 @@ class RunTab(ttk.Frame):
         self._run_with_log(work, "Assessment")
 
     def _preprocess_geometries(self) -> None:
-        """Simplify and cache the geometry files of the project, so that the trace
-        reports do not process them again (see geometry_view.preprocess_geometries).
-        """
+        """Simplify and cache the geometry files of the project in the output root
+        folder, so that the trace reports do not process them again (see
+        geometry_view.preprocess_geometries)."""
+        self.sync()
+        root_dir = self._root_dir.get().strip()
+        if not root_dir:
+            messagebox.showwarning(
+                "No root folder",
+                "Please set the output root folder first: the pre-processed "
+                f"geometries are saved in its {STL_CACHE_FOLDER} folder.",
+            )
+            return
         files = geometry_files(self._project)
         if not files:
             messagebox.showinfo(
@@ -876,7 +886,7 @@ class RunTab(ttk.Frame):
         def work() -> None:
             from cassy.office.geometry_view import preprocess_geometries
 
-            preprocess_geometries(files)
+            preprocess_geometries(files, stl_cache_folder(root_dir))
 
         self._run_with_log(work, "Geometry pre-processing")
 
