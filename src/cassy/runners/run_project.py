@@ -100,6 +100,16 @@ def location_maps(project: dict) -> dict:
     }
 
 
+def geometry_files(project: dict) -> list[str]:
+    """Geometry files of the submodels/flanges of a project (no repetitions)."""
+    files = (
+        entry.get(GEOMETRY_KEY)
+        for section in _FILE_KEYS
+        for entry in project.get(section, [])
+    )
+    return list(dict.fromkeys(f for f in files if f))
+
+
 @contextmanager
 def _config_errors():
     """Report the invalid entries found while building the configurations as

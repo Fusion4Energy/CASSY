@@ -16,7 +16,7 @@ from importlib.resources import files
 
 import pandas as pd
 
-from cassy.office.geometry_view import geometry_payload
+from cassy.office.geometry_view import geometry_payload, mesh_script
 
 GROUP_LEVELS = ("item", "position", "event", "analysis", "rule_set", "rule", "equation")
 RECORD_COLUMNS = ("kind", "name", "value", "text", "unit", "inputs", "source", "note")
@@ -29,6 +29,8 @@ WARN_RATIO = 0.9
 # three.js of the 3D location map, loaded from a CDN (the rest of the report works
 # offline)
 THREE_URL = "https://cdn.jsdelivr.net/npm/three@0.170.0/"
+# folder (next to the pages) of the meshes of the other flanges shown as context
+CONTEXT_FOLDER = "geometry"
 
 # verdicts of an equation, same wording of the excel/word outputs
 OK, FAILED, NOT_REQUIRED = 0, 1, 2
@@ -236,8 +238,14 @@ def _component_page(title: str, payload: dict, metadata: dict | None) -> str:
             "three": THREE_URL + "build/three.module.min.js",
             "three/addons/": THREE_URL + "examples/jsm/",
         }
+        # meshes of the other flanges, registered before the 3D view starts (module
+        # scripts are deferred); a missing file only hides that context
+        context = "".join(
+            f"<script src='{CONTEXT_FOLDER}/{html.escape(c['key'])}.js'></script>"
+            for c in payload["geometry"].get("context", [])
+        )
         view3d = (
-            "<script type='importmap'>"
+            f"{context}<script type='importmap'>"
             f"{_json_for_script({'imports': imports})}</script>"
             f"<script type='module'>{_asset('trace_report_3d.js')}</script>"
         )
@@ -321,6 +329,22 @@ def _index_page(components: list[tuple[str, str, dict]], metadata: dict | None) 
     )
 
 
+def _context(component: str, others: dict, folder: os.PathLike) -> list[dict]:
+    """Meshes of the other flanges shown with ``component`` (only their geometry, no
+    items): [{"name": flange, "key": mesh script key}]. A file shared with the
+    component or with another flange is shown once."""
+    own = others.get(component)
+    seen = {own}
+    context = []
+    for name, mesh in others.items():
+        if name == component or mesh in seen:
+            continue
+        seen.add(mesh)
+        key = mesh_script(mesh, os.path.join(folder, CONTEXT_FOLDER))
+        context.append({"name": name, "key": key})
+    return context
+
+
 def write_html(
     df: pd.DataFrame,
     folder: os.PathLike,
@@ -340,6 +364,8 @@ def write_html(
     geometry : dict | None, optional
         {component: (locations csv, geometry file)} of the components with a 3D
         location map (see cassy.office.geometry_view). The geometry file can be None.
+        In the bolts reports, the geometries of the other flanges are shown as
+        context, to help finding the way in the model.
 
     Returns
     -------
@@ -350,6 +376,22 @@ def write_html(
     df = df.sort_values("seq")
     components = df["component"].fillna("General")
 
+    module = (metadata or {}).get("module", "")
+    # geometries of all the flanges, the context of each other in the 3D view
+    others = {}
+    if module == "bolts":
+        others = {
+            name: os.path.abspath(mesh)
+            for name, (_, mesh) in (geometry or {}).items()
+            if mesh
+        }
+    # meshes of a previous run in the same folder may be out of date
+    context_folder = os.path.join(folder, CONTEXT_FOLDER)
+    if os.path.isdir(context_folder):
+        for name in os.listdir(context_folder):
+            if name.endswith(".js"):
+                os.remove(os.path.join(context_folder, name))
+
     pages = []
     for component, group in df.groupby(components, sort=False):
         filename = _safe_filename(str(component)) + ".html"
@@ -357,10 +399,13 @@ def write_html(
         if str(component) in (geometry or {}):
             locations, mesh = geometry[str(component)]
             items = [str(i) for i in group["item"].dropna().unique()]
-            module = (metadata or {}).get("module", "")
             payload["geometry"] = geometry_payload(
                 locations, mesh, module, items, str(component)
             )
+            if payload["geometry"] is not None:
+                context = _context(str(component), others, folder)
+                if context:
+                    payload["geometry"]["context"] = context
         page = _component_page(str(component), payload, metadata)
         with open(os.path.join(folder, filename), "w", encoding="utf-8") as f:
             f.write(page)

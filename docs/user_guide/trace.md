@@ -220,12 +220,28 @@ drawn. The **geometry** is any surface or volume mesh readable by pyvista (STL, 
 OBJ, PLY, ...); it is decimated to 50,000 triangles at most to keep the report light.
 Without a geometry only the items are drawn.
 
+Reading and decimating a large geometry can take a while (the log tells when it is
+going on). The decimated geometries are therefore cached and reused by the following
+runs, as long as the geometry file is not changed (same path, size and modification
+time). The *Pre-process geometries* button of the *General* tab fills the cache in
+advance with the geometries of all the submodels/flanges, skipping the ones already
+up to date; from a script, call ``cassy.office.geometry_view.preprocess_geometries``.
+The cache is in the user cache folder (``%LOCALAPPDATA%\cassy\geometry`` on Windows,
+``~/.cache/cassy/geometry`` elsewhere), or in the folder set by the
+``CASSY_CACHE_DIR`` environment variable. It can be deleted at any time.
+
 The map is part of the HTML report, so the trace option must be enabled. It appears
 in the *Summary* tab, with the items coloured by their highest applied/allowable ratio
 (or ΣVj), and next to the item and event pages of the *Explore* tab, where the item
 open is highlighted and the view zooms on it. Hovering an item shows its name and
 ratio, clicking it opens it. The model can be shown as x-ray (default, to see the
 paths through the thickness), solid or hidden.
+
+In the bolts reports, the geometries of the other flanges of the assessment are also
+drawn, faded and without their bolts, to help finding the way in the model; the
+*Hide/Show other flanges* button toggles them. They are written once in the
+``geometry`` folder next to the pages and shared by them: keep this folder with the
+report, without it only the flange of the page is drawn.
 
 !!! note
 

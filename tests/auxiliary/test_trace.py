@@ -209,3 +209,52 @@ def test_record_equations_unique_names_and_superseded():
     assert list(allowable["source"]) == ["a1", "a2", "a3"]
     skipped = df[(df["name"] == "applied") & (df["item"] == "skipped")]
     assert skipped["source"].isna().all()
+
+
+def test_html_bolts_context_geometries(tmp_path):
+    import pyvista as pv
+
+    shared, other = tmp_path / "shared.stl", tmp_path / "other.stl"
+    pv.Cube().save(shared)
+    pv.Sphere().save(other)
+    locations = tmp_path / "loc.csv"
+    locations.write_text("flange,boltID,x,y,z\nF1,B1,0,0,0\nF3,B1,1,1,1\n")
+    tracer = trace.Tracer({"module": "bolts"})
+    with trace.activate(tracer):
+        for flange in ("F1", "F3"):
+            with trace.scope(component=flange, item="B1", rule="R1"):
+                _equation(0.5, 1.0)
+    # F2 is not in the trace, F4 shares the geometry of F1, F5 has none
+    geometry = {
+        "F1": (locations, shared),
+        "F2": (locations, other),
+        "F3": (locations, None),
+        "F4": (locations, shared),
+        "F5": (locations, None),
+    }
+    out = tmp_path / "trace"
+    (out / "geometry").mkdir(parents=True)
+    (out / "geometry" / "stale.js").write_text("")
+    write_html(tracer.to_dataframe(), out, tracer.metadata, geometry)
+
+    page = (out / "F1.html").read_text("utf-8")
+    payload = _embedded_payload(page)["geometry"]
+    # only the items of the flange, the other geometries as context
+    assert set(payload["items"]) == {"B1"}
+    assert [c["name"] for c in payload["context"]] == ["F2"]
+    key = payload["context"][0]["key"]
+    assert f"<script src='geometry/{key}.js'></script>" in page
+    context_f3 = _embedded_payload((out / "F3.html").read_text("utf-8"))["geometry"]
+    assert [c["name"] for c in context_f3["context"]] == ["F1", "F2"]
+    assert "mesh" not in context_f3
+    assert sorted(p.name for p in (out / "geometry").iterdir()) == sorted(
+        f"{c['key']}.js" for c in context_f3["context"]
+    )
+
+    # no context for the paths
+    tracer.metadata["module"] = "paths"
+    out_paths = tmp_path / "paths"
+    write_html(
+        tracer.to_dataframe(), out_paths, tracer.metadata, {"F1": (None, shared)}
+    )
+    assert not (out_paths / "geometry").exists()

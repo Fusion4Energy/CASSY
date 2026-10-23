@@ -1,5 +1,7 @@
 import base64
+import json
 import logging
+import os
 
 import numpy as np
 import pytest
@@ -107,3 +109,70 @@ def test_geometry_payload(tmp_path, caplog):
     assert "mesh" not in payload
     assert "SM1: no location for 1 items" in caplog.text
     assert "Path 2" in caplog.text
+
+
+def test_mesh_cache(tmp_path, monkeypatch, caplog):
+    file = tmp_path / "sphere.stl"
+    pv.Sphere(theta_resolution=60, phi_resolution=60).save(file)
+    monkeypatch.setattr(geometry_view, "MAX_TRIANGLES", 1000)
+    assert not geometry_view.is_cached(file)
+    with caplog.at_level(logging.INFO):
+        first = mesh_payload(file)
+    assert "Simplifying the geometry 'sphere.stl'" in caplog.text
+    assert geometry_view.is_cached(file)
+
+    # the cached mesh is used, no processing
+    calls = []
+    process = geometry_view._process_mesh
+    monkeypatch.setattr(
+        geometry_view, "_process_mesh", lambda f: calls.append(f) or process(f)
+    )
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        assert mesh_payload(file) == first
+    assert not calls
+    assert "Using the pre-processed geometry 'sphere.stl'" in caplog.text
+
+    # a changed file is processed again, its old entry removed
+    pv.Cube().save(file)
+    assert not geometry_view.is_cached(file)
+    _, faces = _decode(mesh_payload(file))
+    assert len(faces) == 12 and len(calls) == 1
+    cached = list(os.scandir(geometry_view.cache_folder()))
+    assert len(cached) == 1
+
+
+def test_mesh_cache_not_writable(tmp_path, monkeypatch, caplog):
+    file = tmp_path / "cube.stl"
+    pv.Cube().save(file)
+    blocker = tmp_path / "blocker"
+    blocker.write_text("")
+    monkeypatch.setenv(geometry_view.CACHE_ENV, str(blocker / "cache"))
+    with caplog.at_level(logging.WARNING):
+        _, faces = _decode(mesh_payload(file))
+    assert len(faces) == 12
+    assert "Cannot cache the simplified geometry" in caplog.text
+
+
+def test_preprocess_geometries(tmp_path, caplog):
+    cube, sphere = tmp_path / "cube.stl", tmp_path / "sphere.stl"
+    pv.Cube().save(cube)
+    pv.Sphere().save(sphere)
+    assert geometry_view.preprocess_geometries([cube, str(cube), None, sphere]) == 2
+    assert geometry_view.is_cached(cube) and geometry_view.is_cached(sphere)
+    with caplog.at_level(logging.INFO):
+        assert geometry_view.preprocess_geometries([cube, sphere]) == 0
+    assert "0 geometries pre-processed, 2 already up to date" in caplog.text
+
+
+def test_mesh_script(tmp_path):
+    file = tmp_path / "cube.stl"
+    pv.Cube().save(file)
+    key = geometry_view.mesh_script(file, tmp_path / "geometry")
+    script = (tmp_path / "geometry" / f"{key}.js").read_text()
+    prefix = f'(window.CASSY_MESHES = window.CASSY_MESHES || {{}})["{key}"] = '
+    assert script.startswith(prefix)
+    data = json.loads(script[len(prefix) :].strip().rstrip(";"))
+    assert data == mesh_payload(file)
+    # same file, same key
+    assert geometry_view.mesh_script(str(file), tmp_path / "geometry") == key
