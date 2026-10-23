@@ -4,10 +4,13 @@ import copy
 import shutil
 from pathlib import Path
 
+import pytest
+
 from cassy.additional_data import materials as mat_folder
 from cassy.gui.bolts_model import EMPTY_BOLT_PROJECT, get_analysis_names
 from cassy.gui.bolts_model import fresh_project as fresh_bolt_project
 from cassy.gui.bolts_model import migrate_project as migrate_bolt_project
+from cassy.gui.bolts_model import read_geometries_csv, write_geometries_csv
 from cassy.gui.paths_model import EMPTY_PROJECT
 from cassy.gui.paths_model import fresh_project as fresh_paths_project
 from cassy.gui.paths_model import get_material_names as get_paths_material_names
@@ -104,3 +107,59 @@ def test_paths_material_names_include_additional_folder(tmp_path):
     names = get_paths_material_names(str(tmp_path))
     assert "My custom steel" in names
     assert "Inconel 718 RCC-MRx" in names
+
+
+def test_geometries_csv_roundtrip(tmp_path):
+    geoms = [
+        {
+            "base_name": "M8",
+            "type": "bolt",
+            "material": "SS660",
+            "p": 1.25,
+            "d": 8.0,
+            "Le": 12.0,
+            "d_vh": 0.0,
+            "f": 0.15,
+            "f_prime": 0.15,
+            "B": 8.4,
+            "C": 1.6,
+            "KF": 4.0,
+            "dn": 6.47,
+            "df": 7.19,
+            "D": 6.65,
+            "d1": None,
+            "H": None,
+            "a": None,
+            "Dm": None,
+            "Dp": None,
+        },
+        {
+            "base_name": "M8",
+            "type": "insert",
+            "material": "XM-19",
+            "p": 1.25,
+            "d": 8.0,
+            "Le": 10.0,
+            "d_vh": 0.0,
+            "f": 0.15,
+            "dn": None,
+            "df": None,
+            "D": None,
+        },
+    ]
+    path = tmp_path / "lib.csv"
+    write_geometries_csv(geoms, path)
+    assert read_geometries_csv(path) == geoms
+
+
+def test_geometries_csv_defaults_and_errors(tmp_path):
+    path = tmp_path / "lib.csv"
+    path.write_text("base_name,type,material,p,d,Le\nM6,Bolt,SS660,1,6,9\n")
+    (geom,) = read_geometries_csv(path)
+    assert geom["type"] == "bolt" and geom["KF"] == 4.0 and geom["dn"] is None
+    path.write_text("base_name,type,material,p,d,Le\nM6,bolt,SS660,1,x,9\n")
+    with pytest.raises(ValueError, match="Line 2: 'd' must be a number"):
+        read_geometries_csv(path)
+    path.write_text("base_name,type,material,p,d\nM6,bolt,SS660,1,6\n")
+    with pytest.raises(ValueError, match="Missing columns"):
+        read_geometries_csv(path)

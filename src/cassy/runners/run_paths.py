@@ -19,6 +19,7 @@ from cassy.paths.paths_config import Configuration
 from cassy.paths.submodel import Submodel
 from cassy.runners.run_common import (
     build_material_library,
+    events_table,
     new_tracer,
     save_trace,
     tracing,
@@ -42,6 +43,36 @@ PATNUM = re.compile(r"\d+")
 
 
 # #################### Code ###################################################
+_EVENT_COLUMNS = ["RE", "Service level", "Load category", "OC", "IE", "CE"]
+
+
+def _events_metadata(configs: dict[str, Configuration], fatigue: bool) -> dict:
+    """Configuration of the reference events, shown in the index of the trace."""
+
+    def rows(attr: str, extra):
+        for conf in configs.values():
+            for res in getattr(conf, attr).values():
+                for re_ in res:
+                    yield [re_.re_ID, re_.service_lvl, re_.load_ctg] + [
+                        re_.oc,
+                        re_.ie,
+                        re_.ce,
+                    ] + extra(re_)
+
+    meta = {
+        "reference events": events_table(
+            _EVENT_COLUMNS + ["Loads"],
+            rows("reference_events", lambda r: [", ".join(r.loads)]),
+        )
+    }
+    if fatigue:
+        meta["fatigue reference events"] = events_table(
+            _EVENT_COLUMNS + ["N cycles", "Loads"],
+            rows("fatigue_reference_events", lambda r: [r.ncycles, ", ".join(r.loads)]),
+        )
+    return meta
+
+
 def run_paths(
     root: PathLike,
     configs: dict[str, Configuration],
@@ -58,6 +89,7 @@ def run_paths(
     tracer = new_tracer(trace, "paths")
     if tracer is not None:
         tracer.metadata["codes"] = sorted({c.code for c in configs.values()})
+        tracer.metadata.update(_events_metadata(configs, fatigue))
 
     # --- Reorganize and create the LinStresses and Combined ones + Assessment ---
     logger.info("Assessing the results...")

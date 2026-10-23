@@ -44,6 +44,11 @@ VERDICTS = ("OK", "FAILED", "Assessment not required")
 # analysis
 IMMEDIATE, FATIGUE = "Immediate", "Fatigue"
 DAMAGE_TYPES = (IMMEDIATE, "Ratcheting", FATIGUE)
+# metadata keys of the reference events configuration shown in the index
+EVENT_TABLES = (
+    ("reference events", "Reference events"),
+    ("fatigue reference events", "Fatigue reference events"),
+)
 
 _ASSETS = files("cassy.office")
 
@@ -232,9 +237,7 @@ def _json_for_script(obj) -> str:
     return data.replace("</", "<\\/").replace("<!--", "<\\u0021--")
 
 
-def _component_page(
-    title: str, payload: dict, metadata: dict | None, index: bool = False
-) -> str:
+def _component_page(title: str, payload: dict, metadata: dict | None) -> str:
     payload = dict(payload, summary=_summary(payload), title=title)
     payload["meta"] = metadata or {}
     payload["config"] = {"maxRows": MAX_ROWS, "warnRatio": WARN_RATIO}
@@ -255,14 +258,11 @@ def _component_page(
             f"{_json_for_script({'imports': imports})}</script>"
             f"<script type='module'>{_asset('trace_report_3d.js')}</script>"
         )
-    # link back to the index of the components (a single component has none: its
-    # index redirects here)
-    home = ""
-    if index:
-        home = (
-            "<a class='home' href='index.html' title='Index of all the components'>"
-            "&#8249; All components</a>"
-        )
+    # link back to the index of the components
+    home = (
+        "<a class='home' href='index.html' title='Index of all the components'>"
+        "&#8249; All components</a>"
+    )
     return (
         "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
@@ -288,6 +288,25 @@ def _format_meta(metadata: dict | None) -> str:
             v = str(v).replace("T", " ")[:16]
         rows.append(f"<dt>{html.escape(str(k))}</dt><dd>{html.escape(str(v))}</dd>")
     return f"<dl class='meta'>{''.join(rows)}</dl>"
+
+
+def _events_tables(metadata: dict | None) -> str:
+    """Configuration of the (fatigue) reference events recorded in the metadata."""
+    out = ""
+    for key, title in EVENT_TABLES:
+        table = (metadata or {}).get(key)
+        if not table or not table.get("rows"):
+            continue
+        head = "".join(f"<th>{html.escape(str(c))}</th>" for c in table["columns"])
+        body = "".join(
+            "<tr>" + "".join(f"<td>{html.escape(str(v))}</td>" for v in row) + "</tr>"
+            for row in table["rows"]
+        )
+        out += (
+            f"<h2>{title}</h2><div class='scroll'><table class='grid'>"
+            f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>"
+        )
+    return out
 
 
 def _ratio_cell(value: float | None, usage: bool = False) -> str:
@@ -325,14 +344,9 @@ def _index_page(components: list[tuple[str, str, dict]], metadata: dict | None) 
             + f"<td class='num'>{summ['counts']['FAILED']}</td>"
             + f"<td class='num'>{summ['warnings']}</td></tr>"
         )
-    # a single component: go straight to its page
-    redirect = ""
-    if len(components) == 1:
-        url = html.escape(components[0][1])
-        redirect = f"<meta http-equiv='refresh' content='0; url={url}'>"
     return (
         "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
-        f"{redirect}<title>CASSY assessment trace</title>"
+        "<title>CASSY assessment trace</title>"
         f"<style>{_asset('trace_report.css')}</style></head><body>"
         "<header><h1>CASSY assessment trace</h1></header><main class='pad'>"
         f"{_format_meta(metadata)}<div class='scroll'><table class='grid'><thead><tr>"
@@ -341,7 +355,7 @@ def _index_page(components: list[tuple[str, str, dict]], metadata: dict | None) 
         + "".join(f"<th>{html.escape(d)}: failed items</th>" for d in damages)
         + "<th>Failed equations</th>"
         "<th>Warnings</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table></div></main>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>{_events_tables(metadata)}</main>"
         f"<script>{_asset('trace_index.js')}</script></body></html>"
     )
 
@@ -415,7 +429,6 @@ def write_html(
                 os.remove(os.path.join(context_folder, name))
 
     pages = []
-    n_pages = components.nunique()
     for component, group in df.groupby(components, sort=False):
         filename = _safe_filename(str(component)) + ".html"
         payload = _payload(group, (metadata or {}).get("damage types"))
@@ -429,7 +442,7 @@ def write_html(
                 context = _context(str(component), others, folder, stl_cache)
                 if context:
                     payload["geometry"]["context"] = context
-        page = _component_page(str(component), payload, metadata, index=n_pages > 1)
+        page = _component_page(str(component), payload, metadata)
         with open(os.path.join(folder, filename), "w", encoding="utf-8") as f:
             f.write(page)
         pages.append((str(component), filename, _summary(payload)))

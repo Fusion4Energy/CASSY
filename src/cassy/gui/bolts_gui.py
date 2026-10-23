@@ -12,8 +12,8 @@ Workflow (tabs in order):
   8. T & DPA Fatigue  — same table for fatigue reference events
 
 The project state is saved/loaded as JSON.
-The geometry library can additionally be exported/imported as a standalone JSON file
-so that a shared bolt geometry library can be maintained across projects.
+The geometry library can additionally be exported/imported as a standalone JSON or
+CSV file so that a shared bolt geometry library can be maintained across projects.
 """
 
 from __future__ import annotations
@@ -36,6 +36,8 @@ from cassy.gui.bolts_model import fresh_project as _fresh_project
 from cassy.gui.bolts_model import get_analysis_names as _get_analysis_names
 from cassy.gui.bolts_model import get_material_names as _get_material_names
 from cassy.gui.bolts_model import migrate_project as _migrate_project
+from cassy.gui.bolts_model import read_geometries_csv as _read_geometries_csv
+from cassy.gui.bolts_model import write_geometries_csv as _write_geometries_csv
 from cassy.gui.common import (
     BG,
     GroupedTableTab,
@@ -88,6 +90,18 @@ _INSERT_AUTO_FIELDS = [
     ("D", "Tapping minor diam. (D) [mm]"),
 ]
 _INSERT_REQUIRED = {"p", "d", "Le"}
+
+
+# file types of the geometry library (the format follows the extension)
+_LIB_FILETYPES = [
+    ("JSON files", "*.json"),
+    ("CSV files", "*.csv"),
+    ("All files", "*.*"),
+]
+
+
+def _is_csv(path: str) -> bool:
+    return path.lower().endswith(".csv")
 
 
 # ── Geometry dialog ───────────────────────────────────────────────────────────
@@ -821,18 +835,20 @@ class GeometriesTab(_TableTab):
         self.refresh()
 
     def _import_lib(self) -> None:
-        """Merge geometries from a standalone library JSON file."""
+        """Merge geometries from a standalone library JSON or CSV file."""
         path = filedialog.askopenfilename(
-            title="Import geometry library",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Import geometry library", filetypes=_LIB_FILETYPES
         )
         if not path:
             return
         try:
-            with open(path, encoding="utf-8") as fh:
-                data = json.load(fh)
-            if not isinstance(data, list):
-                raise ValueError("Expected a JSON array of geometry objects.")
+            if _is_csv(path):
+                data = _read_geometries_csv(path)
+            else:
+                with open(path, encoding="utf-8") as fh:
+                    data = json.load(fh)
+                if not isinstance(data, list):
+                    raise ValueError("Expected a JSON array of geometry objects.")
         except Exception as exc:
             messagebox.showerror("Import Error", str(exc))
             return
@@ -849,17 +865,20 @@ class GeometriesTab(_TableTab):
         messagebox.showinfo("Import", f"Imported {merged} new geometry entries.")
 
     def _export_lib(self) -> None:
-        """Export the current geometry list to a standalone JSON file."""
+        """Export the current geometry list to a standalone JSON or CSV file."""
         path = filedialog.asksaveasfilename(
             title="Export geometry library",
             defaultextension=".json",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            filetypes=_LIB_FILETYPES,
         )
         if not path:
             return
         try:
-            with open(path, "w", encoding="utf-8") as fh:
-                json.dump(self._project["geometries"], fh, indent=2)
+            if _is_csv(path):
+                _write_geometries_csv(self._project["geometries"], path)
+            else:
+                with open(path, "w", encoding="utf-8") as fh:
+                    json.dump(self._project["geometries"], fh, indent=2)
             messagebox.showinfo("Export", f"Geometry library saved to:\n{path}")
         except Exception as exc:
             messagebox.showerror("Export Error", str(exc))

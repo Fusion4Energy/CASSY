@@ -30,6 +30,36 @@ ACTIONS_COLUMNS: list[str] = [
     "Mz",
 ]
 
+# Columns of the geometry library CSV. The bolt-only columns are left empty for
+# the inserts; the auto-computed ones can be empty (computed by the geometry)
+GEOM_CSV_COLUMNS: list[str] = [
+    "base_name",
+    "type",
+    "material",
+    "p",
+    "d",
+    "Le",
+    "d_vh",
+    "f",
+    "f_prime",
+    "B",
+    "C",
+    "KF",
+    "dn",
+    "df",
+    "D",
+    "d1",
+    "H",
+    "a",
+    "Dm",
+    "Dp",
+]
+_GEOM_REQUIRED = ("p", "d", "Le")
+# defaults of the optional input fields, as in the geometry dialog
+_GEOM_DEFAULTS = {"d_vh": 0.0, "f": 0.15, "f_prime": 0.15, "B": 0.0, "C": 0.0, "KF": 4.0}
+_GEOM_AUTO = ("dn", "df", "D", "d1", "H", "a", "Dm", "Dp")
+_BOLT_ONLY = ("f_prime", "B", "C", "KF", "d1", "H", "a", "Dm", "Dp")
+
 EMPTY_BOLT_PROJECT: dict[str, Any] = {
     "run_options": {
         "fatigue": False,
@@ -83,6 +113,66 @@ def migrate_project(project: dict) -> dict:
                 )
                 re[new] = [t.to_dict() for t in terms]
     return project
+
+
+def write_geometries_csv(entries: list[dict], path: str) -> None:
+    """Write the geometry library to a CSV file (one row per bolt/insert)."""
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, GEOM_CSV_COLUMNS, extrasaction="ignore")
+        writer.writeheader()
+        for entry in entries:
+            writer.writerow(
+                {k: "" if entry.get(k) is None else entry[k] for k in GEOM_CSV_COLUMNS}
+            )
+
+
+def read_geometries_csv(path: str) -> list[dict]:
+    """Read a geometry library CSV written by :func:`write_geometries_csv`.
+
+    Raises
+    ------
+    ValueError
+        if a column is missing or a row is not valid.
+    """
+    entries = []
+    with open(path, newline="", encoding="utf-8-sig") as fh:
+        reader = csv.DictReader(fh)
+        required = ("base_name", "type", "material") + _GEOM_REQUIRED
+        missing = [c for c in required if c not in (reader.fieldnames or [])]
+        if missing:
+            raise ValueError(f"Missing columns in the geometry CSV: {missing}")
+        for lineno, row in enumerate(reader, start=2):
+            row = {k: (v or "").strip() for k, v in row.items() if k}
+            geom_type = row["type"].lower()
+            if not row["base_name"] or geom_type not in GEOM_TYPES:
+                raise ValueError(
+                    f"Line {lineno}: base_name is required and type must be one "
+                    f"of {GEOM_TYPES}."
+                )
+            if not row["material"]:
+                raise ValueError(f"Line {lineno}: material is required.")
+            entry: dict = {
+                "base_name": row["base_name"],
+                "type": geom_type,
+                "material": row["material"],
+            }
+            for key in GEOM_CSV_COLUMNS[3:]:
+                if geom_type == "insert" and key in _BOLT_ONLY:
+                    continue
+                raw = row.get(key, "")
+                if not raw:
+                    if key in _GEOM_REQUIRED:
+                        raise ValueError(f"Line {lineno}: '{key}' is required.")
+                    entry[key] = None if key in _GEOM_AUTO else _GEOM_DEFAULTS[key]
+                    continue
+                try:
+                    entry[key] = float(raw)
+                except ValueError:
+                    raise ValueError(
+                        f"Line {lineno}: '{key}' must be a number, got {raw!r}."
+                    ) from None
+            entries.append(entry)
+    return entries
 
 
 def get_material_names(matlib_path: str = "") -> list[str]:
