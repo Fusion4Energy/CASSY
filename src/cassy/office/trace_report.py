@@ -44,6 +44,11 @@ VERDICTS = ("OK", "FAILED", "Assessment not required")
 # analysis
 IMMEDIATE, FATIGUE = "Immediate", "Fatigue"
 DAMAGE_TYPES = (IMMEDIATE, "Ratcheting", FATIGUE)
+# metadata keys of the reference events configuration shown in the index
+EVENT_TABLES = (
+    ("reference events", "Reference events"),
+    ("fatigue reference events", "Fatigue reference events"),
+)
 
 _ASSETS = files("cassy.office")
 
@@ -253,12 +258,16 @@ def _component_page(title: str, payload: dict, metadata: dict | None) -> str:
             f"{_json_for_script({'imports': imports})}</script>"
             f"<script type='module'>{_asset('trace_report_3d.js')}</script>"
         )
+    # link back to the index of the components
+    home = (
+        "<a class='home' href='index.html' title='Index of all the components'>"
+        "&#8249; All components</a>"
+    )
     return (
         "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
         f"<title>{html.escape(title)}</title><style>{_asset('trace_report.css')}"
-        "</style></head><body>"
-        f"<header><h1>{html.escape(title)}</h1><nav id='tabs'>"
+        f"</style></head><body><header>{home}<h1>{html.escape(title)}</h1><nav id='tabs'>"
         "<a href='#/summary' data-tab='summary'>Summary</a>"
         "<a href='#/explore' data-tab='explore'>Explore</a></nav></header>"
         "<main id='app'><p class='hint pad'>Loading…</p></main>"
@@ -281,11 +290,33 @@ def _format_meta(metadata: dict | None) -> str:
     return f"<dl class='meta'>{''.join(rows)}</dl>"
 
 
-def _ratio_cell(value: float | None) -> str:
+def _events_tables(metadata: dict | None) -> str:
+    """Configuration of the (fatigue) reference events recorded in the metadata."""
+    out = ""
+    for key, title in EVENT_TABLES:
+        table = (metadata or {}).get(key)
+        if not table or not table.get("rows"):
+            continue
+        head = "".join(f"<th>{html.escape(str(c))}</th>" for c in table["columns"])
+        body = "".join(
+            "<tr>" + "".join(f"<td>{html.escape(str(v))}</td>" for v in row) + "</tr>"
+            for row in table["rows"]
+        )
+        out += (
+            f"<h2>{title}</h2><div class='scroll'><table class='grid'>"
+            f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>"
+        )
+    return out
+
+
+def _ratio_cell(value: float | None, usage: bool = False) -> str:
     if value is None:
         return "<td class='num na'>–</td>"
     css = "fail" if value >= 1 else "warn" if value >= WARN_RATIO else "ok"
-    return f"<td class='num {css}'>{value:.3f}</td>"
+    # the equation ratio follows the display mode (see trace_index.js), the fatigue
+    # usage is a usage factor in both modes
+    data = "" if usage else f" data-ratio='{value!r}'"
+    return f"<td class='num {css}'{data}>{value:.3f}</td>"
 
 
 def _index_page(components: list[tuple[str, str, dict]], metadata: dict | None) -> str:
@@ -308,28 +339,24 @@ def _index_page(components: list[tuple[str, str, dict]], metadata: dict | None) 
             f"<td><span class='verdict {status.lower()}'>{status}</span></td>"
             + _ratio_cell(summ["worst_ratio"])
             + f"<td>{html.escape(summ['worst_where'] or '')}</td>"
-            + _ratio_cell(summ["worst_usage"])
+            + _ratio_cell(summ["worst_usage"], usage=True)
             + by_damage
             + f"<td class='num'>{summ['counts']['FAILED']}</td>"
             + f"<td class='num'>{summ['warnings']}</td></tr>"
         )
-    # a single component: go straight to its page
-    redirect = ""
-    if len(components) == 1:
-        url = html.escape(components[0][1])
-        redirect = f"<meta http-equiv='refresh' content='0; url={url}'>"
     return (
         "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
-        f"{redirect}<title>CASSY assessment trace</title>"
+        "<title>CASSY assessment trace</title>"
         f"<style>{_asset('trace_report.css')}</style></head><body>"
         "<header><h1>CASSY assessment trace</h1></header><main class='pad'>"
         f"{_format_meta(metadata)}<div class='scroll'><table class='grid'><thead><tr>"
-        "<th>Component</th><th>Verdict</th><th>Max ratio</th><th>Where</th>"
+        "<th>Component</th><th>Verdict</th><th id='worst'>Max ratio</th><th>Where</th>"
         "<th>Max ΣVj</th>"
         + "".join(f"<th>{html.escape(d)}: failed items</th>" for d in damages)
         + "<th>Failed equations</th>"
         "<th>Warnings</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table></div></main></body></html>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>{_events_tables(metadata)}</main>"
+        f"<script>{_asset('trace_index.js')}</script></body></html>"
     )
 
 

@@ -21,13 +21,16 @@ The trace is off by default and has no impact on the results. The files are writ
 
 - ``index.html``: entry page with one row per submodel/flange: verdict, highest
   applied/allowable ratio and where it occurs, highest cumulative fatigue usage ΣVj,
-  failed items per damage type, number of failed equations and of warnings. With a
-  single submodel/flange it opens its report directly.
+  failed items per damage type, number of failed equations and of warnings. Below,
+  two tables recap the configuration of the reference events and of the fatigue
+  reference events (service level, load category, OC/IE/CE, load combinations and,
+  for fatigue, number of cycles). Each component report links back to this page.
 - ``<component>.html``: browsable report, one per submodel/flange (see
   [HTML report](#html-report)).
 - ``trace.csv.gz``: all the recorded values as a flat table.
 - ``trace_meta.json``: run information (module, codes, CASSY version, date) and the
-  damage type (Immediate, Ratcheting) under which each rule is reported.
+  damage type (Immediate, Ratcheting) under which each rule is reported, and the
+  configuration of the (fatigue) reference events.
 
 ## What is recorded
 

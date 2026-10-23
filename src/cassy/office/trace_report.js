@@ -39,12 +39,46 @@ function fmt(v) {
   return (a >= 1e6 || a < 1e-3) ? v.toExponential(4) : String(parseFloat(v.toPrecision(6)));
 }
 const mpa = v => (typeof v === 'number' ? fmt(v / 1e6) : 'no limit');
+
+// ---------- display mode ----------
+// the equation results are shown as usage factor (applied/allowable, the stored
+// ratio) or as safety margin (allowable/applied). Only the display changes: verdicts,
+// colours and "worst first" orders always follow the ratio. The fatigue usage ΣVj
+// stays a usage factor in both modes
+const MODES = {
+  uf: {label: 'Usage factor', name: 'applied/allowable ratio', col: 'Ratio', worst: 'max', Worst: 'Max',
+    tile: 'Max applied / allowable', better: 'lower ratio'},
+  sm: {label: 'Safety margin', name: 'allowable/applied safety margin', col: 'Margin', worst: 'min', Worst: 'Min',
+    tile: 'Min allowable / applied', better: 'higher margin'},
+};
+let MODE = 'uf';
+try { if (localStorage.getItem('cassy.mode') === 'sm') MODE = 'sm'; } catch (e) { /* ignore */ }
+const T = () => MODES[MODE];
+const isSM = () => MODE === 'sm';
+// ratio -> displayed value, and back (the inversion is its own inverse)
+const disp = r => (isSM() && typeof r === 'number' ? (r > 0 ? 1 / r : Infinity) : r);
+// a displayed threshold on the "fail side" (ratio ≥ r is margin ≤ 1/r)
+const atLeast = r => (isSM() ? '≤ ' : '≥ ') + fmt(disp(r));
+const below = r => (isSM() ? '> ' : '< ') + fmt(disp(r));
 const level = r => (r >= 1 ? 'fail' : r >= WARN ? 'warn' : 'ok');
-const ratioTxt = r => (typeof r === 'number' ? r.toFixed(3) : '');
+function ratioTxt(r, digits) {
+  if (typeof r !== 'number') return '';
+  const v = disp(r);
+  if (v === Infinity) return '∞';
+  return v > 0 && (v < 1e-3 || v >= 1e4) ? v.toExponential(1) : v.toFixed(digits || 3);
+}
+// the fatigue usage is a usage factor in both modes
+const usageTxt = (u, digits) => (u > 0 && u < 1e-3 ? u.toExponential(1) : u.toFixed(digits || 3));
 const ratioCell = r => td(typeof r === 'number' ? ratioTxt(r) : '–', 'num ' + (typeof r === 'number' ? level(r) : 'na'));
-const badge = r => (typeof r === 'number' ? el('span', {class: 'badge ' + level(r)}, r.toFixed(2)) : null);
+// worst result of an item or event: the equations, or the fatigue usage u when it is
+// higher (shown as such, it is a usage factor in both modes)
+function badge(r, u, uLabel) {
+  if (typeof u === 'number' && !(typeof r === 'number' && r >= u))
+    return el('span', {class: 'badge ' + level(u), title: 'fatigue usage'}, (uLabel || 'ΣVj') + ' ' + usageTxt(u, 2));
+  return typeof r === 'number' ? el('span', {class: 'badge ' + level(r), title: T().worst + ' ' + T().name}, ratioTxt(r, 2)) : null;
+}
 function verdictChip(verdict, screening) {
-  if (verdict === FAILED && screening) return el('span', {class: 'verdict screening', title: 'Superseded by the governing equations of the sequential rule (lower ratio), not counted in the verdict'}, 'superseded');
+  if (verdict === FAILED && screening) return el('span', {class: 'verdict screening', title: 'Superseded by the governing equations of the sequential rule (' + T().better + '), not counted in the verdict'}, 'superseded');
   if (verdict === FAILED) return el('span', {class: 'verdict failed'}, 'FAILED');
   if (verdict === OK) return el('span', {class: 'verdict ok'}, 'OK');
   if (verdict === NOT_REQUIRED) return el('span', {class: 'verdict notreq', title: 'No allowable defined (no limit)'}, 'not required');
@@ -93,7 +127,7 @@ const evLabel = ids => s(ids[2]) + (ids[3] >= 0 && s(ids[3]) !== 'immediate' ? '
 const EV = new Map();
 const gEv = D.groups.map(g => {
   const k = g.slice(0, 4).join('|');
-  if (!EV.has(k)) EV.set(k, {key: k, ids: g.slice(0, 4), rows: [], eqs: [], fat: null, max: null, warnings: 0});
+  if (!EV.has(k)) EV.set(k, {key: k, ids: g.slice(0, 4), rows: [], eqs: [], fat: null, max: null, eqMax: null, warnings: 0});
   return k;
 });
 const KIND_WARNING = sid('warning'), KIND_INPUT = sid('input');
@@ -108,6 +142,7 @@ const higher = (a, b) => (typeof b === 'number' && (a === null || b > a) ? b : a
 D.equations.forEach(e => {
   const ev = EV.get(gEv[e[E.G]]);
   ev.eqs.push(e);
+  ev.eqMax = higher(ev.eqMax, effective(e));
   ev.max = higher(ev.max, effective(e));
 });
 D.fatigue.forEach(f => {
@@ -119,20 +154,22 @@ D.fatigue.forEach(f => {
 const ITEMS = new Map();
 for (const ev of EV.values()) {
   const [item, pos] = ev.ids;
-  if (!ITEMS.has(item)) ITEMS.set(item, {id: item, max: null, positions: new Map(), events: [], usage: new Map(), warnings: 0, failed: false, order: ITEMS.size});
+  // max: worst of the equations (eqMax) and of the fatigue usage (useMax)
+  if (!ITEMS.has(item)) ITEMS.set(item, {id: item, max: null, eqMax: null, useMax: null, positions: new Map(), events: [], usage: new Map(), warnings: 0, failed: false, order: ITEMS.size});
   const it = ITEMS.get(item);
   if (!it.positions.has(pos)) it.positions.set(pos, []);
   it.positions.get(pos).push(ev);
   it.warnings += ev.warnings;
   for (const e of ev.eqs) {
-    it.max = higher(it.max, effective(e));
+    it.eqMax = higher(it.eqMax, effective(e));
     if (e[E.VERD] === FAILED && !e[E.SCREEN]) it.failed = true;
   }
   if (ev.fat && typeof ev.fat[6] === 'number') it.usage.set(pos, (it.usage.get(pos) || 0) + ev.fat[6]);
 }
 for (const it of ITEMS.values()) {
   for (const evs of it.positions.values()) it.events.push(...evs);
-  for (const u of it.usage.values()) { it.max = higher(it.max, u); if (u >= 1) it.failed = true; }
+  for (const u of it.usage.values()) { it.useMax = higher(it.useMax, u); if (u >= 1) it.failed = true; }
+  it.max = higher(it.eqMax, it.useMax);
 }
 const itemName = id => s(id) || '(general)';
 // heatmap columns: one per rule equation, in assessment order
@@ -155,9 +192,11 @@ const HAS_GEOMETRY = Boolean(D.geometry);
 const view3d = (cls, ...kids) => (HAS_GEOMETRY ? el('div', {class: 'view3d ' + (cls || '')},
   el('p', {class: 'hint pad'}, 'Loading the 3D view (it needs internet access to load the three.js library)…'), ...kids) : null);
 if (HAS_GEOMETRY) window.CASSY = {
-  geometry: D.geometry, warnRatio: WARN, route: {view: null, item: null},
-  items: new Map([...ITEMS.values()].map(it => [itemName(it.id), {max: it.max, failed: it.failed}])),
+  geometry: D.geometry, warnRatio: WARN, route: {view: null, item: null}, hasFatigue: D.fatigue.length > 0,
+  items: new Map([...ITEMS.values()].map(it => [itemName(it.id), {max: it.max, eqMax: it.eqMax, useMax: it.useMax, failed: it.failed}])),
   open: name => go(itemHash(sid(name))),
+  // display mode and its formatting, followed by the legend and the tooltips
+  get mode() { return MODE; }, ratioTxt, atLeast, below, label: () => T(),
 };
 
 // ---------- routing ----------
@@ -205,6 +244,30 @@ function route() {
 }
 window.addEventListener('hashchange', route);
 
+// display mode toggle, in the header: the views are rebuilt in the new mode (the
+// explore filters are kept in the url, the scroll positions are restored)
+const displayButtons = Object.entries(MODES).map(([k, m]) => el('button', {type: 'button', 'data-mode': k,
+  title: k === 'uf' ? 'Show the results as applied/allowable' : 'Show the results as allowable/applied (fatigue usage ΣVj stays a usage factor)',
+  onclick: () => setDisplay(k)}, m.label));
+const markMode = () => displayButtons.forEach(b => b.classList.toggle('active', b.dataset.mode === MODE));
+document.querySelector('header').append(el('span', {class: 'seg mode'}, displayButtons));
+markMode();
+function setDisplay(m) {
+  if (m === MODE) return;
+  MODE = m;
+  try { localStorage.setItem('cassy.mode', m); } catch (e) { /* ignore */ }
+  markMode();
+  const panel = document.getElementById('panel'), y = window.scrollY, py = panel ? panel.scrollTop : 0;
+  for (const k of Object.keys(views)) { views[k].node.remove(); delete views[k]; }
+  if (HAS_GEOMETRY) document.dispatchEvent(new CustomEvent('cassy:mode', {detail: MODE}));
+  route();
+  setTimeout(() => {
+    window.scrollTo(0, y);
+    const p = document.getElementById('panel');
+    if (p) p.scrollTop = py;
+  }, 0);
+}
+
 // ---------- summary ----------
 function buildSummary(v) {
   const root = v.node, sm = D.summary, c = sm.counts;
@@ -233,21 +296,21 @@ function buildSummary(v) {
     Object.keys(sm.damage).join(' \u00b7 ')));
   if (worstEq) {
     const g = D.groups[worstEq[E.G]];
-    bar.append(tile('Max applied / allowable', el('span', {class: level(worstEq[E.RATIO])}, ratioTxt(worstEq[E.RATIO])),
+    bar.append(tile(T().tile, el('span', {class: level(worstEq[E.RATIO])}, ratioTxt(worstEq[E.RATIO])),
       link([itemName(g[0]), s(g[1]), evLabel(g)].filter(Boolean).join(' / ') + ' – ' + s(g[G.EQ]), groupHash(g))));
   }
-  if (worstUse) bar.append(tile('Max fatigue usage ΣVj', el('span', {class: level(worstUse.u)}, ratioTxt(worstUse.u)),
+  if (worstUse) bar.append(tile('Max fatigue usage ΣVj', el('span', {class: level(worstUse.u)}, usageTxt(worstUse.u)),
     link(itemName(worstUse.it.id) + ' / ' + s(worstUse.pos), itemHash(worstUse.it.id))));
   bar.append(tile('Equations', String(c.FAILED + c.OK + c['Assessment not required']),
     el('span', null, link(c.FAILED + ' failed', '#/explore' + qs({verdict: 'FAILED'})), ' · ', c.OK + ' OK · ',
       c['Assessment not required'] + ' not required', c.superseded ? ' · ' + c.superseded + ' superseded' : '')));
   const near = D.equations.filter(e => { const r = effective(e); return typeof r === 'number' && r >= WARN && r < 1; }).length;
-  bar.append(tile('Near the limit', String(near), link('ratio ≥ ' + WARN + ' and < 1', '#/explore' + qs({min: WARN}))));
+  bar.append(tile('Near the limit', String(near), link(T().col.toLowerCase() + ' ' + atLeast(WARN) + ' and ' + below(1), '#/explore' + qs({min: WARN}))));
   bar.append(tile('Warnings', String(sm.warnings), sm.warnings ? 'see below' : 'none', sm.warnings ? 'warnbox' : ''));
   root.append(bar);
   if (HAS_GEOMETRY) {
     root.append(el('h2', null, 'Location map'));
-    root.append(el('p', {class: 'hint'}, 'Location of the items on the model, coloured by their maximum applied/allowable ratio (or ΣVj). ' +
+    root.append(el('p', {class: 'hint'}, 'Location of the items on the model, coloured by their ' + (isSM() ? 'minimum ' : 'maximum ') + T().name + ' (or ΣVj). ' +
       'Hover a marker to see the item, click it to open it.'));
     root.append(view3d('large'));
   }
@@ -263,7 +326,7 @@ function buildSummary(v) {
   });
   for (const it of ITEMS.values()) for (const [pos, u] of it.usage) if (u >= 1) {
     att.push({type: el('span', {class: 'verdict failed'}, 'FATIGUE'), g: [it.id, pos, -1, sid('fatigue'), -1, -1, -1], what: 'ΣVj',
-      value: el('span', {class: 'fail'}, ratioTxt(u)), note: 'cumulative usage ≥ 1', h: itemHash(it.id)});
+      value: el('span', {class: 'fail'}, usageTxt(u)), note: 'cumulative usage ≥ 1', h: itemHash(it.id)});
   }
   // warnings grouped by message
   const wg = new Map();
@@ -289,13 +352,14 @@ function buildSummary(v) {
 
   // heatmap
   root.append(el('h2', null, 'Utilisation map'));
-  root.append(el('p', {class: 'hint'}, 'Maximum applied/allowable ratio of each item over all positions and reference events' +
+  root.append(el('p', {class: 'hint'}, (isSM() ? 'Minimum ' : 'Maximum ') + T().name + ' of each item over all positions and reference events' +
     (HAS_FATIGUE ? ', and maximum cumulative fatigue usage ΣVj over the positions' : '') + '. Click a cell to open the item.'));
   const fText = el('input', {type: 'search', placeholder: 'Filter items', size: 18});
-  const fMin = el('input', {type: 'number', step: 'any', min: 0, placeholder: '0.9', style: 'width:70px'});
+  const fMin = el('input', {type: 'number', step: 'any', min: 0, placeholder: fmt(disp(WARN)), style: 'width:70px',
+    title: HAS_FATIGUE ? 'the fatigue usage ΣVj counts as its ' + (isSM() ? 'inverse' : 'value') : null});
   const fSort = el('select', null, el('option', {value: 'worst'}, 'worst first'), el('option', {value: 'name'}, 'assessment order'));
-  root.append(el('div', {class: 'toolbar'}, el('label', null, 'Items ', fText), el('label', null, 'Only max ≥ ', fMin), el('label', null, 'Sort ', fSort),
-    el('div', {class: 'legend'}, el('span', {class: 'l-ok'}, '< ' + WARN), el('span', {class: 'l-warn'}, '≥ ' + WARN), el('span', {class: 'l-fail'}, '≥ 1'),
+  root.append(el('div', {class: 'toolbar'}, el('label', null, 'Items ', fText), el('label', null, 'Only ' + T().worst + (isSM() ? ' ≤ ' : ' ≥ '), fMin), el('label', null, 'Sort ', fSort),
+    el('div', {class: 'legend'}, el('span', {class: 'l-ok'}, below(WARN)), el('span', {class: 'l-warn'}, atLeast(WARN)), el('span', {class: 'l-fail'}, atLeast(1)),
       el('span', {class: 'l-screen'}, 'only failed superseded'), el('span', null, '– not required / not evaluated'))));
   const out = el('div');
   root.append(out);
@@ -316,7 +380,8 @@ function buildSummary(v) {
   });
   if (HAS_FATIGUE) { groupsHead.push(el('th', {class: 'grp', rowspan: 2}, 'Fatigue', el('br'), 'ΣVj')); }
   function render() {
-    const q = fText.value.trim().toLowerCase(), mn = fMin.value === '' ? null : Number(fMin.value);
+    // threshold on the ratio (a margin ≤ x is a ratio ≥ 1/x)
+    const q = fText.value.trim().toLowerCase(), mn = fMin.value === '' ? null : disp(Number(fMin.value));
     let items = [...ITEMS.values()].filter(it => it.id >= 0 || cells.has(it.id));
     if (q) items = items.filter(it => itemName(it.id).toLowerCase().includes(q));
     if (mn !== null) items = items.filter(it => typeof it.max === 'number' && it.max >= mn);
@@ -327,13 +392,13 @@ function buildSummary(v) {
         const h = c.at ? groupHash(c.at) : itemHash(it.id);
         const title = itemName(it.id) + ' – ' + s(COLS[i].rule) + ' ' + s(COLS[i].eq);
         if (c.eff === null && c.scr === null) return el('td', {class: 'cell na', title: title + ': not required / not evaluated', onclick: () => go(itemHash(it.id))}, '–');
-        if (c.eff === null) return el('td', {class: 'cell screen', title: title + ': only failed superseded checks, max ' + ratioTxt(c.scr), onclick: () => go(h)}, c.scr.toFixed(2));
-        const extra = c.nscr ? ' (' + c.nscr + ' failures superseded, max ' + ratioTxt(c.scr) + ')' : '';
-        return el('td', {class: 'cell ' + level(c.eff), title: title + ': max ' + ratioTxt(c.eff) + ' at ' + s(c.at[1]) + ' ' + evLabel(c.at) + extra, onclick: () => go(h)},
-          c.eff.toFixed(2) + (c.nscr ? '*' : ''));
+        if (c.eff === null) return el('td', {class: 'cell screen', title: title + ': only failed superseded checks, ' + T().worst + ' ' + ratioTxt(c.scr), onclick: () => go(h)}, ratioTxt(c.scr, 2));
+        const extra = c.nscr ? ' (' + c.nscr + ' failures superseded, ' + T().worst + ' ' + ratioTxt(c.scr) + ')' : '';
+        return el('td', {class: 'cell ' + level(c.eff), title: title + ': ' + T().worst + ' ' + ratioTxt(c.eff) + ' at ' + s(c.at[1]) + ' ' + evLabel(c.at) + extra, onclick: () => go(h)},
+          ratioTxt(c.eff, 2) + (c.nscr ? '*' : ''));
       });
       if (HAS_FATIGUE) {
-        const u = it.usage.size ? Math.max(...it.usage.values()) : null;
+        const u = it.useMax;
         tds.push(u === null ? el('td', {class: 'cell na'}, '–') :
           el('td', {class: 'cell ' + level(u), title: 'max ΣVj over positions', onclick: () => go(itemHash(it.id))}, u < 0.01 && u > 0 ? u.toExponential(1) : u.toFixed(2)));
       }
@@ -377,8 +442,8 @@ function buildRecap(root) {
   const nAssessed = d => items.filter(it => recap.get(it.id).has(d)).length;
 
   root.append(el('h2', null, 'Recap by damage type'));
-  root.append(el('p', {class: 'hint'}, 'For each item, the verdict of each damage type over all positions and reference events, with the highest ' +
-    'applied/allowable ratio (cumulative usage \u03a3Vj for fatigue) and where it occurs. As in the Word recap, a failed equation of a sequential rule ' +
+  root.append(el('p', {class: 'hint'}, 'For each item, the verdict of each damage type over all positions and reference events, with the ' +
+    (isSM() ? 'lowest ' : 'highest ') + T().name + ' (cumulative usage \u03a3Vj for fatigue) and where it occurs. As in the Word recap, a failed equation of a sequential rule ' +
     'superseded by the governing ones does not fail the item. Click a cell to open the driving calculation.'));
   const fText = el('input', {type: 'search', placeholder: 'Filter items', size: 18});
   const fFail = el('input', {type: 'checkbox'});
@@ -394,7 +459,7 @@ function buildRecap(root) {
     const h = fatigue || !c.at ? itemHash(it.id) : groupHash(c.at);
     const where = fatigue ? s(c.pos) : c.at ? [s(c.at[1]), evLabel(c.at), s(c.at[G.EQ])].filter(Boolean).join(' \u00b7 ') : '';
     const chip = c.failed ? el('span', {class: 'verdict failed'}, 'FAILED') : c.max === null ? el('span', {class: 'verdict notreq'}, 'not required') : el('span', {class: 'verdict ok'}, 'OK');
-    const value = c.max === null ? null : el('b', {class: level(c.max)}, (fatigue ? '\u03a3Vj ' : '') + (c.max > 0 && c.max < 1e-3 ? c.max.toExponential(1) : c.max.toFixed(3)));
+    const value = c.max === null ? null : el('b', {class: level(c.max)}, fatigue ? '\u03a3Vj ' + usageTxt(c.max) : ratioTxt(c.max));
     const notes = [];
     if (c.failed > 1 && !fatigue) notes.push(c.failed + ' failed equations');
     if (c.failed > 1 && fatigue) notes.push(c.failed + ' positions');
@@ -444,7 +509,7 @@ function buildExplore(v) {
     ordered = order();
     list.replaceChildren(...ordered.filter(it => !q || itemName(it.id).toLowerCase().includes(q)).map(it =>
       el('a', {href: itemHash(it.id), class: it.id === current ? 'sel' : null, 'data-id': it.id},
-        el('span', null, itemName(it.id), it.warnings ? el('span', {class: 'warn', title: it.warnings + ' warnings'}, ' ⚠') : null), badge(it.max))));
+        el('span', null, itemName(it.id), it.warnings ? el('span', {class: 'warn', title: it.warnings + ' warnings'}, ' ⚠') : null), badge(it.eqMax, it.useMax))));
   }
   // the item filter applies to the list and to the table
   const browser = buildBrowse(browse, () => fText.value.trim().toLowerCase());
@@ -485,7 +550,7 @@ const INPUT_COLS = ['T', 'dpa', 'service level', 'loading category', 'loads'];
 function renderItem(panel, it, ordered) {
   const idx = ordered.indexOf(it);
   panel.replaceChildren(el('div', {class: 'crumbs'}, link('All items', '#/explore'), el('span', {class: 'sep'}, '›'),
-    el('h3', null, itemName(it.id)), badge(it.max), it.failed ? el('span', {class: 'verdict failed'}, 'FAILED') : null,
+    el('h3', null, itemName(it.id)), badge(it.eqMax, it.useMax), it.failed ? el('span', {class: 'verdict failed'}, 'FAILED') : null,
     el('span', {class: 'spacer'}), prevNext(ordered, idx, x => itemHash(x.id), x => itemName(x.id))));
   if (it.warnings) panel.append(el('div', {class: 'warnbox'}, it.warnings + ' calculation warning(s) in this item: see the events marked ⚠.'));
   for (const [pos, evs] of it.positions) {
@@ -495,7 +560,7 @@ function renderItem(panel, it, ordered) {
       const cols = COLS.map((_, i) => i).filter(i => imm.some(ev => ev.eqs.some(e => COLIDX.get(D.groups[e[0]][G.RULE] + '|' + D.groups[e[0]][G.EQ]) === i)));
       const inCols = INPUT_COLS.filter(n => imm.some(ev => eventInputs(ev)[n]));
       const head = [el('th', null, 'Event'), ...inCols.map(n => el('th', null, n === 'T' ? 'T [°C]' : n)),
-        ...cols.map(i => el('th', {class: 'eq', title: s(COLS[i].set)}, s(COLS[i].rule), el('br'), el('span', {class: 'sub'}, s(COLS[i].eq)))), el('th', null, 'Max')];
+        ...cols.map(i => el('th', {class: 'eq', title: s(COLS[i].set)}, s(COLS[i].rule), el('br'), el('span', {class: 'sub'}, s(COLS[i].eq)))), el('th', null, T().Worst)];
       panel.append(table(head, imm.map(ev => {
         const ins = eventInputs(ev);
         const byCol = new Map(ev.eqs.map(e => [COLIDX.get(D.groups[e[0]][G.RULE] + '|' + D.groups[e[0]][G.EQ]), e]));
@@ -564,7 +629,7 @@ function renderEvent(panel, ev, q) {
   const i = it.events.indexOf(ev);
   const focusRule = q.get('rule'), focusEq = q.get('eq'), focusRow = q.has('row') ? Number(q.get('row')) : null;
   panel.replaceChildren(el('div', {class: 'crumbs'}, link('All items', '#/explore'), el('span', {class: 'sep'}, '›'), link(itemName(it.id), itemHash(it.id)),
-    el('span', {class: 'sep'}, '›'), el('span', null, s(ev.ids[1])), el('span', {class: 'sep'}, '›'), el('h3', null, evLabel(ev.ids)), badge(ev.max),
+    el('span', {class: 'sep'}, '›'), el('span', null, s(ev.ids[1])), el('span', {class: 'sep'}, '›'), el('h3', null, evLabel(ev.ids)), badge(ev.eqMax, ev.fat ? ev.fat[6] : null, 'Vj'),
     el('span', {class: 'spacer'}), prevNext(it.events, i, x => evHash(x.ids), x => s(x.ids[1]) + ' ' + evLabel(x.ids))));
   // split rows: event inputs, rule blocks, event-level calculation (fatigue)
   const inputs = [], general = [], blocks = new Map();
@@ -606,7 +671,7 @@ function renderEvent(panel, ev, q) {
     const card = el('div', {class: 'card' + (isFocus || hasRow || (eqFocus && focusEq) ? ' hl' : '')},
       el('div', {class: 'card-head'}, el('h3', null, s(b.rule) || s(b.set)), b.rule >= 0 ? el('span', {class: 'sub'}, s(b.set)) : null, badge(worst)));
     if (b.eqs.size) {
-      card.append(table(['Equation', 'Applied', 'Applied [MPa]', '', 'Allowable [MPa]', 'Allowable', 'Ratio', 'Verdict'], [...b.eqs].map(([eq, x]) => {
+      card.append(table(['Equation', 'Applied', 'Applied [MPa]', '', 'Allowable [MPa]', 'Allowable', T().col, 'Verdict'], [...b.eqs].map(([eq, x]) => {
         const e = x.res, hl = eqFocus && s(eq) === focusEq;
         const notes = x.rows.map(ri => D.rows[ri]).filter(r => s(r[R.KIND]) === 'branch');
         if (!e) return el('tr', {class: hl ? 'hl' : null}, td(s(eq)), el('td', {colspan: 7, class: 'na'}, notes.map(r => s(r[R.TEXT])).join('; ') || 'not evaluated'));
@@ -640,24 +705,31 @@ function buildBrowse(root, itemQuery) {
     ['Rule', g => s(g[G.RULE])], ['Equation', g => s(g[G.EQ])]];
   const col = (h, get, o) => Object.assign({h, get}, o);
   const fVerd = el('select', null, ['', 'FAILED', 'OK', 'Assessment not required', 'superseded'].map(o => el('option', {value: o}, o || 'All')));
-  const fMin = el('input', {type: 'number', step: 'any', placeholder: 'e.g. 0.9', style: 'width:80px'});
+  const fMin = el('input', {type: 'number', step: 'any', placeholder: 'e.g. ' + fmt(disp(WARN)), style: 'width:80px'});
+  // exact ratio threshold set by a link, until the field is edited (the margin shown
+  // in the field is rounded)
+  let minRatio = null;
+  const minThreshold = () => (minRatio !== null ? minRatio : fMin.value === '' ? null : disp(Number(fMin.value)));
   const fKind = el('select', null, el('option', {value: ''}, 'All'),
     [...new Set(D.rows.map(r => r[R.KIND]))].filter(k => k >= 0).map(k => el('option', {value: s(k)}, s(k))));
   const modes = {
     equations: {
-      label: 'Equation results', all: D.equations, group: e => D.groups[e[E.G]], sort: [7, -1], hay: null,
+      // worst first: highest ratio, lowest margin
+      label: 'Equation results', all: D.equations, group: e => D.groups[e[E.G]], sort: [7, isSM() ? 1 : -1], hay: null,
       text: e => groupText[e[E.G]] + ' ' + verdictText(e[E.VERD], e[E.SCREEN]).toLowerCase(),
       keep: () => {
-        const vd = fVerd.value, mn = fMin.value === '' ? null : Number(fMin.value);
+        // threshold on the ratio (a margin ≤ x is a ratio ≥ 1/x)
+        const vd = fVerd.value, mn = minThreshold();
         return e => (!vd || verdictText(e[E.VERD], e[E.SCREEN]) === vd) && (mn === null || (typeof e[E.RATIO] === 'number' && e[E.RATIO] >= mn));
       },
       hash: e => groupHash(D.groups[e[E.G]]), rowClass: () => '',
       cols: [...gcols.map(([h, f]) => col(h, e => f(D.groups[e[E.G]]))),
         col('Applied [MPa]', e => e[E.APP], {num: true, cell: e => td(mpa(e[E.APP]), 'num'), csv: e => (e[E.APP] === null ? '' : e[E.APP] / 1e6)}),
         col('Allowable [MPa]', e => e[E.ALW], {num: true, cell: e => td(mpa(e[E.ALW]), 'num'), csv: e => (e[E.ALW] === null ? 'No Limit' : e[E.ALW] / 1e6)}),
-        col('Ratio', e => e[E.RATIO], {num: true, cell: e => ratioCell(e[E.RATIO])}),
+        col(T().col, e => disp(e[E.RATIO]), {num: true, cell: e => ratioCell(e[E.RATIO]), first: isSM() ? 1 : -1,
+          csv: e => { const v = disp(e[E.RATIO]); return v === Infinity ? 'inf' : v; }}),
         col('Verdict', e => verdictText(e[E.VERD], e[E.SCREEN]), {cell: e => td(verdictChip(e[E.VERD], e[E.SCREEN]))})],
-      controls: [el('label', null, 'Verdict ', fVerd), el('label', null, 'Min ratio ', fMin)],
+      controls: [el('label', null, 'Verdict ', fVerd), el('label', null, (isSM() ? 'Max ' : 'Min ') + T().col.toLowerCase() + ' ', fMin)],
       hint: 'equation results',
     },
     values: {
@@ -722,21 +794,24 @@ function buildBrowse(root, itemQuery) {
     });
     if (sortCol !== null) {
       const c = m.cols[sortCol];
-      res.sort((a, b) => (c.num ? sortDir * ((c.get(a) ?? -Infinity) - (c.get(b) ?? -Infinity)) : sortDir * natural(c.get(a), c.get(b))));
+      // missing numbers last in both directions (a margin column sorts ascending)
+      const num = (x, y) => (x === null || y === null ? (x === null) - (y === null) : sortDir * (x - y) || 0);
+      res.sort((a, b) => (c.num ? num(c.get(a) ?? null, c.get(b) ?? null) : sortDir * natural(c.get(a), c.get(b))));
     }
     // keep the filters in the url without adding history entries (may be refused on file://)
     try {
       history.replaceState(null, '', '#/explore' + qs({mode: mode === 'equations' ? null : mode, q: fText.value, pos: fPos.value, ev: fEv.value,
-        rule: fRule.value, eq: fEq.value, verdict: fVerd.value, min: fMin.value, kind: fKind.value}));
+        rule: fRule.value, eq: fEq.value, verdict: fVerd.value, min: minRatio !== null ? minRatio : fMin.value === '' ? '' : fmt(minThreshold()), kind: fKind.value}));
     } catch (e) { /* ignore */ }
     const head = m.cols.map((c, i) => el('th', {class: 'sortable' + (i === sortCol ? (sortDir > 0 ? ' asc' : ' desc') : ''),
-      onclick: () => { if (sortCol === i) sortDir = -sortDir; else { sortCol = i; sortDir = c.num ? -1 : 1; } filter(); }}, c.h));
+      onclick: () => { if (sortCol === i) sortDir = -sortDir; else { sortCol = i; sortDir = c.first || (c.num ? -1 : 1); } filter(); }}, c.h));
     out.replaceChildren(
       el('p', {class: 'hint'}, res.length + ' ' + m.hint + (res.length > MAX ? ', showing the first ' + MAX + ' (export to get all)' : '') + '.'),
       table(head, res.slice(0, MAX).map(x => el('tr', {class: 'link' + m.rowClass(x), onclick: () => go(m.hash(x))},
         m.cols.map(c => (c.cell ? c.cell(x) : td(c.get(x), c.num ? 'num' : null)))))));
   }
   const f = debounce(filter, 250);
+  fMin.addEventListener('input', () => { minRatio = null; });
   [fText, fMin].forEach(x => x.addEventListener('input', f));
   [fPos, fEv, fRule, fEq, fVerd, fKind].forEach(x => x.addEventListener('change', filter));
   exp.addEventListener('click', () => {
@@ -751,7 +826,9 @@ function buildBrowse(root, itemQuery) {
       if (KEYS.some(k => q.has(k))) {
         fText.value = q.get('q') || ''; fPos.value = q.get('pos') || ''; fEv.value = q.get('ev') || '';
         fRule.value = q.get('rule') || ''; fEq.value = q.get('eq') || ''; fVerd.value = q.get('verdict') || '';
-        fMin.value = q.get('min') || ''; fKind.value = q.get('kind') || '';
+        // the url threshold is on the ratio, the field shows it in the current mode
+        minRatio = q.get('min') ? Number(q.get('min')) : null;
+        fMin.value = minRatio !== null ? fmt(disp(minRatio)) : ''; fKind.value = q.get('kind') || '';
         setMode(q.get('mode') || 'equations');
       } else if (!modeButtons.some(b => b.classList.contains('active'))) setMode(mode);
       else filter();

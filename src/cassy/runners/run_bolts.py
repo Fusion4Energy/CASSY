@@ -19,7 +19,8 @@ from cassy.designcodes.EN13445_bolts import EN_13445_Bolts
 from cassy.designcodes.sdcic_bolts import SDC_IC_Bolts
 from cassy.general.folder_tree import FolderTree
 from cassy.office.word_helper import WordOutput
-from cassy.runners.run_common import new_tracer, save_trace, tracing
+from cassy.auxiliary.functions import format_terms
+from cassy.runners.run_common import events_table, new_tracer, save_trace, tracing
 
 # #################### Parameters #############################################
 
@@ -36,6 +37,46 @@ INPUT_TITLE = "Internal Bolt Action Used During the Assessment"
 
 
 # #################### Code ###################################################
+_EVENT_COLUMNS = ["RE", "Service level", "Load category", "OC", "IE", "CE"]
+
+
+def _events_metadata(configs: dict[str, FlangeAssessmentConfig], fatigue: bool) -> dict:
+    """Configuration of the reference events, shown in the index of the trace."""
+
+    def common(re) -> list:
+        return [re.name, re.service_lvl, re.load_category] + [
+            re.oper_cond,
+            re.init_event,
+            re.concat_event,
+        ]
+
+    meta = {
+        "reference events": events_table(
+            _EVENT_COLUMNS + ["Primary", "All loads"],
+            (
+                common(re) + [format_terms(re.primary), format_terms(re.all_loads)]
+                for c in configs.values()
+                for res in c.REs.values()
+                for re in res
+            ),
+        )
+    }
+    if fatigue:
+        meta["fatigue reference events"] = events_table(
+            _EVENT_COLUMNS + ["N cycles", "Δσ +", "Δσ −", "σ sustained"],
+            (
+                common(re)
+                + [re.n_cycles, format_terms(re.delta_sigma[0])]
+                + [format_terms(re.delta_sigma[1])]
+                + [format_terms(re.sigma_sustained or [])]
+                for c in configs.values()
+                for res in (c.REs_fatigue or {}).values()
+                for re in res
+            ),
+        )
+    return meta
+
+
 # --- Initializations ---
 def run_bolts(
     root: PathLike,
@@ -52,6 +93,7 @@ def run_bolts(
     tracer = new_tracer(trace, "bolts")
     if tracer is not None:
         tracer.metadata["codes"] = sorted({c.code.name for c in configs.values()})
+        tracer.metadata.update(_events_metadata(configs, fatigue))
 
     recaps = {"Immediate": [], "Fatigue": []}
     connections: dict[str, FlangeAssessment] = {}

@@ -55,6 +55,13 @@ def test_run_bolts_trace(tmp_path):
 
     df = load_trace(folder)
     assert set(df["component"].dropna()) == set(configs)
+    # configuration of the reference events in the index
+    meta = df.attrs["metadata"]
+    assert meta["reference events"]["rows"]
+    assert meta["fatigue reference events"]["rows"]
+    index = (folder / "index.html").read_text(encoding="utf-8")
+    assert "<h2>Reference events</h2>" in index
+    assert "<h2>Fatigue reference events</h2>" in index
     assert {"material", "stress", "allowable", "result", "input"} <= set(df["kind"])
     vj = df[(df["analysis"] == "fatigue") & (df["name"] == "Vj")]
     assert not vj.empty

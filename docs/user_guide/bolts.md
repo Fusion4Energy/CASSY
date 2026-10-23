@@ -44,7 +44,7 @@ The GUI will open on the *General* Tab where the main run options can be set:
     Configuration settings can be imported from and exported to .json format. This is done using `File->Open` and `File->Save as` respectively.
 
 ## Geometries Tab
-Here you can build/modify the geometry library for bolts and inserts dimensions.These libraries can be used cross projects and can be exported and imported as json files using the `Export library` and `Import library` buttons.
+Here you can build/modify the geometry library for bolts and inserts dimensions.These libraries can be used cross projects and can be exported and imported as json or csv files using the `Export library` and `Import library` buttons (the format follows the file extension). The csv has one row per bolt/insert with columns `base_name, type, material, p, d, Le, d_vh, f, f_prime, B, C, KF, dn, df, D, d1, H, a, Dm, Dp`: only `base_name`, `type` (bolt or insert), `material`, `p`, `d` and `Le` are required, empty auto-computed fields are computed by CASSY and the bolt-only columns are ignored for inserts.
 
 When adding a new bolt, an ID (usually something like 'M16') a material, and a number of geometrical parameters will need to be provided. Users can insert all of them or just the minimum set that allows to compute the remaining ones using ISO formulas. This can be done using the `Auto-compute` button in the pop-up dialogue that opens when adding a new bolt geometry.
 

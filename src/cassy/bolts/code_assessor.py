@@ -1,3 +1,4 @@
+import re
 from math import pi
 
 import numpy as np
@@ -7,6 +8,56 @@ from cassy.auxiliary import trace
 from cassy.bolts.bolt_config import BoltReferenceEventFatigue, Event
 from cassy.bolts.geometry import BoltGeom, BoltLikeGeom
 from cassy.designcodes.codes import BoltCode, bolt_stress_name
+
+
+class TracedStresses(dict):
+    def __init__(
+        self,
+        group: str,
+        components: dict[str, float],
+        formulas: dict[str, str],
+        values: dict[str, float],
+    ):
+        """Applicable stresses of a load group. Each time a stress is accessed it is
+        recorded in the trace, together with the formula used to compute it and the
+        stress components it depends on.
+
+        Parameters
+        ----------
+        group : str
+            load group of the stresses ('primary' or 'all').
+        components : dict[str, float]
+            stress components the applicable stresses are computed from [MPa].
+        formulas : dict[str, str]
+            formula of each applicable stress, written with the component names.
+        values : dict[str, float]
+            value of each applicable stress [MPa].
+        """
+        super().__init__(values)
+        self.group = group
+        self.components = components
+        self.formulas = formulas
+
+    def __getitem__(self, key: str) -> float:
+        value = super().__getitem__(key)
+        if trace.is_active():
+            formula = self.formulas.get(key)
+            for name in re.findall(r"\w+", formula or ""):
+                if name in self.components:
+                    trace.record(
+                        bolt_stress_name(self.group, name),
+                        self.components[name],
+                        kind="stress",
+                        unit="MPa",
+                    )
+            trace.record(
+                bolt_stress_name(self.group, key),
+                value,
+                kind="stress",
+                unit="MPa",
+                note=formula,
+            )
+        return value
 
 
 class BoltActionAssessor:
@@ -49,7 +100,6 @@ class BoltActionAssessor:
         self.loads_type = ["Preload", "primary", "all"]
 
         # Compute applicable stresses
-        self.stress_components: dict[str, dict[str, float]] = {}
         primary_stresses = self._compute_applicable_stresses(
             self.primary, group="primary"
         )
@@ -103,13 +153,6 @@ class BoltActionAssessor:
         for group, actions in (("primary", self.primary), ("all", self.all_loads)):
             for key, val in actions.items():
                 trace.record(f"{key} ({group})", val, kind="input", unit=units.get(key))
-        for group, components in self.stress_components.items():
-            for key, val in components.items():
-                trace.record(f"{key} ({group})", val, kind="stress", unit="MPa")
-        for group, stresses in self.applicable_stresses.items():
-            for key, val in stresses.items():
-                name = bolt_stress_name(group, key)
-                trace.record(name, val, kind="stress", unit="MPa")
 
     def assess(self, code: BoltCode, insert=False):
         """
@@ -251,10 +294,11 @@ class BoltActionAssessor:
 
     def _compute_applicable_stresses(
         self, actions: dict, group: str
-    ) -> dict[str, float]:
+    ) -> TracedStresses:
         bolt = self.poa
 
         applicables = {}
+        formulas = {}
 
         # --- Stress Induced by axial loads (SDC-IC B 3812.2.6.1) ---
         N = actions["N"]
@@ -349,30 +393,49 @@ class BoltActionAssessor:
         tau_T = 4 * T / (pi * (bolt.dn**2 - bolt.d_vh**2))
 
         # --- Allowable stresses ---
+        # formulas are written with the names of the components below
         applicables["Primary stress"] = sigma_N
+        formulas["Primary stress"] = "sigma_N"
         applicables["Mean stress"] = (sigma_N**2 + 3 * tau_T**2) ** 0.5
+        formulas["Mean stress"] = "sqrt(sigma_N^2 + 3 * tau_T^2)"
         applicables["Avg shear stress in threads"] = tth_N + tth_M
+        formulas["Avg shear stress in threads"] = "tau_th_N + tau_th_M"
 
         if group == "primary":
             applicables["Max stress"] = ((sigma_N + sigma_M) ** 2 + 3 * tau_T**2) ** 0.5
+            formulas["Max stress"] = "sqrt((sigma_N + sigma_M)^2 + 3 * tau_T^2)"
             if isinstance(bolt, BoltGeom):
                 applicables["Avg shear stress in head"] = th_N + th_M
+                formulas["Avg shear stress in head"] = "tau_h_N + tau_h_M"
         else:  # All
             applicables["Max stress"] = (
                 (sigma_N + sigma_M) ** 2 + 3 * (tau_T + tau_Cr) ** 2
             ) ** 0.5
+            formulas["Max stress"] = (
+                "sqrt((sigma_N + sigma_M)^2 + 3 * (tau_T + tau_Cr)^2)"
+            )
             if isinstance(bolt, BoltGeom):
                 applicables["Avg shear stress in head"] = (
                     (th_N + th_M) ** 2 + tau_Ct**2
                 ) ** 0.5
+                formulas["Avg shear stress in head"] = (
+                    "sqrt((tau_h_N + tau_h_M)^2 + tau_Ct^2)"
+                )
             applicables["Stress intensity range"] = (
                 (sigma_N + sigma_M) ** 2 + 3 * (tau_T) ** 2
             ) ** 0.5
+            formulas["Stress intensity range"] = (
+                "sqrt((sigma_N + sigma_M)^2 + 3 * tau_T^2)"
+            )
 
         applicables["Avg contact pressure betweeen threads"] = pth_M + pth_N
+        formulas["Avg contact pressure betweeen threads"] = "p_th_N + p_th_M"
         if isinstance(bolt, BoltGeom):
             # can be computed only for bolts
             applicables["Avg contact pressure between head and assembly"] = ph_N + ph_M
+            formulas["Avg contact pressure between head and assembly"] = (
+                "p_h_N + p_h_M"
+            )
 
         components = {
             "sigma_N": sigma_N,
@@ -390,8 +453,7 @@ class BoltActionAssessor:
         if isinstance(bolt, BoltGeom):
             components["p_h_N"] = ph_N
             components["p_h_M"] = ph_M
-        self.stress_components[group] = components
-        return applicables
+        return TracedStresses(group, components, formulas, applicables)
 
     def get_df_actions(self):
         """

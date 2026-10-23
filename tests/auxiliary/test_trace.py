@@ -86,8 +86,10 @@ def test_save_load_roundtrip_and_html(tmp_path):
     assert payload["summary"]["failed"]
     assert payload["summary"]["counts"]["FAILED"] == 1
     index_page = Path(index).read_text(encoding="utf-8")
-    # a single component: the index redirects to its page
-    assert "url=C_1.html" in index_page and "FAILED" in index_page
+    # a single component: the index is still shown and its page links back to it
+    assert "url=" not in index_page
+    assert "href='C_1.html'" in index_page and "FAILED" in index_page
+    assert "href='index.html'" in page
 
 
 def _equation(applied, allowable, superseded=False):
@@ -113,7 +115,13 @@ def test_html_verdicts_and_index(tmp_path):
             for event, vj in (("F1", 0.7), ("F2", 0.6)):
                 with trace.scope(event=event, analysis="fatigue"):
                     trace.record("Vj", vj, kind="result")
-    metadata = {"damage types": {"R1": "Ratcheting"}}
+    metadata = {
+        "damage types": {"R1": "Ratcheting"},
+        "reference events": {
+            "columns": ["RE", "Loads"],
+            "rows": [["RE1", "<dead> + seismic"]],
+        },
+    }
     index = write_html(tracer.to_dataframe(), tmp_path, metadata)
 
     summ_a = _embedded_payload((tmp_path / "A.html").read_text("utf-8"))["summary"]
@@ -135,8 +143,16 @@ def test_html_verdicts_and_index(tmp_path):
     index_page = Path(index).read_text(encoding="utf-8")
     assert "url=" not in index_page
     assert "A.html" in index_page and "B.html" in index_page
+    # each component page links back to the index
+    assert "href='index.html'" in (tmp_path / "A.html").read_text("utf-8")
+    # the worst ratio follows the display mode, the fatigue usage does not
+    assert "data-ratio='0.5'" in index_page and "data-ratio='1.3'" not in index_page
     assert "Ratcheting: failed items" in index_page
     assert "damage types" not in index_page
+    # configuration of the reference events, no fatigue ones in the metadata
+    assert "<h2>Reference events</h2>" in index_page
+    assert "<td>&lt;dead&gt; + seismic</td>" in index_page
+    assert "Fatigue reference events" not in index_page
 
 
 def test_duplicates_units_and_named_inputs():

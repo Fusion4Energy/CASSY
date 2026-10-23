@@ -1,6 +1,7 @@
 // 3D location map of the trace report (see trace_report.py and geometry_view.py).
 // Shows the model and the items (paths as segments, bolts as points) in the .view3d
-// container of the visible page, coloured by their max ratio; the item of the current
+// container of the visible page, coloured by their worst result (equation ratio or
+// fatigue usage, in the display mode of trace_report.js); the item of the current
 // route is highlighted and framed. In the bolts reports the other flanges are shown
 // faded, as context (their meshes are registered in window.CASSY_MESHES by the scripts
 // of the geometry folder). It follows the route published by trace_report.js
@@ -16,14 +17,19 @@ function start() {
   const PALETTE = {ok: '#2e9e55', warn: '#f0a020', fail: '#d0203a', na: '#8a94a3', plain: '#1f5fa8', dim: '#c3c9d1', sel: '#e0119d'};
   const level = r => (typeof r !== 'number' ? 'na' : r >= 1 ? 'fail' : r >= WARN ? 'warn' : 'ok');
   const fmt = r => (typeof r === 'number' ? (r > 0 && r < 1e-3 ? r.toExponential(1) : r.toFixed(3)) : '–');
+  // worst result of an item: the equations in the display mode, or the fatigue usage
+  // when it is higher (a usage factor in both modes)
+  const worst = it => (typeof it.useMax === 'number' && !(typeof it.eqMax === 'number' && it.eqMax >= it.useMax) ?
+    'ΣVj ' + fmt(it.useMax) : C.label().worst + ' ' + C.label().col.toLowerCase() + ' ' + (typeof it.eqMax === 'number' ? C.ratioTxt(it.eqMax) : '–'));
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
 
   // ---------- items ----------
   const items = Object.entries(G.items).map(([name, loc]) => {
     const p = loc.p.map(x => new THREE.Vector3(...x));
     const center = p.length > 1 ? p[0].clone().add(p[1]).multiplyScalar(0.5) : p[0].clone();
+    const r = C.items.get(name) || {};
     return {name, p, center, axis: loc.axis ? new THREE.Vector3(...loc.axis).normalize() : null,
-      length: p.length > 1 ? p[0].distanceTo(p[1]) : 0, max: (C.items.get(name) || {}).max};
+      length: p.length > 1 ? p[0].distanceTo(p[1]) : 0, max: r.max, eqMax: r.eqMax, useMax: r.useMax};
   });
   const byName = new Map(items.map(it => [it.name, it]));
 
@@ -141,16 +147,22 @@ function start() {
   const bCtx = context.children.length ? button('', 'Geometry of the other flanges of the assessment (context only)',
     () => { state.context = !state.context; style(); }) : null;
   const legend = el('span', 'v3d-legend');
-  for (const [k, t] of [['ok', '< ' + WARN], ['warn', '≥ ' + WARN], ['fail', '≥ 1'], ['na', 'no result'], ['sel', 'selected']]) {
-    const s = el('span', null, t); s.style.setProperty('--c', PALETTE[k]); legend.append(s);
-  }
   bar.append(legend);
+  function fillLegend() {
+    // the thresholds in the display mode, and on the fatigue usage when the margin is shown
+    const fat = C.mode === 'sm' && C.hasFatigue, both = (r, txt) => txt(r) + (fat ? ' (ΣVj ' + (txt === C.below ? '< ' : '≥ ') + r + ')' : '');
+    legend.title = C.label().col + (fat ? ' (or fatigue usage ΣVj)' : '');
+    legend.replaceChildren(...[['ok', both(WARN, C.below)], ['warn', both(WARN, C.atLeast)], ['fail', both(1, C.atLeast)], ['na', 'no result'], ['sel', 'selected']].map(([k, t]) => {
+      const s = el('span', null, t); s.style.setProperty('--c', PALETTE[k]); return s;
+    }));
+  }
 
   function style() {
     bModel.textContent = 'Model: ' + state.model;
     bCol.textContent = 'Colours: ' + state.colours;
     bLab.textContent = state.labels ? 'Hide labels' : 'Show labels';
     legend.hidden = state.colours !== 'ratio';
+    fillLegend();
     if (bCtx) bCtx.textContent = state.context ? 'Hide other flanges' : 'Show other flanges';
     context.visible = state.context;
     if (model) {
@@ -205,7 +217,7 @@ function start() {
     tip.hidden = !it;
     renderer.domElement.style.cursor = it ? 'pointer' : '';
     if (!it) return;
-    tip.textContent = it.name + ' · max ratio ' + fmt(it.max);
+    tip.textContent = it.name + ' · ' + worst(it);
     tip.style.transform = `translate(${x + 14}px, ${y + 10}px)`;
   });
   renderer.domElement.addEventListener('pointerleave', () => { tip.hidden = true; });
@@ -281,5 +293,6 @@ function start() {
     first = false;
   }
   document.addEventListener('cassy:route', ev => follow(ev.detail));
+  document.addEventListener('cassy:mode', style);
   if (C.route.view) follow(C.route);
 }

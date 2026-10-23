@@ -169,3 +169,12 @@ tr.k-warning td { background: var(--warn-bg); color: var(--warn); }
   #explore { flex-direction: column; height: auto; }
   #side { width: auto; max-height: 40vh; border-right: none; border-bottom: 1px solid var(--line); }
 }
+
+/* --- display mode toggle (header) --- */
+header .seg.mode { margin-left: auto; }
+header .seg.mode button { background: transparent; color: #cfd8e3; border-color: #4a6282; font-size: 12px; }
+header .seg.mode button:hover { color: #fff; }
+header .seg.mode button.active { background: var(--accent); border-color: var(--accent); color: var(--brand); }
+header a.home { color: #cfd8e3; text-decoration: none; font-size: 13px; padding: 3px 8px;
+  border: 1px solid #4a6282; border-radius: 4px; white-space: nowrap; }
+header a.home:hover { color: #fff; border-color: #cfd8e3; }

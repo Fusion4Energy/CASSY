@@ -26,6 +26,17 @@ def new_tracer(enabled: bool, module: str) -> trace.Tracer | None:
     return trace.Tracer({"module": module, "cassy version": cassy_version})
 
 
+def events_table(columns: list[str], rows) -> dict:
+    """Table of reference events for the trace index page.
+
+    The events are shared by many items, so identical rows are kept once.
+    """
+    unique = dict.fromkeys(
+        tuple("–" if v is None or v == "" else str(v) for v in row) for row in rows
+    )
+    return {"columns": list(columns), "rows": [list(r) for r in unique]}
+
+
 @contextmanager
 def tracing(tracer: trace.Tracer | None) -> Generator[None, None, None]:
     """Activate the tracer (if any) for the duration of the context."""
