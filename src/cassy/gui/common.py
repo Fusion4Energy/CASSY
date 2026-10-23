@@ -12,9 +12,11 @@ from tkinter import filedialog, messagebox, ttk
 from tkinter import font as tkfont
 from typing import Callable
 
+from cassy.general.folder_tree import STL_CACHE_FOLDER, stl_cache_folder
 from cassy.runners.run_project import (
     GEOMETRY_KEY,
     LOCATIONS_KEY,
+    geometry_files,
     resolve_project_paths,
     save_project,
 )
@@ -807,12 +809,19 @@ class RunTab(ttk.Frame):
 
         run_frm = ttk.LabelFrame(self, text="Run")
         run_frm.pack(padx=20, pady=(0, 20), fill="x")
+        buttons = ttk.Frame(run_frm)
+        buttons.pack(padx=10, pady=10)
         ttk.Button(
-            run_frm,
+            buttons,
+            text="Pre-process geometries",
+            command=self._preprocess_geometries,
+        ).pack(side="left", padx=(0, 10))
+        ttk.Button(
+            buttons,
             text=self._RUN_LABEL,
             style="Accent.TButton",
             command=self._run_assessment,
-        ).pack(padx=10, pady=10)
+        ).pack(side="left")
         self._status_var = tk.StringVar(value="")
         ttk.Label(run_frm, textvariable=self._status_var, style="Muted.TLabel").pack(
             padx=10, pady=(0, 6)
@@ -852,7 +861,38 @@ class RunTab(ttk.Frame):
             self._status_var.set("Configuration error.")
             return
 
-        log_win = LogWindow(self.winfo_toplevel())
+        self._run_with_log(work, "Assessment")
+
+    def _preprocess_geometries(self) -> None:
+        """Simplify and cache the geometry files of the project in the output root
+        folder, so that the trace reports do not process them again (see
+        geometry_view.preprocess_geometries)."""
+        self.sync()
+        root_dir = self._root_dir.get().strip()
+        if not root_dir:
+            messagebox.showwarning(
+                "No root folder",
+                "Please set the output root folder first: the pre-processed "
+                f"geometries are saved in its {STL_CACHE_FOLDER} folder.",
+            )
+            return
+        files = geometry_files(self._project)
+        if not files:
+            messagebox.showinfo(
+                "No geometries", "No geometry file is set in the project."
+            )
+            return
+
+        def work() -> None:
+            from cassy.office.geometry_view import preprocess_geometries
+
+            preprocess_geometries(files, stl_cache_folder(root_dir))
+
+        self._run_with_log(work, "Geometry pre-processing")
+
+    def _run_with_log(self, work: Callable[[], None], what: str) -> None:
+        """Run ``work`` in a thread, showing its log in a LogWindow."""
+        log_win = LogWindow(self.winfo_toplevel(), what)
         handler = TextHandler(log_win)
         root_logger = logging.getLogger()
         old_level = root_logger.level
@@ -869,13 +909,11 @@ class RunTab(ttk.Frame):
                 self.after(0, lambda: self._status_var.set("Completed successfully."))
                 self.after(
                     0,
-                    lambda: log_win.set_done(
-                        True, "Assessment completed successfully."
-                    ),
+                    lambda: log_win.set_done(True, f"{what} completed successfully."),
                 )
             except Exception as exc:
                 # full traceback to the log window, short message to the status bar
-                root_logger.exception("Assessment failed")
+                root_logger.exception("%s failed", what)
                 msg = f"{type(exc).__name__}: {exc}"
                 self.after(0, lambda: self._status_var.set(f"Error: {msg}"))
                 self.after(0, lambda: log_win.set_done(False, f"Error: {msg}"))
@@ -1194,9 +1232,9 @@ class TDPAGridTab(ttk.Frame):
 class LogWindow(tk.Toplevel):
     """Scrollable pop-up that captures log output from an assessment run."""
 
-    def __init__(self, master: tk.Misc) -> None:
+    def __init__(self, master: tk.Misc, what: str = "Assessment") -> None:
         super().__init__(master)
-        self.title("Cassy \u2014 Assessment Log")
+        self.title(f"Cassy \u2014 {what} Log")
         self.geometry("860x540")
         self.resizable(True, True)
         set_icon(self)

@@ -87,7 +87,9 @@ def run_paths(
         submodels.append(submodel)
         submodel.print_global_df(ass_path)
 
-    save_trace(tracer, folder_tree.assessment_folder, geometry)
+    save_trace(
+        tracer, folder_tree.assessment_folder, geometry, folder_tree.stl_cache
+    )
 
     if not print_recap:
         logger.info("No word recap requested. Assessment completed")

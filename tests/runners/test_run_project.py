@@ -7,6 +7,7 @@ import pytest
 
 from cassy.__main__ import main
 from cassy.runners.run_project import (
+    geometry_files,
     ProjectError,
     load_project,
     location_maps,
@@ -166,3 +167,16 @@ def test_save_project_portable_round_trip(tmp_path):
         moved / "stresses" / "Model_B.csv"
     )
     assert project["run_options"]["root_dir"] == str(moved / "out")
+
+
+def test_geometry_files():
+    project = {
+        "flanges": [
+            {"name": "F1", "geometry_file": "/a.stl"},
+            {"name": "F2"},
+            {"name": "F3", "geometry_file": "/b.stl"},
+            {"name": "F4", "geometry_file": "/a.stl"},
+        ],
+        "run_options": {},
+    }
+    assert geometry_files(project) == ["/a.stl", "/b.stl"]

@@ -1,7 +1,9 @@
 // 3D location map of the trace report (see trace_report.py and geometry_view.py).
 // Shows the model and the items (paths as segments, bolts as points) in the .view3d
 // container of the visible page, coloured by their max ratio; the item of the current
-// route is highlighted and framed. It follows the route published by trace_report.js
+// route is highlighted and framed. In the bolts reports the other flanges are shown
+// faded, as context (their meshes are registered in window.CASSY_MESHES by the scripts
+// of the geometry folder). It follows the route published by trace_report.js
 // in window.CASSY, and never runs if three.js cannot be loaded (no internet).
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
@@ -38,18 +40,38 @@ function start() {
     transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide});
   const edgeMat = new THREE.LineBasicMaterial({color: '#6b7684', transparent: true, opacity: 0.5});
   let model = null, edges = null;
-  if (G.mesh) {
+  function meshGeometry(m) {
     const bytes = b64 => Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer;
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bytes(G.mesh.vertices)), 3));
-    geo.setIndex(new THREE.BufferAttribute(new Uint32Array(bytes(G.mesh.faces)), 1));
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bytes(m.vertices)), 3));
+    geo.setIndex(new THREE.BufferAttribute(new Uint32Array(bytes(m.faces)), 1));
     geo.computeVertexNormals();
     geo.computeBoundingBox();
+    return geo;
+  }
+  if (G.mesh) {
+    const geo = meshGeometry(G.mesh);
     box.union(geo.boundingBox);
     model = new THREE.Mesh(geo, modelMat);
     edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), edgeMat);
     scene.add(model, edges);
   }
+  // other flanges: geometry only, faded, not part of the framing
+  const contextMat = new THREE.MeshStandardMaterial({color: '#dde2e8', flatShading: true, roughness: 0.9,
+    transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide});
+  const contextEdgeMat = new THREE.LineBasicMaterial({color: '#9aa3ae', transparent: true, opacity: 0.18});
+  const context = new THREE.Group();
+  const missingContext = [];
+  for (const c of G.context || []) {
+    const m = (window.CASSY_MESHES || {})[c.key];
+    if (!m) { missingContext.push(c.name); continue; }
+    const geo = meshGeometry(m);
+    context.add(new THREE.Mesh(geo, contextMat), new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), contextEdgeMat));
+  }
+  if (missingContext.length) console.warn('CASSY: geometry of ' + missingContext.join(', ') + ' not found in the geometry folder');
+  // blended before the model, so that it stays behind it
+  context.renderOrder = -1;
+  scene.add(context);
   const size = box.getSize(new THREE.Vector3()).length() || 1;
   const centre = box.getCenter(new THREE.Vector3());
 
@@ -98,7 +120,9 @@ function start() {
   const wrap = el('div', 'v3d');
   const renderer = new THREE.WebGLRenderer({antialias: true});
   renderer.setPixelRatio(window.devicePixelRatio || 1);
-  const camera = new THREE.PerspectiveCamera(35, 1, size * 1e-4, size * 100);
+  // far enough for the other flanges too
+  const all = box.clone().union(new THREE.Box3().setFromObject(context));
+  const camera = new THREE.PerspectiveCamera(35, 1, size * 1e-4, Math.max(size, all.getSize(new THREE.Vector3()).length()) * 100);
   camera.up.set(0, 0, 1);  // FEM models are usually z-up
   const controls = new OrbitControls(camera, renderer.domElement);
   const labels = el('div', 'v3d-labels'), tip = el('div', 'v3d-tip'), bar = el('div', 'v3d-bar');
@@ -108,12 +132,14 @@ function start() {
 
   // ---------- toolbar ----------
   // names shown by default when they are few enough to stay readable
-  const state = {model: 'x-ray', colours: 'ratio', labels: items.length <= 30, selected: null};
+  const state = {model: 'x-ray', colours: 'ratio', labels: items.length <= 30, context: true, selected: null};
   const button = (text, title, onclick) => { const b = el('button', null, text); b.type = 'button'; b.title = title; b.onclick = onclick; bar.append(b); return b; };
   button('Fit all', 'Show the whole model', () => frame(null));
   const bModel = button('', 'Model display', () => { state.model = {'x-ray': 'solid', solid: 'hidden', hidden: 'x-ray'}[state.model]; style(); });
   const bCol = button('', 'Marker colours', () => { state.colours = state.colours === 'ratio' ? 'plain' : 'ratio'; style(); });
   const bLab = button('', 'Show the names of all the items', () => { state.labels = !state.labels; style(); });
+  const bCtx = context.children.length ? button('', 'Geometry of the other flanges of the assessment (context only)',
+    () => { state.context = !state.context; style(); }) : null;
   const legend = el('span', 'v3d-legend');
   for (const [k, t] of [['ok', '< ' + WARN], ['warn', '≥ ' + WARN], ['fail', '≥ 1'], ['na', 'no result'], ['sel', 'selected']]) {
     const s = el('span', null, t); s.style.setProperty('--c', PALETTE[k]); legend.append(s);
@@ -125,6 +151,8 @@ function start() {
     bCol.textContent = 'Colours: ' + state.colours;
     bLab.textContent = state.labels ? 'Hide labels' : 'Show labels';
     legend.hidden = state.colours !== 'ratio';
+    if (bCtx) bCtx.textContent = state.context ? 'Hide other flanges' : 'Show other flanges';
+    context.visible = state.context;
     if (model) {
       model.visible = edges.visible = state.model !== 'hidden';
       modelMat.transparent = state.model === 'x-ray';

@@ -3,13 +3,25 @@
 The locations of paths and bolts are read from a visualization-only csv and, together
 with an optional mesh of the component, are embedded in the report so that the
 selected item can be shown on the model. They are not used by the assessment.
+
+Reading and simplifying a large mesh can take a while, so the simplified meshes can be
+cached in a folder (the _cached_stl folder of the output root folder in the runners)
+and reused as long as the mesh file is not changed. The cache entries are named after
+the content of the mesh files, not their paths, so that a cache folder can be shared
+by people accessing the same files from different machines.
 """
 
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 import logging
 import os
+import time
+import zipfile
+from collections.abc import Iterable
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
@@ -25,6 +37,8 @@ BOLT_COLUMNS = ("flange", "boltID", "x", "y", "z")
 AXIS_COLUMNS = ("nx", "ny", "nz")
 # the mesh is decimated above this number of triangles to keep the report light
 MAX_TRIANGLES = 50_000
+# bump to invalidate the meshes cached by older versions
+CACHE_VERSION = 1
 
 
 def _item_name(item, module: str) -> str:
@@ -103,19 +117,42 @@ def _b64(array: np.ndarray) -> str:
     return base64.b64encode(np.ascontiguousarray(array).tobytes()).decode("ascii")
 
 
-def mesh_payload(file: PathLike) -> dict:
-    """Surface triangles of a mesh (any format read by pyvista, e.g. STL), decimated
-    above MAX_TRIANGLES.
+@lru_cache(maxsize=256)
+def _content_digest(path: str, size: int, mtime_ns: int) -> str:
+    # size and mtime are part of the lru key only: a changed file is hashed again
+    sha = hashlib.sha1()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            sha.update(chunk)
+    return sha.hexdigest()[:16]
 
-    Returns
-    -------
-    dict
-        {"vertices": base64 float32 xyz, "faces": base64 uint32 triangles}
-    """
+
+def _mesh_key(file: PathLike) -> str:
+    """Key of a mesh file, from its content (independent of its path)."""
+    path = os.path.abspath(file)
+    stat = os.stat(path)
+    return _content_digest(path, stat.st_size, stat.st_mtime_ns)
+
+
+def _cache_file(file: PathLike, cache_folder: PathLike) -> str:
+    """Cache entry of a mesh file: <file name>_<content hash>_<settings>.npz, so that
+    a changed file (or different decimation settings) is processed again."""
+    stem = os.path.splitext(os.path.basename(file))[0]
+    settings = f"{MAX_TRIANGLES}v{CACHE_VERSION}"
+    return os.path.join(cache_folder, f"{stem}_{_mesh_key(file)}_{settings}.npz")
+
+
+def is_cached(file: PathLike, cache_folder: PathLike) -> bool:
+    """True if the simplified mesh of ``file`` is in the cache and up to date."""
+    return os.path.exists(file) and os.path.exists(_cache_file(file, cache_folder))
+
+
+def _process_mesh(file: PathLike) -> tuple[np.ndarray, np.ndarray]:
     import pyvista as pv
 
-    if not os.path.exists(file):
-        raise FileNotFoundError(f"Geometry file not found: '{file}'")
+    name = os.path.basename(file)
+    start = time.perf_counter()
+    logger.info("Reading the geometry '%s'", name)
     mesh = pv.read(file)
     if isinstance(mesh, pv.MultiBlock):
         mesh = mesh.combine()
@@ -123,11 +160,156 @@ def mesh_payload(file: PathLike) -> dict:
         mesh = mesh.extract_surface()
     mesh = mesh.triangulate().clean()
     if mesh.n_cells > MAX_TRIANGLES:
+        logger.info(
+            "Simplifying the geometry '%s' from %d to about %d triangles for the 3D "
+            "view, this may take a while",
+            name,
+            mesh.n_cells,
+            MAX_TRIANGLES,
+        )
         mesh = mesh.decimate(1 - MAX_TRIANGLES / mesh.n_cells)
-    return {
-        "vertices": _b64(np.asarray(mesh.points, dtype=np.float32)),
-        "faces": _b64(np.asarray(mesh.regular_faces, dtype=np.uint32)),
-    }
+    logger.info(
+        "Geometry '%s' processed in %.1f s (%d triangles)",
+        name,
+        time.perf_counter() - start,
+        mesh.n_cells,
+    )
+    vertices = np.asarray(mesh.points, dtype=np.float32)
+    faces = np.asarray(mesh.regular_faces, dtype=np.uint32)
+    return vertices, faces
+
+
+def _save_cache(cache: str, vertices: np.ndarray, faces: np.ndarray) -> None:
+    folder = os.path.dirname(cache)
+    try:
+        os.makedirs(folder, exist_ok=True)
+        tmp = f"{cache}.{os.getpid()}.tmp.npz"
+        np.savez_compressed(tmp, vertices=vertices, faces=faces)
+        os.replace(tmp, cache)
+    except OSError as e:
+        logger.warning("Cannot cache the simplified geometry in '%s': %s", folder, e)
+
+
+def load_mesh(
+    file: PathLike, cache_folder: PathLike | None = None
+) -> tuple[np.ndarray, np.ndarray]:
+    """Surface triangles of a mesh (any format read by pyvista, e.g. STL), decimated
+    above MAX_TRIANGLES.
+
+    Parameters
+    ----------
+    file : PathLike
+        mesh file.
+    cache_folder : PathLike | None, optional
+        folder of the simplified meshes: the mesh is read from it if already
+        processed, and saved in it otherwise. By default no cache.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        float32 vertices (n, 3) and uint32 triangles (m, 3).
+    """
+    if not os.path.exists(file):
+        raise FileNotFoundError(f"Geometry file not found: '{file}'")
+    if cache_folder is None:
+        return _process_mesh(file)
+    cache = _cache_file(file, cache_folder)
+    if os.path.exists(cache):
+        try:
+            with np.load(cache) as data:
+                vertices, faces = data["vertices"], data["faces"]
+            logger.info("Using the pre-processed geometry '%s'", os.path.basename(file))
+            return vertices, faces
+        except (OSError, KeyError, ValueError, zipfile.BadZipFile) as e:
+            # corrupted entry: processed again
+            logger.warning("Cannot read the cached geometry '%s': %s", cache, e)
+    vertices, faces = _process_mesh(file)
+    _save_cache(cache, vertices, faces)
+    return vertices, faces
+
+
+def mesh_payload(file: PathLike, cache_folder: PathLike | None = None) -> dict:
+    """Surface triangles of a mesh for the browser (see :func:`load_mesh`).
+
+    Returns
+    -------
+    dict
+        {"vertices": base64 float32 xyz, "faces": base64 uint32 triangles}
+    """
+    vertices, faces = load_mesh(file, cache_folder)
+    return {"vertices": _b64(vertices), "faces": _b64(faces)}
+
+
+def mesh_script(
+    file: PathLike, folder: PathLike, cache_folder: PathLike | None = None
+) -> str:
+    """Write the mesh of ``file`` as a script in ``folder`` (if not there yet), for
+    the pages showing it as context: it registers the mesh in
+    window.CASSY_MESHES[key]. Shared by the pages, so that each mesh is written once.
+
+    Returns
+    -------
+    str
+        key of the mesh, the script is ``<key>.js``.
+    """
+    key = _mesh_key(file)
+    target = os.path.join(folder, f"{key}.js")
+    if not os.path.exists(target):
+        os.makedirs(folder, exist_ok=True)
+        data = json.dumps(mesh_payload(file, cache_folder), separators=(",", ":"))
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(
+                f"(window.CASSY_MESHES = window.CASSY_MESHES || {{}})"
+                f"[{json.dumps(key)}] = {data};\n"
+            )
+    return key
+
+
+def preprocess_geometries(files: Iterable[PathLike], cache_folder: PathLike) -> int:
+    """Simplify and cache the meshes, so that the trace reports are written without
+    processing them again. Already cached meshes are skipped, and the out of date
+    entries of the same files (same name, older content) are removed.
+
+    Returns
+    -------
+    int
+        number of meshes processed (not already in the cache).
+    """
+    unique = list(dict.fromkeys(os.path.abspath(f) for f in files if f))
+    processed = 0
+    for i, file in enumerate(unique, start=1):
+        logger.info("Geometry %d of %d: %s", i, len(unique), file)
+        if is_cached(file, cache_folder):
+            logger.info("Already pre-processed, skipped")
+            continue
+        load_mesh(file, cache_folder)
+        processed += 1
+    remove_stale_cache(unique, cache_folder)
+    logger.info(
+        "%d geometries pre-processed, %d already up to date in %s",
+        processed,
+        len(unique) - processed,
+        cache_folder,
+    )
+    return processed
+
+
+def remove_stale_cache(files: Iterable[PathLike], cache_folder: PathLike) -> None:
+    """Remove the cache entries of older versions of ``files`` (same name, other
+    content), those of the other files are kept."""
+    files = [f for f in files if f and os.path.exists(f)]
+    current = {os.path.basename(_cache_file(f, cache_folder)) for f in files}
+    stems = {os.path.splitext(os.path.basename(f))[0] for f in files}
+    if not os.path.isdir(cache_folder):
+        return
+    for name in os.listdir(cache_folder):
+        # <stem>_<hash>_<settings>.npz, the stem can contain "_"
+        stem = name.rsplit("_", 2)[0]
+        if name.endswith(".npz") and stem in stems and name not in current:
+            try:
+                os.remove(os.path.join(cache_folder, name))
+            except OSError:
+                pass
 
 
 def geometry_payload(
@@ -136,10 +318,12 @@ def geometry_payload(
     module: str,
     items: list[str] | None = None,
     component: str = "",
+    cache_folder: PathLike | None = None,
 ) -> dict | None:
     """Data of the location map of a component, None if no locations are given.
 
     ``items`` are the items of the trace: the ones without a location are reported.
+    ``cache_folder`` is the folder of the simplified meshes (see :func:`load_mesh`).
     """
     if not locations_file:
         return None
@@ -165,5 +349,5 @@ def geometry_payload(
             locations = {k: v for k, v in locations.items() if k not in unknown}
     payload = {"items": locations}
     if geometry_file:
-        payload["mesh"] = mesh_payload(geometry_file)
+        payload["mesh"] = mesh_payload(geometry_file, cache_folder)
     return payload
