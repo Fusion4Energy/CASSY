@@ -232,7 +232,9 @@ def _json_for_script(obj) -> str:
     return data.replace("</", "<\\/").replace("<!--", "<\\u0021--")
 
 
-def _component_page(title: str, payload: dict, metadata: dict | None) -> str:
+def _component_page(
+    title: str, payload: dict, metadata: dict | None, index: bool = False
+) -> str:
     payload = dict(payload, summary=_summary(payload), title=title)
     payload["meta"] = metadata or {}
     payload["config"] = {"maxRows": MAX_ROWS, "warnRatio": WARN_RATIO}
@@ -253,12 +255,19 @@ def _component_page(title: str, payload: dict, metadata: dict | None) -> str:
             f"{_json_for_script({'imports': imports})}</script>"
             f"<script type='module'>{_asset('trace_report_3d.js')}</script>"
         )
+    # link back to the index of the components (a single component has none: its
+    # index redirects here)
+    home = ""
+    if index:
+        home = (
+            "<a class='home' href='index.html' title='Index of all the components'>"
+            "&#8249; All components</a>"
+        )
     return (
         "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
         f"<title>{html.escape(title)}</title><style>{_asset('trace_report.css')}"
-        "</style></head><body>"
-        f"<header><h1>{html.escape(title)}</h1><nav id='tabs'>"
+        f"</style></head><body><header>{home}<h1>{html.escape(title)}</h1><nav id='tabs'>"
         "<a href='#/summary' data-tab='summary'>Summary</a>"
         "<a href='#/explore' data-tab='explore'>Explore</a></nav></header>"
         "<main id='app'><p class='hint pad'>Loading…</p></main>"
@@ -281,11 +290,14 @@ def _format_meta(metadata: dict | None) -> str:
     return f"<dl class='meta'>{''.join(rows)}</dl>"
 
 
-def _ratio_cell(value: float | None) -> str:
+def _ratio_cell(value: float | None, usage: bool = False) -> str:
     if value is None:
         return "<td class='num na'>–</td>"
     css = "fail" if value >= 1 else "warn" if value >= WARN_RATIO else "ok"
-    return f"<td class='num {css}'>{value:.3f}</td>"
+    # the equation ratio follows the display mode (see trace_index.js), the fatigue
+    # usage is a usage factor in both modes
+    data = "" if usage else f" data-ratio='{value!r}'"
+    return f"<td class='num {css}'{data}>{value:.3f}</td>"
 
 
 def _index_page(components: list[tuple[str, str, dict]], metadata: dict | None) -> str:
@@ -308,7 +320,7 @@ def _index_page(components: list[tuple[str, str, dict]], metadata: dict | None) 
             f"<td><span class='verdict {status.lower()}'>{status}</span></td>"
             + _ratio_cell(summ["worst_ratio"])
             + f"<td>{html.escape(summ['worst_where'] or '')}</td>"
-            + _ratio_cell(summ["worst_usage"])
+            + _ratio_cell(summ["worst_usage"], usage=True)
             + by_damage
             + f"<td class='num'>{summ['counts']['FAILED']}</td>"
             + f"<td class='num'>{summ['warnings']}</td></tr>"
@@ -324,12 +336,13 @@ def _index_page(components: list[tuple[str, str, dict]], metadata: dict | None) 
         f"<style>{_asset('trace_report.css')}</style></head><body>"
         "<header><h1>CASSY assessment trace</h1></header><main class='pad'>"
         f"{_format_meta(metadata)}<div class='scroll'><table class='grid'><thead><tr>"
-        "<th>Component</th><th>Verdict</th><th>Max ratio</th><th>Where</th>"
+        "<th>Component</th><th>Verdict</th><th id='worst'>Max ratio</th><th>Where</th>"
         "<th>Max ΣVj</th>"
         + "".join(f"<th>{html.escape(d)}: failed items</th>" for d in damages)
         + "<th>Failed equations</th>"
         "<th>Warnings</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table></div></main></body></html>"
+        f"<tbody>{''.join(rows)}</tbody></table></div></main>"
+        f"<script>{_asset('trace_index.js')}</script></body></html>"
     )
 
 
@@ -402,6 +415,7 @@ def write_html(
                 os.remove(os.path.join(context_folder, name))
 
     pages = []
+    n_pages = components.nunique()
     for component, group in df.groupby(components, sort=False):
         filename = _safe_filename(str(component)) + ".html"
         payload = _payload(group, (metadata or {}).get("damage types"))
@@ -415,7 +429,7 @@ def write_html(
                 context = _context(str(component), others, folder, stl_cache)
                 if context:
                     payload["geometry"]["context"] = context
-        page = _component_page(str(component), payload, metadata)
+        page = _component_page(str(component), payload, metadata, index=n_pages > 1)
         with open(os.path.join(folder, filename), "w", encoding="utf-8") as f:
             f.write(page)
         pages.append((str(component), filename, _summary(payload)))

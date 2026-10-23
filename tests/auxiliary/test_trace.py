@@ -86,8 +86,9 @@ def test_save_load_roundtrip_and_html(tmp_path):
     assert payload["summary"]["failed"]
     assert payload["summary"]["counts"]["FAILED"] == 1
     index_page = Path(index).read_text(encoding="utf-8")
-    # a single component: the index redirects to its page
+    # a single component: the index redirects to its page, which has no link to it
     assert "url=C_1.html" in index_page and "FAILED" in index_page
+    assert "href='index.html'" not in page
 
 
 def _equation(applied, allowable, superseded=False):
@@ -135,6 +136,10 @@ def test_html_verdicts_and_index(tmp_path):
     index_page = Path(index).read_text(encoding="utf-8")
     assert "url=" not in index_page
     assert "A.html" in index_page and "B.html" in index_page
+    # each component page links back to the index
+    assert "href='index.html'" in (tmp_path / "A.html").read_text("utf-8")
+    # the worst ratio follows the display mode, the fatigue usage does not
+    assert "data-ratio='0.5'" in index_page and "data-ratio='1.3'" not in index_page
     assert "Ratcheting: failed items" in index_page
     assert "damage types" not in index_page
 
