@@ -1,10 +1,17 @@
 import functools
+import logging
 
 import pandas as pd
 import numpy as np
 from copy import deepcopy
 from cassy.auxiliary import trace
-from cassy.designcodes.codes import Code, superseded_equations
+from cassy.auxiliary.custom_errors import OutOfBoundsError
+from cassy.designcodes.codes import (
+    INVALID_VJ,
+    Code,
+    InvalidAssessment,
+    superseded_equations,
+)
 from cassy.general.material import Material
 from cassy.paths.paths_config import (
     LinStressConfig,
@@ -469,7 +476,23 @@ class ReferenceEvent:
             assessed = vals[0]
             rule = vals[1]
             superseded = superseded_equations(rule, assessed)
+            invalid = isinstance(assessed, InvalidAssessment)
             for i, subrulename in enumerate(rule.description):
+                if invalid:
+                    # the rule could not be assessed, it counts as failed
+                    rows.append(
+                        {
+                            **self._row(rulename, rule, subrulename),
+                            "Applied [MPa]": "-",
+                            "Allowable [MPa]": "-",
+                            "Result": "FAILED",
+                            "Safety Margin": 0,
+                            "Damage Type": rule.damage_type,
+                            "Superseded": False,
+                            "Note": assessed.message,
+                        }
+                    )
+                    continue
                 try:
                     applied = assessed[i][0] * 1e-6
                 except TypeError:
@@ -510,17 +533,7 @@ class ReferenceEvent:
                         sm = "> 10"
 
                 row = {
-                    "ID": self.config.re_ID,
-                    "Operating Conditions": self.config.oc,
-                    "Initiating Event": self.config.ie,
-                    "Concatenated Event": self.config.ce,
-                    "Loading Category": self.config.load_ctg,
-                    "Service Level": self.config.service_lvl,
-                    "Rule Extended Description": rulename,
-                    "Rule ID": rule.ref,
-                    "Sub-Rule": subrulename,
-                    "T [°C]": self.config.T,
-                    "DPA": self.config.dpa,
+                    **self._row(rulename, rule, subrulename),
                     "Applied [MPa]": applied,
                     "Allowable [MPa]": allowable,
                     "Result": res,
@@ -534,6 +547,22 @@ class ReferenceEvent:
         self.assessment = df
 
         return self.assessment
+
+    def _row(self, rulename: str, rule, subrulename: str) -> dict:
+        """Columns of an assessment row identifying the event and the rule."""
+        return {
+            "ID": self.config.re_ID,
+            "Operating Conditions": self.config.oc,
+            "Initiating Event": self.config.ie,
+            "Concatenated Event": self.config.ce,
+            "Loading Category": self.config.load_ctg,
+            "Service Level": self.config.service_lvl,
+            "Rule Extended Description": rulename,
+            "Rule ID": rule.ref,
+            "Sub-Rule": subrulename,
+            "T [°C]": self.config.T,
+            "DPA": self.config.dpa,
+        }
 
     def computeVj(self, code: Code, material: Material):
         """
@@ -556,13 +585,20 @@ class ReferenceEvent:
         with trace.scope(event=self.config.re_ID, analysis="fatigue"):
             self._record_inputs()
             with trace.scope(rule_set="Fatigue"):
-                assessment = code.computeVj(self, material)
+                try:
+                    assessment = code.computeVj(self, material)
+                except OutOfBoundsError as e:
+                    # the event counts as failed, the assessment goes on
+                    logging.warning(f"Fatigue of {self.config.re_ID} invalidated: {e}")
+                    trace.record("fatigue", f"invalidated: {e}", kind="warning")
+                    assessment = {"N": np.nan, "Note": f"invalidated: {e}"}
+                    vj = INVALID_VJ
+                else:
+                    vj = self.config.ncycles / assessment["N"]
                 for key, val in assessment.items():
                     trace.record(key, val, kind="result")
             trace.record("n cycles", self.config.ncycles, kind="input")
-            trace.record(
-                "Vj", self.config.ncycles / assessment["N"], kind="result", note="n/N"
-            )
+            trace.record("Vj", vj, kind="result", note="n/N")
         assessment["n"] = self.config.ncycles
         assessment["ID"] = self.config.re_ID
         assessment["Range"] = self.config.ce
@@ -571,7 +607,7 @@ class ReferenceEvent:
         assessment["T"] = self.config.T
         assessment["dpa"] = self.config.dpa
         assessment["Operating conditions"] = self.config.oc
-        assessment["Vj"] = self.config.ncycles / assessment["N"]
+        assessment["Vj"] = vj
 
         self.fatigue_assessment = assessment
 

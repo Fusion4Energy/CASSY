@@ -11,6 +11,7 @@ from cassy.auxiliary.types import LoadTerm
 from cassy.bolts.bolt_config import BoltReferenceEvent, BoltReferenceEventFatigue
 from cassy.bolts.code_assessor import BoltActionAssessor
 from cassy.bolts.geometry import BoltGeom
+from cassy.designcodes.codes import INVALID_VJ
 from cassy.designcodes.sdcic_bolts import (
     IC6113,
     IC6121_1_3_1,
@@ -202,3 +203,27 @@ class TestSDC_IC_Bolts:
             == 75
         )
         assert pytest.approx(result["N"], rel=1e-2) == 3123333
+
+    def test_out_of_bounds_invalidates_rule(
+        self, code: SDC_IC_Bolts, assessor: BoltActionAssessor
+    ):
+        # above the material bounds: the rules needing the material are invalidated
+        # and fail, the others are still assessed
+        assessor.ref_event.temp = 2000
+        df = assessor.assess(code)
+        invalid = df[df["Note"].notna()]
+        assert len(invalid) > 0
+        assert (invalid["Result"] == "FAILED").all()
+        assert (invalid["Safety Margin"] == 0).all()
+        assert (invalid["Applied [MPa]"] == "-").all()
+        assert invalid["Note"].str.startswith("invalidated:").all()
+        assert df["Note"].isna().any()
+
+    def test_out_of_bounds_invalidates_fatigue(
+        self, code: SDC_IC_Bolts, assessor_fatigue: BoltActionAssessor
+    ):
+        assessor_fatigue.ref_event.temp = 2000
+        result = assessor_fatigue.computeVj(code)
+        assert result["Vj"] == INVALID_VJ
+        assert np.isnan(result["N"])
+        assert result["Note"].startswith("invalidated:")

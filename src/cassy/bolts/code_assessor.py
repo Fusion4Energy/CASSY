@@ -1,3 +1,4 @@
+import logging
 import re
 from math import pi
 
@@ -5,9 +6,15 @@ import numpy as np
 import pandas as pd
 
 from cassy.auxiliary import trace
+from cassy.auxiliary.custom_errors import OutOfBoundsError
 from cassy.bolts.bolt_config import BoltReferenceEventFatigue, Event
 from cassy.bolts.geometry import BoltGeom, BoltLikeGeom
-from cassy.designcodes.codes import BoltCode, bolt_stress_name
+from cassy.designcodes.codes import (
+    INVALID_VJ,
+    BoltCode,
+    InvalidAssessment,
+    bolt_stress_name,
+)
 
 
 class TracedStresses(dict):
@@ -192,15 +199,18 @@ class BoltActionAssessor:
                     # Rounded at the MPa (compute on mm so already MPa)
                     applied = assessed[i][0]
                     allowable = assessed[i][1]
-                    # If allowable is nan, it means that there are no limits
-                    if allowable != "No limit" and not np.isnan(allowable):
-                        allowable = allowable * 1e-6  # make sure is rounded
-
-                    if allowable == "No limit" or np.isnan(allowable):
+                    note = None
+                    if isinstance(assessed, InvalidAssessment):
+                        # the rule could not be assessed, it counts as failed
+                        applied, allowable = "-", "-"
+                        res, sm, note = "FAILED", 0, assessed.message
+                    elif allowable == "No limit" or np.isnan(allowable):
+                        # If allowable is nan, it means that there are no limits
                         allowable = "No Limit"
                         res = "Assessment not required"
                         sm = None
                     else:
+                        allowable = allowable * 1e-6  # make sure is rounded
                         if applied < allowable:
                             res = "OK"
                         else:
@@ -231,6 +241,8 @@ class BoltActionAssessor:
                         "Safety Margin": sm,
                         "Damage Type": rule.damage_type,
                     }
+                    if note is not None:
+                        row["Note"] = note
                     rows.append(row)
 
         df = pd.DataFrame(rows)
@@ -263,16 +275,26 @@ class BoltActionAssessor:
         with trace.scope(event=self.ref_event.name, analysis="fatigue"):
             self._record_inputs()
             with trace.scope(rule_set="Fatigue"):
-                assessment = code.computeVj(
-                    self,
-                    self.poa.material,
-                )
+                try:
+                    assessment = code.computeVj(
+                        self,
+                        self.poa.material,
+                    )
+                except OutOfBoundsError as e:
+                    # the event counts as failed, the assessment goes on
+                    logging.warning(
+                        f"Fatigue of {self.ref_event.name} invalidated: {e}"
+                    )
+                    trace.record("fatigue", f"invalidated: {e}", kind="warning")
+                    assessment = {"N": np.nan, "Note": f"invalidated: {e}"}
+                    vj = INVALID_VJ
+                else:
+                    try:
+                        vj = self.ref_event.n_cycles / assessment["N"]
+                    except ZeroDivisionError:
+                        vj = INVALID_VJ  # infinity
                 for key, val in assessment.items():
                     trace.record(key, val, kind="result")
-            try:
-                vj = self.ref_event.n_cycles / assessment["N"]
-            except ZeroDivisionError:
-                vj = 1e5  # infinity
             trace.record("n cycles", self.ref_event.n_cycles, kind="input")
             trace.record("Vj", vj, kind="result", note="n/N")
         assessment["n"] = self.ref_event.n_cycles

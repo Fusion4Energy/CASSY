@@ -69,6 +69,8 @@ function ratioTxt(r, digits) {
 }
 // the fatigue usage is a usage factor in both modes
 const usageTxt = (u, digits) => (u > 0 && u < 1e-3 ? u.toExponential(1) : u.toFixed(digits || 3));
+// failed equation of a rule that could not be assessed (no applied stress)
+const invalid = e => e[E.VERD] === FAILED && typeof e[E.APP] !== 'number';
 const ratioCell = r => td(typeof r === 'number' ? ratioTxt(r) : '–', 'num ' + (typeof r === 'number' ? level(r) : 'na'));
 // worst result of an item or event: the equations, or the fatigue usage u when it is
 // higher (shown as such, it is a usage factor in both modes)
@@ -322,7 +324,7 @@ function buildSummary(v) {
   D.equations.filter(e => e[E.VERD] === FAILED && !e[E.SCREEN]).sort((a, b) => (b[E.RATIO] || 0) - (a[E.RATIO] || 0)).forEach(e => {
     const g = D.groups[e[E.G]];
     att.push({type: el('span', {class: 'verdict failed'}, 'FAILED'), g, what: s(g[G.EQ]),
-      value: el('span', {class: 'fail'}, ratioTxt(e[E.RATIO])), note: mpa(e[E.APP]) + ' > ' + mpa(e[E.ALW]) + ' MPa', h: groupHash(g)});
+      value: el('span', {class: 'fail'}, ratioTxt(e[E.RATIO])), note: invalid(e) ? 'invalidated: see the warnings' : mpa(e[E.APP]) + ' > ' + mpa(e[E.ALW]) + ' MPa', h: groupHash(g)});
   });
   for (const it of ITEMS.values()) for (const [pos, u] of it.usage) if (u >= 1) {
     att.push({type: el('span', {class: 'verdict failed'}, 'FATIGUE'), g: [it.id, pos, -1, sid('fatigue'), -1, -1, -1], what: 'ΣVj',
@@ -570,9 +572,9 @@ function renderItem(panel, it, ordered) {
             const e = byCol.get(i);
             if (!e) return td('', 'na');
             const g = D.groups[e[0]], sc = e[E.SCREEN] && e[E.VERD] === FAILED;
-            return el('td', {class: 'num link ' + (typeof e[E.RATIO] === 'number' && !sc ? level(e[E.RATIO]) : 'na'), style: 'cursor:pointer',
-              title: verdictText(e[E.VERD], e[E.SCREEN]) + ': ' + mpa(e[E.APP]) + ' / ' + mpa(e[E.ALW]) + ' MPa', onclick: () => go(groupHash(g))},
-            e[E.VERD] === NOT_REQUIRED ? 'n.r.' : ratioTxt(e[E.RATIO]) + (sc ? ' s' : ''));
+            return el('td', {class: 'num link ' + (invalid(e) ? 'fail' : typeof e[E.RATIO] === 'number' && !sc ? level(e[E.RATIO]) : 'na'), style: 'cursor:pointer',
+              title: verdictText(e[E.VERD], e[E.SCREEN]) + ': ' + (invalid(e) ? 'invalidated' : mpa(e[E.APP]) + ' / ' + mpa(e[E.ALW]) + ' MPa'), onclick: () => go(groupHash(g))},
+            e[E.VERD] === NOT_REQUIRED ? 'n.r.' : invalid(e) ? 'inv.' : ratioTxt(e[E.RATIO]) + (sc ? ' s' : ''));
           }), ratioCell(ev.max));
       }), {class: 'grid'}));
     }
@@ -585,7 +587,7 @@ function renderItem(panel, it, ordered) {
       })));
     }
   }
-  panel.append(el('p', {class: 'hint'}, 'n.r. = assessment not required (no limit); s = failed equation superseded by the governing equations of the sequential rule.'));
+  panel.append(el('p', {class: 'hint'}, 'n.r. = assessment not required (no limit); inv. = rule invalidated (counted as failed, see the warnings); s = failed equation superseded by the governing equations of the sequential rule.'));
 }
 function valuesTable(rows, focusRow) {
   return table(['Kind', 'Name', 'Value', 'Unit', 'Inputs', 'Source', 'Note'], rows.map(i => {

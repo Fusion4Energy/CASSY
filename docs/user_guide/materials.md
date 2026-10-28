@@ -46,6 +46,8 @@ There are attributes that are general and can be specified in each data format. 
 
 - `lower_bound`: a list of inferior bounds to delimit the range of validity of the data provided. A value for each argument needs to be provided. If there is no limit to the validity of a specific value, the keyword `null` can be used. By default, no bounds are applied. 
 - `upper_bound`: a list of upper bounds to delimit the range of validity of the data provided. A value for each argument needs to be provided. If there is no limit to the validity of a specific value, the keyword `null` can be used. By default, no bounds are applied.
+
+When a property is requested outside its bounds during an assessment, the rule (or the fatigue event) that needs it is invalidated and counted as failed, with a warning in the log and in the [trace](trace.md); the rest of the assessment goes on.
 - `scale_result`: data may be provided in differen units than the standard (e.g. Young modulus in GPa instead of Pa). This factor can be used to scale the provided data accordingly. By default equal to 1.
 - `scale_x`, `scale_y` and `scale_z`: to ensure a correct interpolation, especially on tables, it is
 better to stick with the units the data is provided. cassy will enter these interpolation functions though with standard units (e.g. Pa, rel strain, etc.) hence, before entering into the interpolation range, this arguments (x, y, z) may need to be scaled accordingly. By default equal to 1.
@@ -292,7 +294,7 @@ Fatigue:
 ### Multi-format
 
 This properties allows to specify mutiple data formats depending on the input parameter range.
-All supported property formats can be used in the "sub-properties". The code will start iterating in the different subproperties in the order they are provided. If input parameters are found to be out of the bounds of the subproperty, the next one is checked. If parameters are found to be out of all bounds, an error is thrown at runtime.
+All supported property formats can be used in the "sub-properties". The code will start iterating in the different subproperties in the order they are provided. If input parameters are found to be out of the bounds of the subproperty, the next one is checked. If parameters are found to be out of all bounds, the property cannot be computed.
 
 **Note:** *Upper and lower bounds are defined in each subproperty if needed, not in the multi one.*
 

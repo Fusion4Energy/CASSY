@@ -6,6 +6,8 @@ import pytest
 
 from cassy.additional_data import materials as mat_folder
 from cassy.auxiliary import trace
+from cassy.auxiliary.custom_errors import OutOfBoundsError
+from cassy.designcodes.codes import INVALID_VJ
 from cassy.designcodes.sdcic import (
     SDC_IC,
     IC3121_1_1_2a,
@@ -275,3 +277,39 @@ class TestSDCICPaths:
             (rule["equation"] == "Primary membrane") & (rule["kind"] == "result")
         ]
         assert set(eq1["name"]) == {"applied", "allowable", "applied/allowable"}
+
+    def test_out_of_bounds_invalidates_rule(
+        self, ref_event: ReferenceEvent, material_ss316, monkeypatch
+    ):
+        def out_of_bounds(self, *args):
+            raise OutOfBoundsError("Argument 2000 is above the upper bound 700.")
+
+        monkeypatch.setattr(IC3121_2_1, "assess", out_of_bounds)
+        ref_event.config.T = 200
+        ref_event.config.dpa = 0.0
+        tracer = trace.Tracer()
+        with trace.activate(tracer):
+            df = ref_event.assess(SDC_IC(), material_ss316)
+        # only the failing rule is invalidated, the others are assessed
+        invalid = df[df["Rule ID"] == "IC 3121.2.1"]
+        assert len(invalid) == 1
+        assert invalid["Result"].iloc[0] == "FAILED"
+        assert invalid["Safety Margin"].iloc[0] == 0
+        assert invalid["Note"].iloc[0].startswith("invalidated:")
+        others = df[df["Rule ID"] != "IC 3121.2.1"]
+        assert len(others) > 0 and others["Note"].isna().all()
+
+        rule = tracer.to_dataframe()
+        rule = rule[rule["rule"] == "IC 3121.2.1"]
+        warning = rule[rule["kind"] == "warning"]
+        assert warning["text"].iloc[0].startswith("invalidated:")
+        assert (rule["name"] == "invalidated").sum() == 1
+
+    def test_out_of_bounds_invalidates_fatigue(
+        self, ref_event: ReferenceEvent, material_ss316
+    ):
+        ref_event.config.T = 2000
+        ref_event.config.ncycles = 10
+        result = ref_event.computeVj(SDC_IC(), material_ss316)
+        assert result["Vj"] == INVALID_VJ
+        assert result["Note"].startswith("invalidated:")

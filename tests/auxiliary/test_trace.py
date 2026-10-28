@@ -155,6 +155,37 @@ def test_html_verdicts_and_index(tmp_path):
     assert "Fatigue reference events" not in index_page
 
 
+def test_html_invalidated_rule(tmp_path):
+    from types import SimpleNamespace
+
+    from cassy.auxiliary.custom_errors import OutOfBoundsError
+    from cassy.designcodes.codes import InvalidAssessment, invalidate
+
+    rule = SimpleNamespace(ref="R1", description=["eq a", "eq b"])
+    tracer = trace.Tracer()
+    with trace.activate(tracer):
+        with trace.scope(component="A", item="P1", position="begin", event="LS1"):
+            with trace.scope(analysis="immediate", rule="R1"):
+                trace.equation_terms(("s1", "a1"))
+                assessed = invalidate(rule, OutOfBoundsError("T above the bound"))
+            # the terms declared by the invalidated rule do not leak
+            assert trace.take_equation_terms() == []
+            with trace.scope(analysis="immediate", rule="R2"):
+                _equation(0.5, 1.0)
+    assert isinstance(assessed, InvalidAssessment)
+    assert list(assessed) == [(None, None), (None, None)]
+    assert assessed.message == "invalidated: T above the bound"
+
+    write_html(tracer.to_dataframe(), tmp_path)
+    payload = _embedded_payload((tmp_path / "A.html").read_text("utf-8"))
+    summ = payload["summary"]
+    assert summ["failed"]
+    assert summ["counts"]["FAILED"] == 2
+    assert summ["counts"]["OK"] == 1
+    assert summ["warnings"] == 1
+    assert summ["worst_ratio"] == pytest.approx(0.5)
+
+
 def test_duplicates_units_and_named_inputs():
     tracer = trace.Tracer()
     with trace.activate(tracer):

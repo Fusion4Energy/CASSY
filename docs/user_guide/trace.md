@@ -81,6 +81,12 @@ In particular, the trace contains:
   the efficiency index), recorded as a ``superseded`` branch;
 - the calculation warnings (``kind == "warning"``), e.g. a property out of its bounds
   or a curve not available for the material, with the assumption made;
+- the invalidated rules: when a material property is needed outside its validity bounds
+  and the rule cannot handle it, the rule is not assessed but the assessment goes on.
+  A ``warning`` with the error is recorded for the rule and an ``invalidated`` branch for
+  each of its equations, which count as FAILED (in the Excel output the rows have
+  Result ``FAILED``, Safety Margin 0 and the error in the ``Note`` column). An invalidated
+  fatigue event gets Vj = 1e5, so the cumulative usage counts as failed;
 - all fatigue intermediate values and the resulting Vj.
 
 ## Exploring the trace in Python

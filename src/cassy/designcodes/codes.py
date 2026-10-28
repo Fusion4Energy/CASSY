@@ -1,3 +1,4 @@
+import logging
 import math
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
@@ -7,7 +8,12 @@ if TYPE_CHECKING:
     from cassy.bolts.code_assessor import BoltActionAssessor
     from cassy.paths.linstress import ReferenceEvent
 from cassy.auxiliary import trace
+from cassy.auxiliary.custom_errors import OutOfBoundsError
 from cassy.general.material import Material
+
+# usage fraction assigned to a fatigue event that could not be computed (e.g. a
+# material property out of its bounds), so that it counts as failed
+INVALID_VJ = 1e5
 
 
 class Rule(ABC):
@@ -95,20 +101,52 @@ class Code:
                 # This means that this is still not a rule
                 assessments[rule_name] = {}
                 for rule_name2, rule2 in rule.items():
-                    trace.rule_damage_type(rule2.ref, self.recap_damage_type(rule2))
-                    with trace.scope(rule_set=rule_name, rule=rule2.ref):
-                        assessed = rule2.assess(combined_stress, material)
-                        _record_equations(rule2, assessed, self.APPLIED_TO_PA)
+                    assessed = self._assess_rule(
+                        rule_name, rule2, combined_stress, material
+                    )
                     assessments[rule_name][rule_name2] = (assessed, rule2)
             else:
-                trace.rule_damage_type(rule.ref, self.recap_damage_type(rule))
-                with trace.scope(rule_set=rule_name, rule=rule.ref):
-                    assessed = rule.assess(combined_stress, material)
-                    _record_equations(rule, assessed, self.APPLIED_TO_PA)
-
+                assessed = self._assess_rule(rule_name, rule, combined_stress, material)
                 assessments[rule_name] = (assessed, rule)
 
         return assessments
+
+    def _assess_rule(
+        self, rule_set: str, rule: Rule, combined_stress, material: Material
+    ) -> list | None:
+        """Assess a single rule. A material property out of its bounds invalidates
+        the rule (counted as failed) without stopping the assessment."""
+        trace.rule_damage_type(rule.ref, self.recap_damage_type(rule))
+        with trace.scope(rule_set=rule_set, rule=rule.ref):
+            try:
+                assessed = rule.assess(combined_stress, material)
+            except OutOfBoundsError as e:
+                return invalidate(rule, e)
+            _record_equations(rule, assessed, self.APPLIED_TO_PA)
+        return assessed
+
+
+class InvalidAssessment(list):
+    """Result of a rule that could not be assessed (e.g. a material property out of
+    its bounds). It has one (None, None) couple per equation and counts as failed."""
+
+    def __init__(self, n: int, message: str):
+        super().__init__([(None, None)] * n)
+        self.message = message
+
+
+def invalidate(rule: Rule, error: Exception) -> InvalidAssessment:
+    """Log and trace the invalidation of a rule, returning its invalid result."""
+    message = f"invalidated: {error}"
+    logging.warning(f"Rule {rule.ref} {message}")
+    # discard the terms declared by the rule before the error
+    trace.take_equation_terms()
+    trace.record("rule", message, kind="warning")
+    n = len(rule.description)
+    for name in _equation_names(rule.description, n):
+        with trace.scope(equation=name):
+            trace.record("invalidated", str(error), kind="branch")
+    return InvalidAssessment(n, message)
 
 
 def record_allowables(allowables: tuple, formulas: tuple | None = None) -> None:
@@ -180,7 +218,11 @@ def superseded_equations(rule: Rule, assessed: list | None) -> set[int]:
     ratio is therefore the minimum between the screening ratio and the maximum
     ratio of the following equations; the other side is superseded.
     """
-    if not getattr(rule, "sequential", False) or not assessed:
+    if (
+        not getattr(rule, "sequential", False)
+        or not assessed
+        or isinstance(assessed, InvalidAssessment)
+    ):
         return set()
     following = [
         i

@@ -28,6 +28,8 @@ RATIO = "applied/allowable"
 FATIGUE_NAMES = ("N", "n cycles", "Vj")
 # "screening" is the name used by older traces
 SUPERSEDED_NAMES = ("superseded", "screening")
+# branch recorded in the equations of a rule that could not be assessed
+INVALIDATED = "invalidated"
 MAX_ROWS = 500
 WARN_RATIO = 0.9
 # three.js of the 3D location map, loaded from a CDN (the rest of the report works
@@ -124,6 +126,8 @@ def _payload(df: pd.DataFrame, damage_types: dict | None = None) -> dict:
             equations.setdefault(g, {})[name] = number
         elif scope[6] >= 0 and kind == "branch" and name in SUPERSEDED_NAMES:
             equations.setdefault(g, {})["superseded"] = True
+        elif scope[6] >= 0 and kind == "branch" and name == INVALIDATED:
+            equations.setdefault(g, {})["invalidated"] = True
         if rec[3] == "fatigue" and name in FATIGUE_NAMES and number is not None:
             fatigue.setdefault(scope[:4], {})[name] = number
 
@@ -132,6 +136,10 @@ def _payload(df: pd.DataFrame, damage_types: dict | None = None) -> dict:
 
     eq_rows = []
     for g, e in equations.items():
+        if e.get("invalidated"):
+            # rule not assessable (e.g. material property out of bounds): failed
+            eq_rows.append([g, None, None, None, FAILED, 0])
+            continue
         if "applied" not in e:
             continue
         applied, allowable = e["applied"], e.get("allowable")
