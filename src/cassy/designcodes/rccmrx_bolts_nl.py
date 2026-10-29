@@ -126,9 +126,7 @@ class RCCMRx_Bolts(BoltCode):
             )
             if material.N.mean_stress:
                 SA = ds_tot / 2
-                s_tens_sust = boltAction.sigma_tensile
-                ds_tens = boltAction.applicable_stresses["all"]["Primary stress"]
-                s_pre = s_tens_sust + ds_tens
+                s_pre = boltAction.sigma_tensile
                 # Sigma pre is used as max mean stress
                 N = material.N(ref_event.temp, SA * 1e-6, s_pre)  # MPa
             else:

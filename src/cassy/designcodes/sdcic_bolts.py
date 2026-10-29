@@ -78,11 +78,10 @@ class SDC_IC_Bolts(BoltCode):
         ruleID = "IC 6131.2.1"
         ref_event = boltAction.ref_event
         T_dpa = (ref_event.temp, ref_event.dpa)
-        # In a bolt action for fatigue, the primary stress are to be used for
-        # sigma pre and the all loads for the stress intensity range
+        # In a bolt action for fatigue, the sustained tensor is used for
+        # sigma pre and the delta actions for the stress intensity range
         s_tens_sust = boltAction.sigma_tensile
-        ds_tens = boltAction.applicable_stresses["all"]["Primary stress"]
-        s_pre = (s_tens_sust + ds_tens) * 1e6  # Pa
+        s_pre = s_tens_sust * 1e6  # Pa
         trace.record("sigma tensile sustained", s_tens_sust, kind="stress", unit="MPa")
         trace.record("KF", boltAction.poa.KF, kind="factor")
 

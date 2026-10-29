@@ -204,6 +204,20 @@ class TestSDC_IC_Bolts:
         )
         assert pytest.approx(result["N"], rel=1e-2) == 3123333
 
+    def test_computeVj_sigma_pre(
+        self,
+        code: SDC_IC_Bolts,
+        assessor_fatigue: BoltActionAssessor,
+        material: Material,
+    ):
+        # sigma pre is the axial stress of the sustained tensor only: it must
+        # not depend on the delta actions nor sum the range stress to itself
+        sustained = assessor_fatigue.applicable_stresses["primary"]["Primary stress"]
+        delta = assessor_fatigue.applicable_stresses["all"]["Primary stress"]
+        assert sustained != pytest.approx(delta, rel=1e-2)
+        result = code.computeVj(assessor_fatigue, material)
+        assert result["sigma pre"] == pytest.approx(sustained)
+
     def test_computeVj_neuber(self, code: SDC_IC_Bolts, assessor_fatigue):
         # a material with a cyclic stress-strain curve goes through the Neuber branch
         with as_file(

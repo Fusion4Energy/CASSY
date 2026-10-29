@@ -326,7 +326,9 @@ class BoltActionAssessor:
         N = actions["N"]
         # mean tensile stress [N/mm^2 = MPa]
         sigma_N = N / bolt.An
-        if group == "all":
+        if group == "primary":
+            # In fatigue events the "primary" group holds the sustained tensor
+            # (preload included), which is what sigma pre is computed on
             self.sigma_tensile = sigma_N
         # shear stress in the threads [N/mm^2 = MPa]
         tth_N = 2 * (N) / (pi * bolt.df * bolt.Le_shear)
