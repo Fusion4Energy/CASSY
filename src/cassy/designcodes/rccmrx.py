@@ -73,9 +73,6 @@ class RCC_MRx(Code):
         de3 = material.Keps(T_ds) * math.sqrt(de1 * (de1 + de2)) - de2 - de1
         de4 = de1 * (material.Kmu(T_ds) - 1)
         detot = de1 + de2 + de3 + de4
-        # the fatigue curve of the welded joint is obatined dividing the
-        # ordinates (epsilon) by f factor
-        detot = detot / f
         # total allowable cycles calculation
         if material.N.ftype == "strain":
             N_all = material.N((T, detot))

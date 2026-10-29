@@ -82,11 +82,10 @@ class SDC_IC(Code):
             de3 = (de1 + de2) * (material.Keps(T_ds) - 1)
             de4 = de1 * (material.Kmu(T_ds) - 1)
             detot = de1 + de2 + de3 + de4
-            # the fatigue curve of the welded joint is obatined dividing the
-            # ordinates (epsilon) by f factor
-            detot = detot / f
+            # f is already applied once through ds (IC 3132.3.1 welded joints),
+            # the base metal fatigue curve is used
             trace.record(
-                "de tot", detot, kind="value", note="(de1 + de2 + de3 + de4) / f"
+                "de tot", detot, kind="value", note="de1 + de2 + de3 + de4"
             )
             N_all = material.N((T, detot))
 
