@@ -57,8 +57,8 @@ class RCCMRx_Bolts(BoltCode):
         Returns
         -------
         dict
-            dictionary containing: sigma bar, epsilon bar, N, Rule ID,
-            epsilon plasticity, signa_pre, epsilon N, sigma N.
+            dictionary containing: de1, de2, de3, de4, N, Rule ID, sigma tot,
+            de tot.
         """
         ruleID = "RB 3261.112"
         ref_event = boltAction.ref_event

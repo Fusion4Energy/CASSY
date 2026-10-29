@@ -73,7 +73,7 @@ class SDC_IC_Bolts(BoltCode):
         -------
         dict
             Dictionary containing: sigma bar, epsilon bar, N, Rule ID,
-            epsilon plasticity, sigma_pre, epsilon N, sigma N.
+            sigma plasticity, sigma pre, epsilon N, sigma N.
         """
         ruleID = "IC 6131.2.1"
         ref_event = boltAction.ref_event
@@ -104,7 +104,6 @@ class SDC_IC_Bolts(BoltCode):
             # Correction implemented in case true stress-strain curve is not
             # available
             ds = boltAction.poa.KF * ds_n
-            de = "-"
             trace.record("plasticity correction", "KF * ds_n", kind="branch")
 
         # --- Correction for mean stress (IC 6131.2.1.3) ---
@@ -153,7 +152,6 @@ class SDC_IC_Bolts(BoltCode):
             "epsilon bar": de_bar,
             "N": float(N),
             "Rule ID": ruleID,
-            "epsilon plasticity": de,
             "sigma plasticity": ds * 1e-6,  # convert to MPa
             "sigma pre": s_pre * 1e-6,  # convert to MPa
             "epsilon N": de_n,

@@ -204,6 +204,17 @@ class TestSDC_IC_Bolts:
         )
         assert pytest.approx(result["N"], rel=1e-2) == 3123333
 
+    def test_computeVj_neuber(self, code: SDC_IC_Bolts, assessor_fatigue):
+        # a material with a cyclic stress-strain curve goes through the Neuber branch
+        with as_file(
+            files(mat_folder).joinpath("SS316L(N)-IG_SDC-IC.yaml")
+        ) as path:
+            ss316 = Material(path)
+        result = code.computeVj(assessor_fatigue, ss316)
+        assert result["N"] > 0
+        assert "epsilon plasticity" not in result
+        assert result["sigma plasticity"] > 0
+
     def test_out_of_bounds_invalidates_rule(
         self, code: SDC_IC_Bolts, assessor: BoltActionAssessor
     ):
