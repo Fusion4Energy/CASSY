@@ -274,8 +274,8 @@ class RB3284_1113:
         elif service_lvl == "D":
             if material.Su_min(T_dpa) <= 700e6:
                 allowable1 = "No limit"
-                allowable2 = 1.5 * allowable1
-                formulas = ("No limit", "1.5 * allowable 1")
+                allowable2 = "No limit"
+                formulas = ("No limit", "No limit")
             else:
                 allowable1 = "No limit"
                 allowable2 = 3 * material.Smb(T_dpa)
