@@ -6,6 +6,7 @@ cassy is shipped with a default library of such materials. The same material may
 
 List of available materials:
 
+- SS316L_SDC-IC
 - SS316L(N)-IG_SDC-IC
 - SS316L(N)-IG_RCC-MRx
 - CuCrZr-IG Tr A SDC-IC

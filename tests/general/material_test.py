@@ -204,6 +204,35 @@ def test_CuCrZr_Tr_C_SDC_IC():
     # assert material.Su_min(300, 1) == 994e6
 
 
+def test_SS316L_SDC_IC():
+    with as_file(MAT_FOLDER.joinpath("SS316L_SDC-IC.yaml")) as mat_path:
+        material = Material(mat_path)
+
+    assert pytest.approx(material.E(200, 0), rel=5e-3) == 185e9
+    assert material.Sy_min(250, 0) == 127e6
+    # Sy,av = 1.28 Sy,min (A.S02.3.2)
+    assert pytest.approx(material.Sy_moy(20, 0)) == 1.28 * 190e6
+    assert material.Su_min(450, 0) == 370e6
+    assert material.Sm(200, 0) == 123e6
+    assert material.Keps(400, 500e6) == 1.37
+    # fatigue curve of 316L(N)-IG (A.S02.5.6)
+    assert pytest.approx(material.N(20, 0.399e-2)) == 1e4
+    # Table A.S02.3.1-1, strain in %
+    assert (
+        pytest.approx(material.monotonic_min_stress_strain(110.3e6, 400, 0))
+        == 0.30131e-2
+    )
+    # no irradiation data in A.S02
+    with pytest.raises(OutOfBoundsError):
+        material.Sm(200, 0.5)
+    # Keff_rec (to be computed with A.GEN.5.3), Se and Sd are not supplied
+    with pytest.raises(MissingPropertyError):
+        material.Keff_rec(100, 0)
+    with pytest.raises(MissingPropertyError):
+        material.Se(100, 0)
+    assert material.type == "austenitic"
+
+
 def test_SS316LNIG_RCCMRx():
     with as_file(MAT_FOLDER.joinpath("SS316L(N)-IG_RCC-MRx.yaml")) as mat_path:
         material = Material(mat_path)
