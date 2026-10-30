@@ -112,7 +112,7 @@ properties:
     scale_y: 1e2 # to from relative to percent
     values:
       T: [20, 600] # degrees Celsius
-      N_cycles: [10, 30, 100, 300, 1000, 3000, 1e4, 3e4, 1e5, 3e5, 1e6, 1e8] # DPA
+      N_cycles: [10, 30, 100, 300, 1000, 3000, 1e4, 3e4, 1e5, 3e5, 1e6] # N cycles
       y: [
           [1.042, 1.042],
           [0.7882, 0.7882],
@@ -125,5 +125,4 @@ properties:
           [0.1915, 0.1915],
           [0.1678, 0.1678],
           [0.1452, 0.1452],
-          [0, 0]
         ] # in %

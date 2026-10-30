@@ -1,6 +1,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Set as AbstractSet
 from enum import Enum
 
 import numpy as np
@@ -20,6 +21,39 @@ from cassy.auxiliary.types import PathLike
 
 MATH_SUBSTITUTIONS = {"EXP": np.exp, "SQRT": np.sqrt, "^": "**"}
 
+# keys accepted by all property formats that do not compute their own bounds
+COMMON_KEYS = frozenset({"type", "lower_bound", "upper_bound", "scale_result"})
+
+
+def _check_keys(data: dict, allowed: AbstractSet[str], where: str) -> None:
+    """Raise a ConfigError if data contains keys that would be silently ignored,
+    typically a wrong indentation in the YAML file (e.g. scale_result under values).
+    """
+    unknown = set(data) - allowed
+    if unknown:
+        raise ConfigError(
+            f"Unknown key(s) {sorted(unknown)} in {where}. Allowed keys: "
+            f"{sorted(allowed)}. Check the indentation of the material file."
+        )
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """SafeLoader raising a ConfigError on duplicate keys, which PyYAML would
+    otherwise silently overwrite with the last one."""
+
+    def construct_mapping(self, node, deep=False):
+        keys = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in keys:
+                mark = key_node.start_mark
+                raise ConfigError(
+                    f"Duplicate key '{key}' in {mark.name}, line {mark.line + 1}. "
+                    "Check the indentation of the material file."
+                )
+            keys.add(key)
+        return super().construct_mapping(node, deep=deep)
+
 
 class PropertyType(Enum):
     CONSTANT = "constant"
@@ -33,6 +67,9 @@ class PropertyType(Enum):
 
 
 class Property(ABC):
+    # keys of the property data dictionary, any other key raises a ConfigError
+    ALLOWED_KEYS: frozenset[str] = COMMON_KEYS
+
     def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the Property with a dictionary.
@@ -48,6 +85,9 @@ class Property(ABC):
         """
         if "type" not in data:
             raise ConfigError("Property 'type' is missing in the data dictionary.")
+        _check_keys(
+            data, self.ALLOWED_KEYS, f"property '{name}' of material {material_name}"
+        )
         self.type = PropertyType(data["type"])
 
         self.lower_bound = data.get("lower_bound", None)
@@ -131,6 +171,9 @@ class NotImplementedProperty(Property):
 
 
 class Table1DProperty(Property):
+    # bounds are computed from the table
+    ALLOWED_KEYS = frozenset({"type", "scale_result", "values"})
+
     def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the Table1DProperty with a table of values.
@@ -145,6 +188,11 @@ class Table1DProperty(Property):
             Name of the material this property belongs to.
         """
         super().__init__(data, name, material_name)
+        _check_keys(
+            data["values"],
+            {"x", "y"},
+            f"values of property '{name}' of {material_name}",
+        )
         self.x = data["values"]["x"]
         self.y = data["values"]["y"]
         # override the lower and upper bounds
@@ -167,6 +215,9 @@ class Table1DProperty(Property):
 
 
 class Table2DProperty(Property):
+    # bounds are computed from the table
+    ALLOWED_KEYS = frozenset({"type", "scale_result", "scale_x", "scale_y", "values"})
+
     def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the Table2DProperty with a table of values.
@@ -181,6 +232,11 @@ class Table2DProperty(Property):
             Name of the material this property belongs to.
         """
         super().__init__(data, name, material_name)
+        _check_keys(
+            data["values"],
+            {"x", "y", "vals"},
+            f"values of property '{name}' of {material_name}",
+        )
         # Ensure that x and y are read as floats using np arrays
         self.x = np.array(data["values"]["x"], dtype=float)
         self.y = np.array(data["values"]["y"], dtype=float)
@@ -225,6 +281,19 @@ class Table2DProperty(Property):
 
 
 class Table3DProperty(Property):
+    # bounds are computed from the table
+    ALLOWED_KEYS = frozenset(
+        {
+            "type",
+            "scale_result",
+            "scale_x",
+            "scale_y",
+            "scale_z",
+            "columns",
+            "values",
+        }
+    )
+
     def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the Table3DProperty with a table of values.
@@ -293,6 +362,21 @@ class Table3DProperty(Property):
 
 
 class Fatigue(Property):
+    # bounds are computed from the table
+    ALLOWED_KEYS = frozenset(
+        {
+            "type",
+            "scale_result",
+            "scale_x",
+            "scale_y",
+            "ftype",
+            "mean_stress",
+            "rccmrx_inconel",
+            "values",
+            "tables",
+        }
+    )
+
     def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the Fatigue property with a table of values.
@@ -320,6 +404,11 @@ class Fatigue(Property):
 
         interpolators = {}
         for mean_stress, table in tables.items():
+            _check_keys(
+                table,
+                {"T", "N_cycles", "y"},
+                f"table {mean_stress} of property '{name}' of {material_name}",
+            )
             T = np.array(table["T"], dtype=float)
             N_cycles_or = np.array(table["N_cycles"], dtype=float)
 
@@ -477,6 +566,8 @@ class FatigueInconelRCCMRx(Fatigue):
 
 
 class PolynomialProperty(Property):
+    ALLOWED_KEYS = COMMON_KEYS | {"coefficients"}
+
     def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the PolynomialProperty with coefficients.
@@ -513,6 +604,8 @@ class PolynomialProperty(Property):
 
 
 class ConstantProperty(Property):
+    ALLOWED_KEYS = COMMON_KEYS | {"value"}
+
     def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the ConstantProperty with a constant value.
@@ -537,6 +630,8 @@ class ConstantProperty(Property):
 
 
 class EquationProperty(Property):
+    ALLOWED_KEYS = COMMON_KEYS | {"equation", "args"}
+
     def __init__(self, data: dict, name: str, material_name: str) -> None:
         """
         Initialize the EquationProperty with an equation function.
@@ -570,6 +665,8 @@ class EquationProperty(Property):
 
 
 class MultiProperty(Property):
+    ALLOWED_KEYS = COMMON_KEYS | {"ranges"}
+
     def __init__(
         self, property_dictionary: dict, property_name: str, material_name: str
     ) -> None:
@@ -585,10 +682,14 @@ class MultiProperty(Property):
         """
         data = property_dictionary[property_name]
         super().__init__(data, property_name, material_name)
-        self.ranges = [
-            PropertyFactory.create_property({"A": prop}, "A", material_name)
-            for prop in data["ranges"]
-        ]
+        self.ranges = []
+        for i, prop in enumerate(data["ranges"]):
+            range_name = f"{property_name} (range {i + 1})"
+            self.ranges.append(
+                PropertyFactory.create_property(
+                    {range_name: prop}, range_name, material_name
+                )
+            )
 
         # go trough the ranges and find the maximum bounds
         for prop in self.ranges:
@@ -688,7 +789,7 @@ class Material:
         else:
             self.name = name
         with open(config_file) as file:
-            config = yaml.safe_load(file)
+            config = yaml.load(file, Loader=_UniqueKeyLoader)
 
         # Mandatory properties
         data = config["properties"]

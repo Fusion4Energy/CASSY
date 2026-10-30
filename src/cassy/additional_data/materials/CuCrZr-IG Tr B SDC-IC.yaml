@@ -43,7 +43,6 @@ properties:
                  [341, 341],
                  [280, 280],
                  [218, 218]]
-        args: ["T", "DPA"] # in Celsius
         scale_result: 1e6 # to convert MPa to Pa
   Min Tensile Strength:
     type: multi
@@ -65,7 +64,6 @@ properties:
                  [216, 216],
                  [193, 193],
                  [167, 167]]
-        args: ["T", "DPA"] # in Celsius
         scale_result: 1e6 # to convert MPa to Pa
       # Irradiated
       - type: table2D
@@ -78,7 +76,6 @@ properties:
                  [356, 356],
                  [313, 313],
                  [270, 270]]
-        args: ["T", "DPA"] # in Celsius
         scale_result: 1e6 # to convert MPa to Pa
   Sm: 
     type: multi
@@ -99,7 +96,6 @@ properties:
                  [80, 80],
                  [71, 71],
                  [62, 62]]
-        args: ["T", "DPA"] # in Celsius
         scale_result: 1e6 # to convert MPa to Pa
       # Irradiated
       - type: table2D
@@ -113,7 +109,6 @@ properties:
                  [110, 110],
                  [103, 103],
                  [96, 96]]
-        args: ["T", "DPA"] # in Celsius
         scale_result: 1e6 # to convert MPa to Pa
   Keff_rec:
     type: table2D

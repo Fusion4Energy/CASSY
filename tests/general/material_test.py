@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 from cassy.additional_data import materials
-from cassy.auxiliary.custom_errors import OutOfBoundsError
-from cassy.general.material import Material, read_materials
+from cassy.auxiliary.custom_errors import ConfigError, OutOfBoundsError
+from cassy.general.material import Material, PropertyFactory, read_materials
 from tests.general import res
 
 MAT_FOLDER = files(materials)
@@ -137,6 +137,9 @@ def test_SS316LNIG_RCCMRx():
         material = Material(mat_path)
 
     assert pytest.approx(material.E(550, 1), rel=5e-3) == 155e9
+    # irradiated tables
+    assert material.Sy_min(300, 7) == 765e6
+    assert material.Su_min(400, 12) == 665e6
 
 
 def test_S660_SDC_IC():
@@ -165,6 +168,9 @@ def test_S660_RCCMRx():
     assert (
         pytest.approx(material.cyclic_stress_strain(600, 3000e6), rel=2e-3) == 2.86e-2
     )
+    # below the last row of the fatigue curve the allowable is its last N
+    assert pytest.approx(material.N(20, 0.1452e-2), rel=1e-3) == 1e6
+    assert material.N(20, 0.1e-2) == 1e6
 
 
 def test_XM19_SDC_IC():
@@ -197,3 +203,54 @@ def test_Inconel_RCCMRx():
 
 def test_read_materials():
     read_materials(MAT_FOLDER)
+
+
+TABLE2D = {
+    "type": "table2D",
+    "values": {"x": [20, 100], "y": [0, 1], "vals": [[1, 1], [2, 2]]},
+}
+FATIGUE_TABLE = {"T": [20, 100], "N_cycles": [10, 100], "y": [[2, 2], [1, 1]]}
+
+
+@pytest.mark.parametrize(
+    "prop",
+    [
+        # scale_result indented under values: it would be silently ignored
+        {**TABLE2D, "values": {**TABLE2D["values"], "scale_result": 1e6}},
+        # typo at the property level
+        {**TABLE2D, "scale_reslt": 1e6},
+        # bounds of tables are computed from the table itself
+        {**TABLE2D, "lower_bound": [0, 0]},
+        {"type": "constant", "value": 1, "scale_y": 1},
+        {
+            "type": "fatigue",
+            "ftype": "stress",
+            "values": {**FATIGUE_TABLE, "scale_y": 1},
+        },
+        {
+            "type": "fatigue",
+            "ftype": "stress",
+            "mean_stress": True,
+            "tables": {690: {**FATIGUE_TABLE, "scale_y": 1}},
+        },
+        # sub-ranges of a multi property are checked too
+        {"type": "multi", "ranges": [{**TABLE2D, "args": ["T", "DPA"]}]},
+    ],
+)
+def test_unknown_keys_raise(prop):
+    with pytest.raises(ConfigError, match="Unknown key"):
+        PropertyFactory.create_property({"Sm": prop}, "Sm", "test")
+
+
+def test_duplicate_keys_raise(tmp_path):
+    # PyYAML would silently keep the last of the duplicated keys
+    config = tmp_path / "duplicated.yaml"
+    config.write_text(
+        "properties:\n"
+        "  Poisson Ratio:\n"
+        "    type: constant\n"
+        "    value: 0.3\n"
+        "    value: 0.4\n"
+    )
+    with pytest.raises(ConfigError, match="Duplicate key 'value'.*line 5"):
+        Material(config)

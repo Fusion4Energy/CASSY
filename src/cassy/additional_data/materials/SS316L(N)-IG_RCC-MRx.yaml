@@ -139,7 +139,7 @@ properties:
             [116, 390, 600, 600],
             [112, 214, 293, 340]
           ]
-          scale_result: 1e6 # to convert MPa to Pa
+        scale_result: 1e6 # to convert MPa to Pa
   Min Tensile Strength:
     type: multi
     ranges:
@@ -162,4 +162,4 @@ properties:
             [400, 552, 665, 665],
             [398, 399, 400, 400]
           ]
-          scale_result: 1e6 # to convert MPa to Pa
+        scale_result: 1e6 # to convert MPa to Pa

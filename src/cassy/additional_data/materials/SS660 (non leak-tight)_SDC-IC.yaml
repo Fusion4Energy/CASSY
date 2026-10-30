@@ -61,9 +61,6 @@ properties:
     type: table2D
     scale_result: 1e6 # to convert MPa to Pa
     values:
-      type: table2D
-    scale_result: 1e6 # to convert MPa to Pa
-    values:
       x: [20, 100, 200, 300, 400, 500] # degrees Celsius
       y: [0, 100] # DPA
       vals: [
