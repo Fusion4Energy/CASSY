@@ -320,18 +320,17 @@ class Fatigue(Property):
 
         interpolators = {}
         for mean_stress, table in tables.items():
-            # Add a point for eps 0 and one for eps>max
             T = np.array(table["T"], dtype=float)
             N_cycles_or = np.array(table["N_cycles"], dtype=float)
 
             matrix_original = table["y"]
 
-            # add extrapolation to the table
-            matrix = [matrix_original[0]]
-            matrix.extend(matrix_original)
+            # Add a point at eps 0 with the last N, so that below the curve the
+            # allowable is the last N of the table. Above the first row the
+            # interpolation is not defined (see _interpolate).
+            matrix = list(matrix_original)
             matrix.append([0] * len(matrix_original[0]))
-            N_cycles = [0]
-            N_cycles.extend(N_cycles_or.tolist())
+            N_cycles = N_cycles_or.tolist()
             N_cycles.append(max(N_cycles))
 
             N_cycles = np.array(N_cycles, dtype=float)
@@ -404,7 +403,18 @@ class Fatigue(Property):
                 )
                 interpolator = interpolator_s
 
-        return interpolator(x * self.scale_x, y * self.scale_y)
+        return self._interpolate(interpolator, x, y)
+
+    def _interpolate(self, interpolator: LinearNDInterpolator, x: float, y: float):
+        """Interpolate the number of cycles, raising an OutOfBoundsError if the
+        stress/strain is above the curve (the interpolator would return NaN)."""
+        res = interpolator(x * self.scale_x, y * self.scale_y)
+        if np.any(np.isnan(res)):
+            raise OutOfBoundsError(
+                f"{self.ftype.capitalize()} {y} at T={x} is above the fatigue curve."
+                f" Property: {self.name}, Material: {self.material_name}"
+            )
+        return res
 
 
 class FatigueInconelRCCMRx(Fatigue):
@@ -463,7 +473,7 @@ class FatigueInconelRCCMRx(Fatigue):
             )
         interpolator = self.interpolators[curve]
 
-        return interpolator(x * self.scale_x, y * self.scale_y)
+        return self._interpolate(interpolator, x, y)
 
 
 class PolynomialProperty(Property):

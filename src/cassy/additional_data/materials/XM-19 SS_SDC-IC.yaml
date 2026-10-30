@@ -48,7 +48,7 @@ properties:
         [526, 526],
         [513, 513]
       ]
-      scale_result: 1e6 # to convert MPa to Pa
+    scale_result: 1e6 # to convert MPa to Pa
   #
   Sm:
     type: table2D
@@ -91,7 +91,7 @@ properties:
   Monotonic Min True Stress Strain:
     type: table3D
     scale_x: 1e-6 # to convert from Pa to MPa for entering the table
-    scale_result: 1e-2 # to convert from percent to relative
+    # strain is already relative in Table A.S05.3.1-1, no scale_result
     columns: ['val', 'x', 'y', 'z']
     values: [
       # --- 0 DPA ---
@@ -134,7 +134,7 @@ properties:
       [9.911E-02, 450, 400, 0], [1.282E-01, 500, 400, 0], [1.618E-01, 550, 400, 0],
       [2.002E-01, 600, 400, 0], [2.435E-01, 650, 400, 0], [2.920E-01, 700, 400, 0],
 
-      # --- 1000 DPA ---
+      # --- 100 DPA ---
       # 20°C Column
       [0.000E+00, 0, 20, 100], [2.564E-04, 50, 20, 100], [5.129E-04, 100, 20, 100],
       [7.708E-04, 150, 20, 100], [1.040E-03, 200, 20, 100], [1.361E-03, 250, 20, 100],

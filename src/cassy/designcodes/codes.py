@@ -19,6 +19,16 @@ INVALID_VJ = 1e5
 INVALIDATING_ERRORS = (OutOfBoundsError, MissingPropertyError)
 
 
+def invalidate_nan_vj(vj: float, event_name: str) -> float:
+    """Return INVALID_VJ if the usage fraction is NaN, so that a fatigue event that
+    could not be computed counts as failed instead of being skipped in the sum."""
+    if not math.isnan(vj):
+        return vj
+    logging.warning(f"Fatigue of {event_name} invalidated: usage fraction is NaN")
+    trace.record("fatigue", "invalidated: usage fraction is NaN", kind="warning")
+    return INVALID_VJ
+
+
 class Rule(ABC):
     def __init__(self):
         self.ref = None

@@ -14,6 +14,7 @@ from cassy.designcodes.codes import (
     BoltCode,
     InvalidAssessment,
     bolt_stress_name,
+    invalidate_nan_vj,
 )
 
 
@@ -287,7 +288,10 @@ class BoltActionAssessor:
                     vj = INVALID_VJ
                 else:
                     try:
-                        vj = self.ref_event.n_cycles / assessment["N"]
+                        vj = invalidate_nan_vj(
+                            self.ref_event.n_cycles / assessment["N"],
+                            self.ref_event.name,
+                        )
                     except ZeroDivisionError:
                         vj = INVALID_VJ  # infinity
                 for key, val in assessment.items():

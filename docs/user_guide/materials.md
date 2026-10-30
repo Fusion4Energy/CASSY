@@ -50,7 +50,7 @@ There are attributes that are general and can be specified in each data format. 
 When a property is requested outside its bounds during an assessment, the rule (or the fatigue event) that needs it is invalidated and counted as failed, with a warning in the log and in the [trace](trace.md); the rest of the assessment goes on.
 - `scale_result`: data may be provided in differen units than the standard (e.g. Young modulus in GPa instead of Pa). This factor can be used to scale the provided data accordingly. By default equal to 1.
 - `scale_x`, `scale_y` and `scale_z`: to ensure a correct interpolation, especially on tables, it is
-better to stick with the units the data is provided. cassy will enter these interpolation functions though with standard units (e.g. Pa, rel strain, etc.) hence, before entering into the interpolation range, this arguments (x, y, z) may need to be scaled accordingly. By default equal to 1.
+better to stick with the units the data is provided. cassy will enter these interpolation functions though with standard units (e.g. Pa, rel strain, etc.) hence, before entering into the interpolation range, this arguments (x, y, z) may need to be scaled accordingly. By default equal to 1. The only exception are stress based [fatigue](#fatigue) curves, which cassy enters in MPa.
 
 This is an example of a general property would look like:
 
@@ -235,14 +235,21 @@ Curves to retrieve the allow the allowable number of cycles in fatigue assessmen
 **mandatory attributes:**
 
 - `ftype`: either "strain" or "stress" depending if the numnber of cycles is given as a function of stress or strain range.
-- `T` temperature vector of the table in Celsius.
-- `N_cycles` number of cycles vector of the table.
-- `y`: here either the strain or stress values will be placed. It is matrix where each point is evaluated at the correspondent T and N cycle. One row for each temperature.
+- `values`: the table, made of:
+  - `T` temperature vector of the table in Celsius.
+  - `N_cycles` number of cycles vector of the table.
+  - `y`: here either the strain or stress values will be placed. It is matrix where each point is evaluated at the correspondent T and N cycle. One row for each value of `N_cycles`, one column for each temperature.
 
 **optional attributes:**
 
+- `scale_y`: scale applied to the strain or stress before entering the table. cassy enters the table with:
+  - strain based curves: the total strain range as relative strain. Use `scale_y: 1e2` if the table is in %.
+  - stress based curves: the stress amplitude in **MPa** (not Pa, unlike all other properties). Tables in MPa need `scale_y: 1`.
 - `mean_stress`: either true or false. If true and the fatigue is stress based, it means that a table is provided for different values of mean stress during the cycle. Default is false. Mean stress must be expressed in MPa. Goodman correction is skipped in this case.
-- `tables`: if `mean_stress` is true, then the different tables should be listed under `tables` using the mean stress value as key. See examples.
+- `tables`: if `mean_stress` is true, then the different tables should be listed under `tables` (in place of `values`) using the mean stress value as key. The first table whose key is greater than or equal to the mean stress is used; above the largest key the last table is used, with a warning. See examples.
+- `rccmrx_inconel`: if true, the curves are the RCC-MRx Inconel 718 ones, functions of Sm and Smb. Two tables `Curve1` and `Curve2` are expected under `tables` (together with `mean_stress: true`): `Curve1` is used when the total stress range is below 2.7 Sm or 2.7 Smb, `Curve2` when it is below 3 Sm or 3 Smb. Above that, the number of cycles is not computed.
+
+The table does not need boundary rows: cassy adds a strain/stress equal to 0 at the last N of the table, hence below the last row the allowable number of cycles is the last one of the table. Above the first row the number of cycles cannot be computed: as for any property out of its bounds, the fatigue event is invalidated and counted as failed.
 
 **examples**:
 

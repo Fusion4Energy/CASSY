@@ -13,8 +13,6 @@ from cassy.designcodes.codes import (
 )
 from cassy.general.material import Material
 from cassy.general.material import FatigueInconelRCCMRx
-from cassy.auxiliary.custom_errors import OutOfBoundsError
-import numpy as np
 
 ASSESSMENTS = {
     "core": "Rules for the screw core",
@@ -99,20 +97,17 @@ class RCCMRx_Bolts(BoltCode):
 
         if material.N.ftype == "strain":
             if isinstance(material.N, FatigueInconelRCCMRx):
-                try:
-                    N = material.N(
-                        (
-                            ref_event.temp,
-                            detot,
-                            material.Sm((ref_event.temp, ref_event.dpa)),
-                            material.Smb((ref_event.temp, ref_event.dpa)),
-                            ds_n,
-                        )
+                # an OutOfBoundsError invalidates the fatigue event (counted as
+                # failed by the assessor)
+                N = material.N(
+                    (
+                        ref_event.temp,
+                        detot,
+                        material.Sm((ref_event.temp, ref_event.dpa)),
+                        material.Smb((ref_event.temp, ref_event.dpa)),
+                        ds_n,
                     )
-                except OutOfBoundsError as e:
-                    logging.warning(str(e))
-                    trace.record("N", f"not computed: {e}", kind="warning")
-                    N = np.nan
+                )
             else:
                 N = material.N((ref_event.temp, detot))
         elif material.N.ftype == "stress":

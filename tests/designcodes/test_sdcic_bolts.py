@@ -93,6 +93,11 @@ def assessor(material):
 
 @pytest.fixture
 def assessor_fatigue(material):
+    return _fatigue_assessor(material)
+
+
+def _fatigue_assessor(material: Material, scale: float = 1) -> BoltActionAssessor:
+    """Fatigue assessor; scale multiplies the delta (secondary) actions."""
     bolt_geom = _bolt_geom(material)
 
     primary = pd.Series(
@@ -115,6 +120,7 @@ def assessor_fatigue(material):
             "Mz": 0.9629,
         }
     )
+    secondary = secondary * scale
     ref_event = BoltReferenceEventFatigue(
         "test",
         "op",
@@ -263,3 +269,19 @@ class TestSDC_IC_Bolts:
         assert result["Vj"] == INVALID_VJ
         assert np.isnan(result["N"])
         assert result["Note"].startswith("invalidated:")
+
+    def test_above_fatigue_curve_invalidates_fatigue(
+        self, code: SDC_IC_Bolts, material: Material
+    ):
+        # a stress amplitude above the fatigue curve must fail the event, not
+        # return a NaN usage fraction that would be skipped in the total
+        result = _fatigue_assessor(material, scale=200).computeVj(code)
+        assert result["Vj"] == INVALID_VJ
+        assert "above the fatigue curve" in result["Note"]
+
+    def test_nan_N_invalidates_fatigue(
+        self, code: SDC_IC_Bolts, assessor_fatigue: BoltActionAssessor, monkeypatch
+    ):
+        monkeypatch.setattr(code, "computeVj", lambda *args: {"N": np.nan})
+        result = assessor_fatigue.computeVj(code)
+        assert result["Vj"] == INVALID_VJ

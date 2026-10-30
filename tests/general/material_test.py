@@ -97,6 +97,9 @@ def test_Inconel_SDC_IC():
     assert material.Smb(300, 1) == 368e6
     assert material.N(300, 220, 500) > 5e5
     assert material.N(300, 103, 1000) == 2e6
+    # curve C (mean stress < 930 MPa), Table A.B01.5.6-1
+    assert pytest.approx(material.N(300, 1103, 900), rel=1e-3) == 5e2
+    assert pytest.approx(material.N(300, 972, 900), rel=1e-3) == 8e2
     assert material.Su_min(300, 1) == 994e6
 
 
@@ -146,7 +149,9 @@ def test_S660_SDC_IC():
     assert pytest.approx(material.Su_min(200, 0.1), rel=1e-3) == 817e6
     assert pytest.approx(material.Sm(200, 0.1), rel=1e-3) == 299e6
     assert pytest.approx(material.Smb(200, 0.1), rel=1e-3) == 299e6
-    assert pytest.approx(material.N(100, 338e6), rel=1e-3) == 5e3
+    # stress based curves are entered in MPa
+    assert pytest.approx(material.N(100, 338), rel=1e-3) == 5e3
+    assert pytest.approx(material.N(20, 1207), rel=1e-3) == 1e2
     assert (
         pytest.approx(material.monotonic_min_stress_strain(351e6, 250, 50), rel=1e-3)
         == 0.189e-2
@@ -167,10 +172,20 @@ def test_XM19_SDC_IC():
         material = Material(mat_path)
 
     assert pytest.approx(material.E(200, 1), rel=1e-2) == 183e9
+    assert material.Su_min(100, 0) == 621e6
+    # Table A.S05.3.1-1 gives the strain as relative
     assert (
         pytest.approx(material.monotonic_min_stress_strain(400e6, 200, 1), rel=1e-3)
-        == 5.118e-4
+        == 5.118e-2
     )
+    assert pytest.approx(material.N(100, 1800), rel=1e-3) == 1e2
+    # first segment of the curve, between 4881 MPa (10 cycles) and 3530 (20)
+    assert pytest.approx(material.N(100, 4881), rel=1e-3) == 10
+    assert pytest.approx(material.N(100, 4500), rel=1e-3) == 12.82
+    # below the curve: last N of the table; above: not computable
+    assert material.N(100, 100) == 1e11
+    with pytest.raises(OutOfBoundsError):
+        material.N(100, 6000)
 
 
 def test_Inconel_RCCMRx():

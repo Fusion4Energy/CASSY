@@ -8,6 +8,7 @@ from cassy.auxiliary import trace
 from cassy.designcodes.codes import (
     INVALID_VJ,
     INVALIDATING_ERRORS,
+    invalidate_nan_vj,
     Code,
     InvalidAssessment,
     superseded_equations,
@@ -594,7 +595,9 @@ class ReferenceEvent:
                     assessment = {"N": np.nan, "Note": f"invalidated: {e}"}
                     vj = INVALID_VJ
                 else:
-                    vj = self.config.ncycles / assessment["N"]
+                    vj = invalidate_nan_vj(
+                        self.config.ncycles / assessment["N"], self.config.re_ID
+                    )
                 for key, val in assessment.items():
                     trace.record(key, val, kind="result")
             trace.record("n cycles", self.config.ncycles, kind="input")
