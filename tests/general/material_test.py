@@ -4,7 +4,11 @@ import numpy as np
 import pytest
 
 from cassy.additional_data import materials
-from cassy.auxiliary.custom_errors import ConfigError, OutOfBoundsError
+from cassy.auxiliary.custom_errors import (
+    ConfigError,
+    MissingPropertyError,
+    OutOfBoundsError,
+)
 from cassy.general.material import Material, PropertyFactory, read_materials
 from tests.general import res
 
@@ -101,6 +105,30 @@ def test_Inconel_SDC_IC():
     assert pytest.approx(material.N(300, 1103, 900), rel=1e-3) == 5e2
     assert pytest.approx(material.N(300, 972, 900), rel=1e-3) == 8e2
     assert material.Su_min(300, 1) == 994e6
+    # Sy,av = 1.08 Sy,min unirradiated, Table A.B01.3.2-2 irradiated
+    assert pytest.approx(material.Sy_moy(20, 0), rel=2e-3) == 1117e6
+    assert material.Sy_moy(350, 1) == 854e6
+    # no Se/Sd limit only below 0.5 dpa and at 20-400°C
+    assert np.isnan(material.Se(300, 0.4))
+    assert np.isnan(material.Sd(300, 0.4))
+    assert np.isnan(material.Sd_nopeak(300, 0.4))
+    with pytest.raises(OutOfBoundsError):
+        material.Se(300, 1)
+    with pytest.raises(OutOfBoundsError):
+        material.Sd(450, 0.1)
+    # Table A.B01.3.1-1, strain in %
+    assert (
+        pytest.approx(material.monotonic_min_stress_strain(100.05e6, 20, 0))
+        == 0.049988e-2
+    )
+    assert (
+        pytest.approx(
+            material.monotonic_min_stress_strain(1112.646e6, 250, 0.01), rel=1e-3
+        )
+        == 3.442061e-2
+    )
+    with pytest.raises(OutOfBoundsError):
+        material.monotonic_min_stress_strain(500e6, 300, 1)
 
 
 def test_CuCrZr_Tr_B_SDC_IC():
@@ -192,6 +220,10 @@ def test_XM19_SDC_IC():
     assert material.N(100, 100) == 1e11
     with pytest.raises(OutOfBoundsError):
         material.N(100, 6000)
+    # Se and Sd are not supplied in A.S05
+    with pytest.raises(MissingPropertyError):
+        material.Se(100, 0)
+    assert material.type == "austenitic"
 
 
 def test_Inconel_RCCMRx():

@@ -23,7 +23,7 @@ from cassy.designcodes.sdcic_bolts import (
     IC6122_1_2,
     SDC_IC_Bolts,
 )
-from cassy.general.material import Material
+from cassy.general.material import Material, NotImplementedProperty
 from cassy.gui.bolts_model import build_geometries
 from tests.designcodes import res
 
@@ -82,7 +82,7 @@ def assessor(material):
         "init",
         "concat",
         133,
-        2.5,
+        0.4,  # Se and Sd have no limit below 0.5 dpa
         "II",
         "A",
         [LoadTerm("+", "1", 1)],
@@ -182,16 +182,21 @@ class TestSDC_IC_Bolts:
         assert np.isnan(assessed[0][1])
 
     def test_6122_1_2(self, assessor: BoltActionAssessor, material: Material):
-        # Sd_nopeak is not available for the material
+        # above 0.5 dpa the rule needs the material
+        assessor.ref_event.dpa = 2.5
+        material.Sd_nopeak = NotImplementedProperty("Sd_nopeak", material.name)
         rule = IC6122_1_2()
         with pytest.raises(MissingPropertyError):
             rule.assess(assessor, material)
 
     def test_missing_property_invalidates_rule(
-        self, code: SDC_IC_Bolts, assessor: BoltActionAssessor
+        self, code: SDC_IC_Bolts, assessor: BoltActionAssessor, material: Material
     ):
         # a missing material property invalidates the rule, which fails, while
         # the others are still assessed
+        # above 0.5 dpa the rule needs the material
+        assessor.ref_event.dpa = 2.5
+        material.Sd_nopeak = NotImplementedProperty("Sd_nopeak", material.name)
         df = assessor.assess(code)
         invalid = df[df["Rule ID"] == "IC 6122.1.2"]
         assert len(invalid) == 2
@@ -237,9 +242,7 @@ class TestSDC_IC_Bolts:
 
     def test_computeVj_neuber(self, code: SDC_IC_Bolts, assessor_fatigue):
         # a material with a cyclic stress-strain curve goes through the Neuber branch
-        with as_file(
-            files(mat_folder).joinpath("SS316L(N)-IG_SDC-IC.yaml")
-        ) as path:
+        with as_file(files(mat_folder).joinpath("SS316L(N)-IG_SDC-IC.yaml")) as path:
             ss316 = Material(path)
         result = code.computeVj(assessor_fatigue, ss316)
         assert result["N"] > 0
@@ -249,9 +252,9 @@ class TestSDC_IC_Bolts:
     def test_out_of_bounds_invalidates_rule(
         self, code: SDC_IC_Bolts, assessor: BoltActionAssessor
     ):
-        # above the material bounds: the rules needing the material are invalidated
+        # Se and Sd are not supplied above 0.5 dpa: those rules are invalidated
         # and fail, the others are still assessed
-        assessor.ref_event.temp = 2000
+        assessor.ref_event.dpa = 2.5
         df = assessor.assess(code)
         invalid = df[df["Note"].notna()]
         assert len(invalid) > 0

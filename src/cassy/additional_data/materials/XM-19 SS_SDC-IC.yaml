@@ -1,5 +1,6 @@
 name: XM-19 SS_SDC-IC
 description: From Appendix A.S05/B03 of the SDC-IC. Can be used also for non-leak tight bolts.
+type: austenitic
 properties:
   Poisson Ratio:
     type: constant
@@ -230,13 +231,4 @@ properties:
         [164, 164],
         [163, 163]
         ]
-  #
-  Se:
-    type: constant
-    value: null
-  Sd:
-    type: constant
-    value: null
-  Sd_nopeak:
-    type: constant
-    value: null
+  # Se and Sd are not supplied in A.S05
