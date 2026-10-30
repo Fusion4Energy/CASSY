@@ -91,9 +91,22 @@ def build_material_library(
     # by default also adds custom materials in the default additional folde
     default_additional = os.path.join(os.getcwd(), "additional_materials")
     if os.path.exists(default_additional):
-        additional_materials = read_materials(default_additional)
-        materials.update(additional_materials)
+        _add_materials(
+            materials, read_materials(default_additional), default_additional
+        )
     if custom_path is not None:
-        additional_materials = read_materials(custom_path)
-        materials.update(additional_materials)
+        _add_materials(materials, read_materials(custom_path), custom_path)
     return materials
+
+
+def _add_materials(
+    materials: dict[str, Material], additional: dict[str, Material], folder: PathLike
+) -> None:
+    """Add the additional materials to the library, warning on overrides."""
+    for name in sorted(materials.keys() & additional.keys()):
+        logging.warning(
+            "Material '%s' from %s overrides the one already in the library",
+            name,
+            folder,
+        )
+    materials.update(additional)
