@@ -8,7 +8,9 @@ List of available materials:
 
 - SS316L(N)-IG_SDC-IC
 - SS316L(N)-IG_RCC-MRx
+- CuCrZr-IG Tr A SDC-IC
 - CuCrZr-IG Tr B SDC-IC
+- CuCrZr-IG Tr C SDC-IC
 - Inconel 718 (non leak tight) SDC-IC
 - Inconel 718 RCC-MRx
 - SS660 (non leak-tight)_SDC-IC

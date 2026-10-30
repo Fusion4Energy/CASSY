@@ -154,6 +154,50 @@ def test_CuCrZr_Tr_B_SDC_IC():
     assert pytest.approx(material.Se(275, 1), rel=1e-3) == 401e6
     assert np.isnan(material.Sd(450, 1))
 
+
+def test_CuCrZr_Tr_A_SDC_IC():
+    """
+    Test that the CuCrZr-IG Tr A material file is read correctly.
+    """
+    with as_file(MAT_FOLDER.joinpath("CuCrZr-IG Tr A SDC-IC.yaml")) as mat_path:
+        material = Material(mat_path)
+    assert pytest.approx(material.E(250, 1), rel=5e-3) == 118.481e9
+    assert pytest.approx(material.Sy_min(20, 0), rel=1e-3) == 407e6
+    assert pytest.approx(material.Sy_min(175, 1), rel=1e-3) == 416e6
+    assert pytest.approx(material.Su_min(375, 4), rel=1e-3) == 140.5e6
+    assert pytest.approx(material.Sm(300, 0), rel=1e-3) == 120e6
+    assert pytest.approx(material.Sm(300, 1), rel=1e-3) == 105e6
+    assert pytest.approx(material.Se(275, 1), rel=1e-3) == 261.5e6
+    # no irradiated strength below 150 °C
+    with pytest.raises(OutOfBoundsError):
+        material.Sy_min(100, 1)
+    # not supplied for treatment A
+    with pytest.raises(MissingPropertyError):
+        material.Sd(100, 1)
+    with pytest.raises(MissingPropertyError):
+        material.monotonic_min_stress_strain(100e6, 20, 0)
+
+
+def test_CuCrZr_Tr_C_SDC_IC():
+    """
+    Test that the CuCrZr-IG Tr C material file is read correctly.
+    """
+    with as_file(MAT_FOLDER.joinpath("CuCrZr-IG Tr C SDC-IC.yaml")) as mat_path:
+        material = Material(mat_path)
+    assert pytest.approx(material.Sy_min(125, 0.1), rel=1e-3) == 163.5e6
+    assert pytest.approx(material.Su_min(125, 1), rel=1e-3) == 309.5e6
+    assert pytest.approx(material.Sm(225, 0), rel=1e-3) == 83.5e6
+    assert pytest.approx(material.Sm(225, 2), rel=1e-3) == 83.5e6
+    assert (
+        pytest.approx(material.monotonic_min_stress_strain(194.905e6, 300, 3))
+        == 5.215648e-2
+    )
+    # only unirradiated yield strength for treatment C
+    with pytest.raises(OutOfBoundsError):
+        material.Sy_min(100, 1)
+    with pytest.raises(MissingPropertyError):
+        material.Se(100, 1)
+
     # assert pytest.approx(material.E(125, 0.1), rel=1e-3) == 120e6
     # assert material.N(300, 220, 500) > 5e5
     # assert material.N(300, 103, 1000) == 2e6
