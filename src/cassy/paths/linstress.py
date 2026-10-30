@@ -5,9 +5,9 @@ import pandas as pd
 import numpy as np
 from copy import deepcopy
 from cassy.auxiliary import trace
-from cassy.auxiliary.custom_errors import OutOfBoundsError
 from cassy.designcodes.codes import (
     INVALID_VJ,
+    INVALIDATING_ERRORS,
     Code,
     InvalidAssessment,
     superseded_equations,
@@ -587,7 +587,7 @@ class ReferenceEvent:
             with trace.scope(rule_set="Fatigue"):
                 try:
                     assessment = code.computeVj(self, material)
-                except OutOfBoundsError as e:
+                except INVALIDATING_ERRORS as e:
                     # the event counts as failed, the assessment goes on
                     logging.warning(f"Fatigue of {self.config.re_ID} invalidated: {e}")
                     trace.record("fatigue", f"invalidated: {e}", kind="warning")

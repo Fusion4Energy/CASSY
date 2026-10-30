@@ -8,12 +8,15 @@ if TYPE_CHECKING:
     from cassy.bolts.code_assessor import BoltActionAssessor
     from cassy.paths.linstress import ReferenceEvent
 from cassy.auxiliary import trace
-from cassy.auxiliary.custom_errors import OutOfBoundsError
+from cassy.auxiliary.custom_errors import MissingPropertyError, OutOfBoundsError
 from cassy.general.material import Material
 
 # usage fraction assigned to a fatigue event that could not be computed (e.g. a
-# material property out of its bounds), so that it counts as failed
+# material property out of its bounds or missing), so that it counts as failed
 INVALID_VJ = 1e5
+
+# errors that invalidate a rule or a fatigue event without stopping the assessment
+INVALIDATING_ERRORS = (OutOfBoundsError, MissingPropertyError)
 
 
 class Rule(ABC):
@@ -114,13 +117,13 @@ class Code:
     def _assess_rule(
         self, rule_set: str, rule: Rule, combined_stress, material: Material
     ) -> list | None:
-        """Assess a single rule. A material property out of its bounds invalidates
-        the rule (counted as failed) without stopping the assessment."""
+        """Assess a single rule. A material property out of its bounds or missing
+        invalidates the rule (counted as failed) without stopping the assessment."""
         trace.rule_damage_type(rule.ref, self.recap_damage_type(rule))
         with trace.scope(rule_set=rule_set, rule=rule.ref):
             try:
                 assessed = rule.assess(combined_stress, material)
-            except OutOfBoundsError as e:
+            except INVALIDATING_ERRORS as e:
                 return invalidate(rule, e)
             _record_equations(rule, assessed, self.APPLIED_TO_PA)
         return assessed

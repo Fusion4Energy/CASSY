@@ -145,7 +145,7 @@ class RCCMRx_Bolts(BoltCode):
         }
 
 
-class RB3284_1112:
+class RB3284_1112(Rule):
     def __init__(self):
         self.damage_type = "P"
         self.ref = "RB3284_1112"
@@ -221,7 +221,7 @@ class RB3284_1112:
         return [(stress, allowable), (stress2, allowable2)]
 
 
-class RB3284_1113:
+class RB3284_1113(Rule):
     def __init__(self):
         self.damage_type = "P"
         self.ref = "RB 3284.1113"

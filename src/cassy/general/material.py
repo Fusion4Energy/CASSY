@@ -11,7 +11,11 @@ from scipy.optimize import root_scalar
 from scipy.spatial import Delaunay
 
 from cassy.auxiliary import trace
-from cassy.auxiliary.custom_errors import ConfigError, OutOfBoundsError
+from cassy.auxiliary.custom_errors import (
+    ConfigError,
+    MissingPropertyError,
+    OutOfBoundsError,
+)
 from cassy.auxiliary.types import PathLike
 
 MATH_SUBSTITUTIONS = {"EXP": np.exp, "SQRT": np.sqrt, "^": "**"}
@@ -121,7 +125,7 @@ class NotImplementedProperty(Property):
         self.upper_bound = None
 
     def _function_to_call(self, *args) -> float:
-        raise NotImplementedError(
+        raise MissingPropertyError(
             f"Property {self.name} not implemented for {self.material_name}"
         )
 

@@ -6,11 +6,11 @@ import numpy as np
 import pandas as pd
 
 from cassy.auxiliary import trace
-from cassy.auxiliary.custom_errors import OutOfBoundsError
 from cassy.bolts.bolt_config import BoltReferenceEventFatigue, Event
 from cassy.bolts.geometry import BoltGeom, BoltLikeGeom
 from cassy.designcodes.codes import (
     INVALID_VJ,
+    INVALIDATING_ERRORS,
     BoltCode,
     InvalidAssessment,
     bolt_stress_name,
@@ -136,13 +136,10 @@ class BoltActionAssessor:
         primary_dic = {"N": N, "M": M, "T": T}
 
         # All Loads
-        N_nopreload = abs(
-            all_loads["F" + axs[0]] - self.preload
-        )  # subtract preload from all loads actions
         N = abs(all_loads["F" + axs[0]])
         M = (all_loads["M" + axs[1]] ** 2 + all_loads["M" + axs[2]] ** 2) ** 0.5
         T = (all_loads["F" + axs[1]] ** 2 + all_loads["F" + axs[2]] ** 2) ** 0.5
-        all_loads_dic = {"N": N, "M": M, "T": T, "N_nopreload": N_nopreload}
+        all_loads_dic = {"N": N, "M": M, "T": T}
 
         return primary_dic, all_loads_dic
 
@@ -156,7 +153,7 @@ class BoltActionAssessor:
         trace.record("loading category", ev.load_category, kind="input")
         trace.record("preload", self.preload, kind="input", unit="N")
         trace.record("material", self.poa.material.name, kind="input")
-        units = {"N": "N", "N_nopreload": "N", "T": "N", "M": "N m"}
+        units = {"N": "N", "T": "N", "M": "N m"}
         for group, actions in (("primary", self.primary), ("all", self.all_loads)):
             for key, val in actions.items():
                 trace.record(f"{key} ({group})", val, kind="input", unit=units.get(key))
@@ -280,7 +277,7 @@ class BoltActionAssessor:
                         self,
                         self.poa.material,
                     )
-                except OutOfBoundsError as e:
+                except INVALIDATING_ERRORS as e:
                     # the event counts as failed, the assessment goes on
                     logging.warning(
                         f"Fatigue of {self.ref_event.name} invalidated: {e}"

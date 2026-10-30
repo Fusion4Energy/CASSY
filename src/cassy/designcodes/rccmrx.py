@@ -47,27 +47,23 @@ class RCC_MRx(Code):
         T_ds = (T, ds)
         # de calculation
         de1 = 2 / 3 * (1 + material.nu()) * (ds / material.E(T, dpa))
-        if refEvent.tresca is not None:
-            # tresca for shells Pm+0.67*(Pb+Pl-Pm)
-            tresca = refEvent.tresca
-            # de2 represents the "plastic" increase in strain due to the primary
-            # stress range at the point examined, equal to tresca for shells
-            # cyclic_stress_strain looks like it returns strain in [-], not %, so not change it
-            try:
-                de2 = material.cyclic_stress_strain(T, tresca) - 2 / 3 * (
-                    1 + material.nu()
-                ) * (tresca / material.E(T, dpa))
-            except NotImplementedError as e:
-                de2 = 0
-                logging.warning(f"Cyclic stress-strain curves not implemented, de2=0")
-                trace.record(
-                    "de2",
-                    "cyclic stress-strain curve not available: de2 = 0",
-                    kind="warning",
-                )
-        else:
-            # there is no primary stress
+        # tresca for shells Pm+0.67*(Pb+Pl-Pm), it is 0 if there is no primary stress
+        tresca = refEvent.tresca
+        # de2 represents the "plastic" increase in strain due to the primary
+        # stress range at the point examined, equal to tresca for shells
+        # cyclic_stress_strain looks like it returns strain in [-], not %, so not change it
+        try:
+            de2 = material.cyclic_stress_strain(T, tresca) - 2 / 3 * (
+                1 + material.nu()
+            ) * (tresca / material.E(T, dpa))
+        except NotImplementedError as e:
             de2 = 0
+            logging.warning(f"Cyclic stress-strain curves not implemented, de2=0")
+            trace.record(
+                "de2",
+                "cyclic stress-strain curve not available: de2 = 0",
+                kind="warning",
+            )
 
         # de3 is derived assuming de_i = 0
         de3 = material.Keps(T_ds) * math.sqrt(de1 * (de1 + de2)) - de2 - de1

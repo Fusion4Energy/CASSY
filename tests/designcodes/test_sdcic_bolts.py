@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from cassy.additional_data import materials as mat_folder
+from cassy.auxiliary.custom_errors import MissingPropertyError
 from cassy.auxiliary.types import LoadTerm
 from cassy.bolts.bolt_config import BoltReferenceEvent, BoltReferenceEventFatigue
 from cassy.bolts.code_assessor import BoltActionAssessor
@@ -175,12 +176,22 @@ class TestSDC_IC_Bolts:
         assert np.isnan(assessed[0][1])
 
     def test_6122_1_2(self, assessor: BoltActionAssessor, material: Material):
+        # Sd_nopeak is not available for the material
         rule = IC6122_1_2()
-        assessed = rule.assess(assessor, material)
-        assert pytest.approx(assessed[0][0], rel=1e-2) == 357
-        assert np.isnan(assessed[0][1])
-        assert pytest.approx(assessed[1][0], rel=1e-2) == 1431
-        assert np.isnan(assessed[1][1])
+        with pytest.raises(MissingPropertyError):
+            rule.assess(assessor, material)
+
+    def test_missing_property_invalidates_rule(
+        self, code: SDC_IC_Bolts, assessor: BoltActionAssessor
+    ):
+        # a missing material property invalidates the rule, which fails, while
+        # the others are still assessed
+        df = assessor.assess(code)
+        invalid = df[df["Rule ID"] == "IC 6122.1.2"]
+        assert len(invalid) == 2
+        assert (invalid["Result"] == "FAILED").all()
+        assert invalid["Note"].str.contains("Sd_nopeak").all()
+        assert df["Note"].isna().any()
 
     def test_computeVj(
         self,

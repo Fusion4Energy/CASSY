@@ -649,24 +649,28 @@ class IC6122_1_2(Rule):
         if dpa < 0.5:
             allowable1 = np.nan
             allowable2 = np.nan
-            formula = "no limit for dpa < 0.5"
+            formula1 = formula2 = "no limit for dpa < 0.5"
         else:
             # select allowable
             if service_lvl == "A":
-                allowable1 = allowable2 = material.Sd(T_dpa)
-                formula = "Sd"
+                allowable1 = material.Sd_nopeak(T_dpa)
+                allowable2 = material.Sd(T_dpa)
+                formula1 = "Sd_nopeak"
+                formula2 = "Sd"
             elif service_lvl == "C":
-                allowable1 = allowable2 = 1.2 * material.Sd(T_dpa)
-                formula = "1.2 * Sd"
+                allowable1 = 1.2 * material.Sd_nopeak(T_dpa)
+                allowable2 = 1.2 * material.Sd(T_dpa)
+                formula1 = "1.2 * Sd_nopeak"
+                formula2 = "1.2 * Sd"
             elif service_lvl == "D":
                 allowable1 = allowable2 = 1.35 * material.Sd(T_dpa)
-                formula = "1.35 * Sd"
+                formula1 = formula2 = "1.35 * Sd"
             else:
                 raise KeyError(service_lvl + " is not an admissible service level")
-        record_allowables((allowable1, allowable2), (formula, formula))
+        record_allowables((allowable1, allowable2), (formula1, formula2))
 
         stress1 = boltaction.applicable_stresses["all"]["Max stress"]
-        stress2 = stress1 * boltaction.poa.KF  # THIS NEEDS TO BE DOUBLE-CHECKED
+        stress2 = stress1 * boltaction.poa.KF
         trace.record("KF", boltaction.poa.KF, kind="factor")
         trace.record(
             "Max stress with concentrations",

@@ -20,3 +20,12 @@ class OutOfBoundsError(Exception):
     def __init__(self, message: str):
         self.message = message
         super().__init__(self.message)
+
+
+class MissingPropertyError(NotImplementedError):
+    """Exception raised when a material property is not available. It subclasses
+    NotImplementedError so that the local fallbacks of the rules still apply."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)

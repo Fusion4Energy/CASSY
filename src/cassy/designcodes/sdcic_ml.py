@@ -46,18 +46,14 @@ class SDC_IC_ML(Code):
         T_ds = (T, ds)
         # de calculation
         de1 = 2 / 3 * (1 + material.nu()) * (ds / material.E(T))
-        if refEvent.tresca is not None:
-            # tresca for shells Pm+0.67*(Pb+Pl-Pm)
-            tresca = refEvent.tresca
-            # de2 represents the "plastic" increase in strain due to the primary
-            # stress range at the point examined, equal to tresca for shells
-            # cyclic_stress_strain looks like it returns strain in [-], not %, so not change it
-            de2 = material.cyclic_stress_strain(T, tresca) - 2 / 3 * (
-                1 + material.nu()
-            ) * (tresca / material.E(T, dpa))
-        else:
-            # there is no primary stress
-            de2 = 0
+        # tresca for shells Pm+0.67*(Pb+Pl-Pm), it is 0 if there is no primary stress
+        tresca = refEvent.tresca
+        # de2 represents the "plastic" increase in strain due to the primary
+        # stress range at the point examined, equal to tresca for shells
+        # cyclic_stress_strain looks like it returns strain in [-], not %, so not change it
+        de2 = material.cyclic_stress_strain(T, tresca) - 2 / 3 * (
+            1 + material.nu()
+        ) * (tresca / material.E(T, dpa))
 
         # de3 is derived as the intersection point of the cyclic curve and the
         # hyperbola ds*de = costant

@@ -56,7 +56,7 @@ In the classification between primary and secondary stresses, SDC-IC makes some 
 In CASSY this applies to loads flagged as pressure, classified as primary and evaluated on a path of type "fillet". Their bending component is moved from primary to secondary, while membrane and peak components stay primary.
 
 ### Immediate local fracture
-In IC 3121.3.1, the total stress including peaks (P+Q+F) is compared with Sd and the total stress excluding peaks (P+Q) with Sd_nopeak. The allowables are multiplied by 1.2 in level C and 1.35 in level D.
+In IC 3121.3.1, the total stress including peaks (P+Q+F) is compared with Sd and the total stress excluding peaks (P+Q) with Sd_nopeak. The allowables are multiplied by 1.2 in level C and 1.35 in level D. As prescribed for welded joints, Sd and Sd_nopeak are the base metal values: the joint efficiency n is not applied (it only enters IC 3121.1.1, through Sm).
 
 ### Plasma disruption derived stresses
 This distinction applies to the 3Sm rule (ratcheting) in SDC-IC.
