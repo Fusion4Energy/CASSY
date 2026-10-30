@@ -585,9 +585,9 @@ class IC6122_1_1(Rule):
         dpa = boltaction.ref_event.dpa
         T_dpa = (T, dpa)
 
-        if dpa < 0.1:
+        if dpa < 0.5:
             allowable1 = np.nan
-            formula = "no limit for dpa < 0.1"
+            formula = "no limit for dpa < 0.5"
         else:
             # select allowable
             if service_lvl == "A":
@@ -646,10 +646,10 @@ class IC6122_1_2(Rule):
         T = boltaction.ref_event.temp
         dpa = boltaction.ref_event.dpa
         T_dpa = (T, dpa)
-        if dpa < 0.1:
+        if dpa < 0.5:
             allowable1 = np.nan
             allowable2 = np.nan
-            formula = "no limit for dpa < 0.1"
+            formula = "no limit for dpa < 0.5"
         else:
             # select allowable
             if service_lvl == "A":
