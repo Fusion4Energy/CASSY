@@ -1,3 +1,5 @@
+import math
+
 from cassy.bolts.geometry import BoltGeom, InsertGeom
 from cassy.general.material import Material
 import pytest
@@ -27,6 +29,21 @@ class TestBoltGeom:
         assert pytest.approx(bolt_geom.dn, 0.01) == 9.85
         assert pytest.approx(bolt_geom.Dp, 0.01) == 13.2
 
+    def test_section_thread_root(self):
+        # standard bolt: the thread root is the section of least diameter
+        bolt_geom = BoltGeom(name="TestBolt", material=MockMaterial(), p=1.75, d=12)
+        assert bolt_geom.ds == bolt_geom.dn
+        assert pytest.approx(bolt_geom.An) == math.pi / 4 * bolt_geom.dn**2
+
+    def test_section_reduced_shank(self):
+        # reduced shank: the smooth shank is the section of least diameter
+        bolt_geom = BoltGeom(
+            name="TestBolt", material=MockMaterial(), p=1.75, d=12, d1=9, d_vh=2
+        )
+        assert bolt_geom.ds == 9
+        assert pytest.approx(bolt_geom.An) == math.pi / 4 * (9**2 - 2**2)
+        assert pytest.approx(bolt_geom.Z) == math.pi / 32 * (9**4 - 2**4) / 9
+
 
 class TestInsertGeom:
     def test_defaults(self):
@@ -34,3 +51,4 @@ class TestInsertGeom:
             name="TestInsert", material=MockMaterial(), p=1.75, d=12
         )
         assert pytest.approx(insert_geom.dn, 0.01) == 9.85
+        assert insert_geom.ds == insert_geom.dn

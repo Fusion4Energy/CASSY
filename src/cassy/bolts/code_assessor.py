@@ -154,6 +154,8 @@ class BoltActionAssessor:
         trace.record("loading category", ev.load_category, kind="input")
         trace.record("preload", self.preload, kind="input", unit="N")
         trace.record("material", self.poa.material.name, kind="input")
+        section = "thread root" if self.poa.ds == self.poa.dn else "smooth shank"
+        trace.record("ds", self.poa.ds, kind="input", unit="mm", note=section)
         units = {"N": "N", "T": "N", "M": "N m"}
         for group, actions in (("primary", self.primary), ("all", self.all_loads)):
             for key, val in actions.items():
@@ -335,10 +337,10 @@ class BoltActionAssessor:
         tth_N = 2 * (N) / (pi * bolt.df * bolt.Le_shear)
 
         # shear stress in the head [N/mm^2 = MPa]
-        if not isinstance(bolt, BoltGeom) or bolt.H == 0:
-            th_N = 0
-        else:  # There is washer
+        if isinstance(bolt, BoltGeom):
             th_N = N / (pi * bolt.d1 * bolt.H)
+        else:  # insert: no head
+            th_N = 0
 
         # Contact pressure between threads [N*mm/mm^3 = MPa]
         pth_N = 4 * N * bolt.p / (pi * (bolt.d**2 - bolt.D**2) * bolt.Le)
@@ -355,14 +357,14 @@ class BoltActionAssessor:
         # --- Stress Induced by bending moment M (SDC-IC B 3812.2.6.2) ---
         M = actions["M"] * 1000
         # Easier to bring the Moment N/m -> N/mm to avoid errors with units
-        sigma_M = M / bolt.Z  # used the one on the thread root section
+        sigma_M = M / bolt.Z  # on the section of least diameter
         # shear stress in the threads
         tth_M = 2 * M / (pi * bolt.df**2 * bolt.Le_shear)
         # shear stress in the head
-        if not isinstance(bolt, BoltGeom) or bolt.H == 0:  # There is no washer
-            th_M = 0
-        else:  # There is washer
+        if isinstance(bolt, BoltGeom):
             th_M = M / (pi * bolt.d1**2 * bolt.H)
+        else:  # insert: no head
+            th_M = 0
         # contact pressure between the threads
         pth_M = (
             96
@@ -404,7 +406,7 @@ class BoltActionAssessor:
         #     torques Cr and Ct (B 3812.2.6.3) ---
         Cr = self.preload * (0.16 * bolt.p + 0.583 * bolt.f * bolt.df)
         # Shear stress in threads
-        tau_Cr = 16 * Cr * bolt.dn / (pi * (bolt.dn**4 - bolt.d_vh**4))
+        tau_Cr = 16 * Cr * bolt.ds / (pi * (bolt.ds**4 - bolt.d_vh**4))
 
         if isinstance(bolt, BoltGeom):
             Ct = self.preload * 0.5 * bolt.f_prime * bolt.Dm
@@ -415,7 +417,7 @@ class BoltActionAssessor:
         # --- Stress induced by transverse load T ---
         # Shear stress in the threaded root section
         T = actions["T"]
-        tau_T = 4 * T / (pi * (bolt.dn**2 - bolt.d_vh**2))
+        tau_T = 4 * T / (pi * (bolt.ds**2 - bolt.d_vh**2))
 
         # --- Allowable stresses ---
         # formulas are written with the names of the components below

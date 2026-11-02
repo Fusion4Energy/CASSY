@@ -68,10 +68,23 @@ class BoltLikeGeom(ABC):
         # --- Additional geometrical feature ---
         # length for shear calculation
         self.Le_shear = min(0.8 * self.d, self.Le)
-        # Minimum cross-sectional area at the root of thread
-        self.An = self.dn**2 * math.pi / 4 - self.d_vh**2 * math.pi / 4
+        # the stressed section is the thread root section
+        self._set_section(self.dn)
+
+    def _set_section(self, ds: float) -> None:
+        """Set the section of least diameter under stress (IC 6013), on which
+        the stresses in the bolt core are computed (B 3812.2.6).
+
+        Parameters
+        ----------
+        ds : float
+            diameter of the section.
+        """
+        self.ds = ds
+        # Minimum cross-sectional area
+        self.An = self.ds**2 * math.pi / 4 - self.d_vh**2 * math.pi / 4
         # Section Module
-        self.Z = (self.dn**4 - self.d_vh**4) * math.pi / 32 / self.dn
+        self.Z = (self.ds**4 - self.d_vh**4) * math.pi / 32 / self.ds
 
 
 @dataclass
@@ -188,3 +201,5 @@ class BoltGeom(BoltLikeGeom):
                 self.Dm = 0.8 * self.a
         if not self.Dp:
             self.Dp = self.d * 1.1
+        # a reduced shank (d1 < dn) is the section of least diameter
+        self._set_section(min(self.dn, self.d1))
