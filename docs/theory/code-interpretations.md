@@ -5,7 +5,7 @@ This section lists the key design code interpretations and implementation decisi
 ## Common to all codes
 
 ### Scope of the implemented rules
-Only elastic analysis rules with negligible creep are implemented. Service levels A, C and D are supported. Rules that the codes do not require at a given level (e.g. ratcheting in level D) are skipped and do not appear in the results.
+Only elastic analysis rules with negligible creep are implemented. Service levels A, C and D are supported. Rules that the codes do not require at a given level (e.g. ratcheting in level D) are skipped and do not appear in the results. Single equations of a rule that have no limit at a given level (e.g. most bolt limits in level D, or flow localization of bolts below 0.5 dpa) are instead reported with "No Limit" as allowable and "Assessment not required" as result.
 
 All stresses are converted to Pa internally, whatever the unit of the input files.
 
@@ -141,6 +141,13 @@ For inserts, only the shear stress and contact pressure in the threads of the ba
 
 
 ### SDC-IC
+
+#### Stress including concentrations
+IC 6122.1.2 limits the maximum stress intensity including stress concentrations $\overline{\sigma}$ with $S_d(T, \Phi t, r_2)$. CASSY does not compute the peak stress at the thread root: it is estimated as the maximum stress intensity due to all loads (neglecting concentrations) multiplied by the fatigue strength reduction factor $K_F$ of the bolt:
+
+$$\overline{\sigma} = K_F \sqrt{(\sigma_N + \sigma_M)^2 + 3(\tau_T + \tau_{Cr})^2}$$
+
+The same $K_F$ is used in fatigue (IC 6131.2.1.2), so lowering it for a normal strength bolt also lowers this stress.
 
 #### Goodman's correction in bolts
 
