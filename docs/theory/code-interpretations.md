@@ -47,6 +47,11 @@ $$K_{eff} = 1 + 2(K - 1)(K_{eff,rec} - 1)$$
 
 where $K_{eff,rec}$ is taken from the material data. If the material does not provide it, $K_{eff,rec} = 1.5$ is assumed, which gives $K_{eff} = 1.5$.
 
+### Welded joints
+IC 4121 replaces Sm of the base metal with that of the welded joint, $S_m(\text{joint}) = S_m(\text{base metal}) \cdot J_m \cdot n$ (Equations 125 and 126), where n is the joint efficiency coefficient (Table IC 4121-1) and $J_m$ is a weld material property coefficient. CASSY has a single input for this, the path "Welding-n", which must therefore be set to the product $n \cdot J_m$. Appendix A gives no values of $J_m$; for 316L(N) filler material with covered electrode or TIG welding, $J_m = 1$ (IC 4121, Note 1).
+
+The reduced Sm enters only IC 3121.1.1. In levels C and D, $S_{y,min}$ and $S_{u,min}$ in the allowables keep their base metal values, as the code replaces only Sm. Ratcheting uses the base metal Sm (IC 4131.1). In fatigue, the stress range is multiplied by the factor f (Table IC 4132-1) and the base metal fatigue curve is used: the alternative of dividing the curve by $J_f$ is not applied on top of it.
+
 ### Distinction between normal and fillet paths
 
 In the classification between primary and secondary stresses, SDC-IC makes some distinctions on how to classify stresses depending on their source and on the geometry where the path is defined. In particular, it specifies that if a path is defined in a fillet, pressure-induced bending stresses should be considered secondary and not primary. Hereafter is an extract of the relevant SDC-IC section:
@@ -64,6 +69,8 @@ The rule is defined as
 $$\mathrm{Max}\left(\overline{P_L + P_b}\right) + \Delta\left[\overline{P} + \overline{Q}\right]_{\max} \leq 3S_m(T_m, \Phi t_m)$$
 
 Here, the code specifies that $\mathrm{Max}\left(\overline{P_L + P_b}\right)$ should not include plasma disruption derived loads, which instead need to be accounted for in the cyclic primary part of the equation.
+
+Plasma disruption loads are always treated as cyclic, even if not flagged as such. They therefore also enter the cyclic primary stress used for $\Delta\varepsilon_2$ in fatigue.
 
 ### Efficiency index in ratcheting
 For the efficiency index diagram (IC 3131.1.1) the code foresees two routes depending on whether secondary membrane stresses are present. Since thermal stresses will always be present in in-vessel components, the route with secondary membrane stress is the only one implemented in CASSY.

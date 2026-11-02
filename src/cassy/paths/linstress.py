@@ -434,16 +434,14 @@ class ReferenceEvent:
                 if not matrix.config.isPD:
                     maxPmPb_vol.append(matrix.primary.loc["MB"].values)
                 else:
-                    # plasma disruption cyclic
-                    if matrix.config.isCyclic:
-                        P_plasma_vol.append(matrix.primary.loc["MB"].values)
+                    # plasma disruption, always cyclic
+                    P_plasma_vol.append(matrix.primary.loc["MB"].values)
 
             for matrix in self.inertial:
                 if not matrix.config.isPD:
                     maxPmPb_inertial.append(matrix.primary.loc["MB"].values)
                 else:
-                    if matrix.config.isCyclic:
-                        P_plasma_inertial.append(matrix.primary.loc["MB"].values)
+                    P_plasma_inertial.append(matrix.primary.loc["MB"].values)
 
             maxPmPb = self._get_final_VM(maxPmPb_vol, maxPmPb_inertial)
             P_plasma = self._get_final_VM(P_plasma_vol, P_plasma_inertial)

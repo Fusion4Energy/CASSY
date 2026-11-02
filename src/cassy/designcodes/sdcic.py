@@ -367,11 +367,11 @@ class IC3131_1_2(Rule):
             trace.record("short duration overstress", "yes", kind="branch")
             sigma_mb = (
                 0.5 * (refEvent.PmPb_ns + sigma_nmb)
-                + (3 * material.E(T, dpa) / Emb) * refEvent.PmPbs
+                + (3 * Emb / material.E(T, dpa)) * refEvent.PmPbs
             )
             sigma_m = (
                 0.5 * (refEvent.Pm_ns + sigma_nm)
-                + (3 * material.E(T, dpa) / Em) * refEvent.Pms
+                + (3 * Em / material.E(T, dpa)) * refEvent.Pms
             )
 
         else:  # no overstress of short duration

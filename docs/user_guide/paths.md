@@ -69,7 +69,7 @@ Here all single loads (i.e., their correspondent stress tensors) are classified.
 * **Spatial Recombination**, type of spatial recombination of inertial stresses,
     typically "srss" for inertial loads. Other options are "algebraic" and "abs". Do not specify anything for volumetric load, they are always algebraically combined.
 * **Is Cyclic**, mark if the load is cyclic.
-* **Derives from Plasma Disruption**, mark if the load derives from plasma disruption. See [here](../theory/code-interpretations#plasma-disruption-derived-stresses) for additional details.
+* **Derives from Plasma Disruption**, mark if the load derives from plasma disruption. A plasma disruption load is always treated as cyclic, whether or not **Is Cyclic** is marked. See [here](../theory/code-interpretations#plasma-disruption-derived-stresses) for additional details.
 * **Is Pressure**, mark if the load is pressure. See [here](../theory/code-interpretations#distinction-between-normal-and-fillet-paths) on why this is relevant.
 * **Is Short Overstress**, mark if the load can be considered a short overstress. This is used only in the computation of efficiency index in ratcheting rules. If the load is cyclic and of brief duration it will cause a short-duration overstress that needs to be categorized differently in the rules.
 
@@ -101,7 +101,7 @@ the following data is specified:
     and that needs to be the same as the one specified in the csv input file;
 * **Material**, this specifies the material in which the path is defined. The complete list of default materials available in cassy can be found [here](materials#default-cassy-materials).
 * **Path Type**, this accepts "normal" or "fillet". The distinction is due to the fact that if a path is directed radially through a fillet, bending componenet of pressure induced stress shall be considered secondary in SDC-IC. See the relevant [code interpretation](../theory/code-interpretations#distinction-between-normal-and-fillet-paths) for additional details.
-* **Welding-n**, factor to be specified in case of paths on welds. If that is not the case, set equal to 1. This reduces the allowable in immediate damage type.
+* **Welding-n**, factor to be specified in case of paths on welds. If that is not the case, set equal to 1. This reduces the allowable in immediate damage type. For SDC-IC, it is the product of the joint efficiency n and the weld material coefficient Jm, see [here](../theory/code-interpretations#welded-joints).
 * **Welding-f**, factor to be specified in case of paths on welds. If that is not the case, set equal to 1. This increases the applicable stress/strain range in fatigue assessments.
 
 ## T & DPA Tab

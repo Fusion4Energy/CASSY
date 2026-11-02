@@ -113,6 +113,15 @@ class TestLinStress:
         assert np.allclose(ls.primary.loc["B"].values, np.zeros(6))
         assert ls.secondary.loc["B"].values[0] == 1
 
+    def test_pd_always_cyclic(self):
+        config = LinStressConfig(
+            name="PD",
+            stress_classification=StressClassification.PRIMARY,
+            load_type=LoadType.VOLUMETRIC,
+            isPD=True,
+        )
+        assert config.isCyclic
+
 
 class TestReferenceEvent:
     def test_init(self, vol_stress: LinStress, inertial_list: list[LinStress]):
@@ -130,3 +139,18 @@ class TestReferenceEvent:
             attr = getattr(refevent, name)
             if isinstance(attr, property):
                 print(name, getattr(refevent, name))
+
+    def test_ratcheting3Sm_PD_not_flagged_cyclic(self, vol_stress: LinStress):
+        # a PD load not flagged as cyclic still enters the 3Sm rule as DeltaP
+        pd_config = LinStressConfig(
+            name="PD",
+            stress_classification=StressClassification.PRIMARY,
+            load_type=LoadType.VOLUMETRIC,
+            isPD=True,
+            isCyclic=False,
+        )
+        pd_stress = LinStress(DF1.copy(), pd_config)
+        refevent_config = ReferenceEventConfig(service_lvl="A", re_ID="Test", T=20)
+        refevent = ReferenceEvent([vol_stress, pd_stress], refevent_config)
+        PmPb = von_mises(vol_stress.primary.loc["MB"].values)
+        assert refevent.ratcheting3Sm_SDCIC == pytest.approx(2 * PmPb)

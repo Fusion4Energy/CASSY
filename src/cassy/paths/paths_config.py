@@ -48,9 +48,10 @@ class LinStressConfig:
     load_type : LoadType
         Either volumetric or inertial
     isPD : bool
-        if True the stress is a Plasma disruption induced stress.
+        if True the stress is a Plasma disruption induced stress. Plasma
+        disruption stresses are always cyclic.
     isCyclic : bool
-        if True the stress should be considered cyclic
+        if True the stress should be considered cyclic. Forced to True if isPD.
     scale : float
         scale factor for the stresses
     spatial_rec_method : SpatialRecMethod
@@ -90,6 +91,9 @@ class LinStressConfig:
             and self.load_type == LoadType.INERTIAL
         ):
             raise ValueError("Inertial loads cannot be secondary")
+        # plasma disruptions are always cyclic (range DeltaP in IC 3131.1)
+        if self.isPD:
+            self.isCyclic = True
 
     @classmethod
     def from_load(cls, load: LoadConfig, path: PathConfig) -> "LinStressConfig":
