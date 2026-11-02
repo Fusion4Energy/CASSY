@@ -106,29 +106,31 @@ properties:
   Fatigue:
     type: fatigue
     ftype: stress
+    mean_stress: true
     scale_y: 1 # stress based curves are entered in MPa by the code
-    values:
-      T: [20, 371] # degrees Celsius
-      N_cycles: [1.0E+01, 2.0E+01, 5.0E+01, 1.0E+02, 2.0E+02, 5.0E+02, 1.0E+03, 2.0E+03, 5.0E+03, 1.0E+04, 1.2E+04, 2.0E+04, 5.0E+04, 1.0E+05, 2.0E+05, 5.0E+05, 1.0E+06]
-      y: [
-        [2896, 2896],
-        [2206, 2206],
-        [1586, 1586],
-        [1207, 1207],
-        [931, 931],
-        [690, 690],
-        [538, 538],
-        [427, 427],
-        [338, 338],
-        [303, 303],
-        [296, 296],
-        [248, 248],
-        [200, 200],
-        [179, 179],
-        [165, 165],
-        [152, 152],
-        [138, 138],
-        ]
+    tables:
+      900: # MPa. See the code interpretations for an explanation of why Goodman is not applied here
+        T: [20, 371] # degrees Celsius
+        N_cycles: [1.0E+01, 2.0E+01, 5.0E+01, 1.0E+02, 2.0E+02, 5.0E+02, 1.0E+03, 2.0E+03, 5.0E+03, 1.0E+04, 1.2E+04, 2.0E+04, 5.0E+04, 1.0E+05, 2.0E+05, 5.0E+05, 1.0E+06]
+        y: [
+          [2896, 2896],
+          [2206, 2206],
+          [1586, 1586],
+          [1207, 1207],
+          [931, 931],
+          [690, 690],
+          [538, 538],
+          [427, 427],
+          [338, 338],
+          [303, 303],
+          [296, 296],
+          [248, 248],
+          [200, 200],
+          [179, 179],
+          [165, 165],
+          [152, 152],
+          [138, 138],
+          ]
   Monotonic Min True Stress Strain:
     type: table3D
     scale_x: 1e-6 # to convert from Pa to MPa for entering the table

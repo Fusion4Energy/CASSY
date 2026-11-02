@@ -159,6 +159,13 @@ $$\overline{\Delta\sigma} = \frac{\Delta\sigma}{1 - \sigma_m / S_u}, \qquad \sig
 
 When the material fatigue curves are provided with a dependence on the mean stress, it is assumed that no further mean stress correction is needed. Hence, Goodman's correction is not applied, and the curve is entered with the amplitude $\Delta\sigma/2$, using $\sigma_{pre}$ as mean stress. The first curve whose mean stress is not lower than $\sigma_{pre}$ is used; above the highest mean stress available, the last curve is used.
 
+For 660 steel this dependency is not explicit. Nevertheless, SDC-IC claims that the curve is taken from ASME, July 1, 2001 Edition, Section VIII, Division II, Appendix 5: Design
+Based On Fatigue Analysis, Table 5-110.1 Design Fatigue Curves For Carbon,
+Low Alloy, Series 4XX, High Alloy Steels And High Tensile Steels For
+Temperatures Not Exceeding 700°F (371°C), p.366-367.
+
+In ASME article 5-101 it is explicitly stated that "The curves have been adjusted, where necessary, to include the maximum effects of mean stress, which is the condition where the stress fluctuates about a mean value which is different from zero". Hence, Goodman's correction is not applied to SS660 either.
+
 ### RCC-MRx
 
 #### Strength threshold

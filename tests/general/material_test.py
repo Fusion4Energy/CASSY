@@ -253,9 +253,9 @@ def test_S660_SDC_IC():
     assert pytest.approx(material.Su_min(200, 0.1), rel=1e-3) == 817e6
     assert pytest.approx(material.Sm(200, 0.1), rel=1e-3) == 299e6
     assert pytest.approx(material.Smb(200, 0.1), rel=1e-3) == 299e6
-    # stress based curves are entered in MPa
-    assert pytest.approx(material.N(100, 338), rel=1e-3) == 5e3
-    assert pytest.approx(material.N(20, 1207), rel=1e-3) == 1e2
+    # stress based curves are entered in MPa, with the mean stress (MPa)
+    assert pytest.approx(material.N(100, 338, 500), rel=1e-3) == 5e3
+    assert pytest.approx(material.N(20, 1207, 500), rel=1e-3) == 1e2
     assert (
         pytest.approx(material.monotonic_min_stress_strain(351e6, 250, 50), rel=1e-3)
         == 0.189e-2
