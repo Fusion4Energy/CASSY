@@ -252,7 +252,9 @@ Curves to retrieve the allow the allowable number of cycles in fatigue assessmen
 - `tables`: if `mean_stress` is true, then the different tables should be listed under `tables` (in place of `values`) using the mean stress value as key. The first table whose key is greater than or equal to the mean stress is used; above the largest key the last table is used, with a warning. See examples.
 - `rccmrx_inconel`: if true, the curves are the RCC-MRx Inconel 718 ones, functions of Sm and Smb. Two tables `Curve1` and `Curve2` are expected under `tables` (together with `mean_stress: true`): `Curve1` is used when the total stress range is below 2.7 Sm or 2.7 Smb, `Curve2` when it is below 3 Sm or 3 Smb. Above that, the number of cycles is not computed.
 
-The table does not need boundary rows: cassy adds a strain/stress equal to 0 at the last N of the table, hence below the last row the allowable number of cycles is the last one of the table. Above the first row the number of cycles cannot be computed: as for any property out of its bounds, the fatigue event is invalidated and counted as failed.
+The number of cycles is interpolated in two steps: first the curve at the requested temperature is built interpolating linearly in T the strain/stress of each `N_cycles` row, then N is interpolated log-log (log N vs log strain/stress) between the two rows of that curve bracketing the requested value. On a flat segment of the curve the largest N is taken.
+
+The table does not need boundary rows: below the last row the allowable number of cycles is the last one of the table. Above the first row the number of cycles cannot be computed: as for any property out of its bounds, the fatigue event is invalidated and counted as failed.
 
 **examples**:
 

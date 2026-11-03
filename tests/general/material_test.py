@@ -36,7 +36,8 @@ class TestMaterial:
         with pytest.raises(OutOfBoundsError):
             material.Kmu(0, 120e6)
         assert material.Keff_rec(250, 2.75) == 1.48
-        assert pytest.approx(material.N(450, (0.488 + 0.412) / 2 / 100)) == 3e3
+        # log-log between 0.488 % (2e3) and 0.412 % (4e3)
+        assert pytest.approx(material.N(450, (0.488 + 0.412) / 2 / 100)) == 2787.291
         assert material.Sm(500, 5) == 97e6
         assert pytest.approx(material.Sy_min(100, 0.05), rel=1e-2) == 172e6
         assert material.Sy_min(20, 2) > 500e6
@@ -288,7 +289,7 @@ def test_XM19_SDC_IC():
     assert pytest.approx(material.N(100, 1800), rel=1e-3) == 1e2
     # first segment of the curve, between 4881 MPa (10 cycles) and 3530 (20)
     assert pytest.approx(material.N(100, 4881), rel=1e-3) == 10
-    assert pytest.approx(material.N(100, 4500), rel=1e-3) == 12.82
+    assert pytest.approx(material.N(100, 4500), rel=1e-3) == 11.90  # log-log
     # below the curve: last N of the table; above: not computable
     assert material.N(100, 100) == 1e11
     with pytest.raises(OutOfBoundsError):
@@ -304,6 +305,35 @@ def test_Inconel_RCCMRx():
         material = Material(mat_path)
 
     assert material.N((150, 0, 500e6, 350e6, 250e6)) > 0
+
+
+def test_fatigue_interpolation():
+    """Curve built at T linearly in T, then N interpolated log-log."""
+    with as_file(MAT_FOLDER.joinpath("SS316L(N)-IG_SDC-IC.yaml")) as mat_path:
+        material = Material(mat_path)
+    # on a table column: log-log between 0.498 % (4e3) and 0.399 % (1e4)
+    assert pytest.approx(material.N(20, 0.407748e-2), rel=1e-4) == 9142.4
+    # between 20 and 450 C the curve at T is 0.4379 % (4e3) - 0.3508 % (1e4)
+    assert pytest.approx(material.N(320.4, 0.407748e-2), rel=1e-4) == 5371.9
+    assert pytest.approx(material.N(320.4, 0.410216e-2), rel=1e-4) == 5239.56
+    # table points are returned exactly, also between the T columns
+    assert material.N(450, 0.330e-2) == 1e4
+    assert material.N(235, (0.399 + 0.330) / 2 / 100) == 1e4
+    # below the last row the allowable is the last N, above the first an error
+    assert material.N(320.4, 0.05e-2) == 1e8
+    with pytest.raises(OutOfBoundsError):
+        material.N(320.4, 5e-2)
+
+
+def test_fatigue_flat_segment():
+    """On a flat segment of the curve the largest N is taken."""
+    with as_file(
+        MAT_FOLDER.joinpath("Inconel 718 (non leak tight) SDC-IC.yaml")
+    ) as mat_path:
+        material = Material(mat_path)
+    # curve 830 MPa: 135 MPa at both 5e7 and 1e8 cycles, then 126 at 1e11
+    assert material.N(300, 135, 800) == 1e8
+    assert 1e8 < material.N(300, 130, 800) < 1e11
 
 
 def test_read_materials():

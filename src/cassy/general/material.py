@@ -402,7 +402,9 @@ class Fatigue(Property):
         else:
             tables = {"All": data["values"]}
 
-        interpolators = {}
+        # Each table is stored as (T, N_cycles, y), y having one row per N and one
+        # column per T. See _interpolate for the interpolation scheme.
+        self.tables = {}
         for mean_stress, table in tables.items():
             _check_keys(
                 table,
@@ -410,36 +412,9 @@ class Fatigue(Property):
                 f"table {mean_stress} of property '{name}' of {material_name}",
             )
             T = np.array(table["T"], dtype=float)
-            N_cycles_or = np.array(table["N_cycles"], dtype=float)
-
-            matrix_original = table["y"]
-
-            # Add a point at eps 0 with the last N, so that below the curve the
-            # allowable is the last N of the table. Above the first row the
-            # interpolation is not defined (see _interpolate).
-            matrix = list(matrix_original)
-            matrix.append([0] * len(matrix_original[0]))
-            N_cycles = N_cycles_or.tolist()
-            N_cycles.append(max(N_cycles))
-
-            N_cycles = np.array(N_cycles, dtype=float)
-            matrix = np.array(matrix, dtype=float)
-
-            points = []
-            values = []
-            for i, eps_row in enumerate(matrix):
-                for j, eps in enumerate(eps_row):
-                    point = [T[j], eps]
-                    val = N_cycles[i]
-                    points.append(point)
-                    values.append(val)
-
-            # Compute the triangulation
-            tri = Delaunay(points)
-            # Perform the interpolation with the given values:
-            interpolator = LinearNDInterpolator(tri, values)
-            interpolators[mean_stress] = interpolator
-        self.interpolators = interpolators
+            N_cycles = np.array(table["N_cycles"], dtype=float)
+            matrix = np.array(table["y"], dtype=float)
+            self.tables[mean_stress] = (T, N_cycles, matrix)
 
         # Update the bounds. For the number of cycles extrapolation needs to be in the
         # table values.
@@ -470,19 +445,19 @@ class Fatigue(Property):
         """
         if s_mean is None:
             # Use the All table
-            interpolator = self.interpolators["All"]
+            table = self.tables["All"]
         else:
-            interpolator = None
-            for mean_stress, interpolator_s in self.interpolators.items():
+            table = None
+            for mean_stress, table_s in self.tables.items():
                 if s_mean <= float(mean_stress):
-                    interpolator = interpolator_s
+                    table = table_s
                     break
-            if interpolator is None:
-                # insteading of raising an error, we can use the last interpolator
+            if table is None:
+                # insteading of raising an error, we can use the last table
                 # with a warning
                 logging.warning(
                     f"Mean stress {s_mean} is above the maximum defined in the "
-                    f"fatigue table. Using the last interpolator."
+                    f"fatigue table. Using the last table."
                 )
                 trace.record(
                     "mean stress",
@@ -490,20 +465,47 @@ class Fatigue(Property):
                     kind="warning",
                     source=self.material_name,
                 )
-                interpolator = interpolator_s
+                table = table_s
 
-        return self._interpolate(interpolator, x, y)
+        return self._interpolate(table, x, y)
 
-    def _interpolate(self, interpolator: LinearNDInterpolator, x: float, y: float):
-        """Interpolate the number of cycles, raising an OutOfBoundsError if the
-        stress/strain is above the curve (the interpolator would return NaN)."""
-        res = interpolator(x * self.scale_x, y * self.scale_y)
-        if np.any(np.isnan(res)):
+    def _interpolate(
+        self, table: tuple[np.ndarray, np.ndarray, np.ndarray], x: float, y: float
+    ) -> float:
+        """Interpolate the number of cycles. The curve at temperature x is obtained
+        interpolating linearly in T the strain/stress of each N row, then N is
+        interpolated log-log on that curve. Below the last row the allowable is the
+        last N of the table, above the first row an OutOfBoundsError is raised."""
+        T, N_cycles, matrix = table
+        T_val = x * self.scale_x
+        y_val = y * self.scale_y
+        if len(T) == 1:
+            curve = matrix[:, 0]
+        else:
+            j = min(max(int(np.searchsorted(T, T_val)), 1), len(T) - 1)
+            w = (T_val - T[j - 1]) / (T[j] - T[j - 1])
+            curve = matrix[:, j - 1] * (1 - w) + matrix[:, j] * w
+
+        # The curve is non-increasing with N: the bracket starts at the last row
+        # with curve >= y_val, which also picks the largest N on flat segments.
+        n_above = int(np.sum(curve >= y_val))
+        if n_above == 0:
             raise OutOfBoundsError(
                 f"{self.ftype.capitalize()} {y} at T={x} is above the fatigue curve."
                 f" Property: {self.name}, Material: {self.material_name}"
             )
-        return res
+        if n_above == len(curve):
+            return float(N_cycles[-1])
+        i = n_above - 1
+        y1, y2 = curve[i], curve[i + 1]
+        N1, N2 = N_cycles[i], N_cycles[i + 1]
+        if y_val == y1:
+            # on a table row, avoid the round-off of the log interpolation
+            return float(N1)
+        log_N = np.log10(N1) + np.log10(y_val / y1) * np.log10(N2 / N1) / np.log10(
+            y2 / y1
+        )
+        return float(10**log_N)
 
 
 class FatigueInconelRCCMRx(Fatigue):
@@ -560,9 +562,7 @@ class FatigueInconelRCCMRx(Fatigue):
                 f"Total stress range {ds_tot} is above the maximum defined in the "
                 f"fatigue table."
             )
-        interpolator = self.interpolators[curve]
-
-        return self._interpolate(interpolator, x, y)
+        return self._interpolate(self.tables[curve], x, y)
 
 
 class PolynomialProperty(Property):

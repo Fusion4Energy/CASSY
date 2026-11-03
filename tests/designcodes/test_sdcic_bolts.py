@@ -224,7 +224,8 @@ class TestSDC_IC_Bolts:
             )
             == 75
         )
-        assert pytest.approx(result["N"], rel=1e-2) == 3123333
+        # log-log between 199 MPa (2e6) and 186 MPa (5e6)
+        assert pytest.approx(result["N"], rel=1e-2) == 2798376
 
     def test_computeVj_sigma_pre(
         self,
