@@ -1,6 +1,12 @@
+from __future__ import annotations
+
 import re
+from typing import TYPE_CHECKING
 
 from cassy.auxiliary.types import LoadTerm
+
+if TYPE_CHECKING:
+    import pandas as pd
 # import xlwings as xw
 
 
@@ -26,6 +32,33 @@ def stripfunc(string: str) -> str:
 #     except AttributeError:
 #         logging.warning("No active engine of excel.")
 #         return False
+
+
+# optional column of the input CSVs, allows to share one file among several
+# submodels/flanges
+COMPONENT_COLUMN = "component"
+
+
+def select_component(df: pd.DataFrame, name: str, source: str = "") -> pd.DataFrame:
+    """Keep only the rows of component ``name`` if ``df`` has a ``component``
+    column, which is then dropped. ``df`` is returned unchanged otherwise.
+
+    Raises
+    ------
+    ValueError
+        If the column exists but no row belongs to ``name``.
+    """
+    if COMPONENT_COLUMN not in df.columns:
+        return df
+    labels = df[COMPONENT_COLUMN].astype(str).str.strip()
+    mask = labels == str(name).strip()
+    if not mask.any():
+        available = sorted(labels.unique())
+        raise ValueError(
+            f"{source}: no rows with {COMPONENT_COLUMN} '{name}'. "
+            f"Available: {available}"
+        )
+    return df.loc[mask].drop(columns=COMPONENT_COLUMN).reset_index(drop=True)
 
 
 _LEGACY_TOKEN = re.compile(r"([+-]?)(\d+)")

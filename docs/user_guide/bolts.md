@@ -19,6 +19,10 @@ The columns of the csv file are:
 * **Mx**: Mx moment action on the bolt section
 * **My**: My moment action on the bolt section
 
+Optionally, the actions of several flanges can be collected in a single file. In this
+case, add a **component** column containing the flange name and point all the flanges
+to the same file: each flange only uses the rows whose *component* matches its name.
+
 Any other column in the file is ignored.
 
 CASSY is FEM code agnostic, but a collection of script to extract data from different workflows (e.g., APDL, Mechanical, ABAQUS, etc.) in a suitable format ready to be used in CASSY can be found [here](https://github.com/Fusion4Energy/CASSY_support).

@@ -1,6 +1,11 @@
+import pandas as pd
 import pytest
 
-from cassy.auxiliary.functions import format_terms, parse_legacy_combination
+from cassy.auxiliary.functions import (
+    format_terms,
+    parse_legacy_combination,
+    select_component,
+)
 from cassy.auxiliary.types import LoadTerm
 
 
@@ -54,3 +59,25 @@ def test_format_terms():
     terms = [{"sign": "-", "analysis": "X", "step": 2}, LoadTerm("+", "Y", 5)]
     assert format_terms(terms) == "-X:2 + Y:5"
     assert format_terms([]) == ""
+
+
+class TestSelectComponent:
+    def test_no_component_column(self):
+        df = pd.DataFrame({"a": [1, 2]})
+        assert select_component(df, "X") is df
+
+    def test_filters_and_drops_column(self):
+        df = pd.DataFrame({"component": ["A", " B ", "A"], "a": [1, 2, 3]})
+        out = select_component(df, "A")
+        assert list(out.columns) == ["a"]
+        assert out["a"].tolist() == [1, 3]
+        assert select_component(df, "B")["a"].tolist() == [2]
+
+    def test_numeric_labels(self):
+        df = pd.DataFrame({"component": [1, 2], "a": [1, 2]})
+        assert select_component(df, "2")["a"].tolist() == [2]
+
+    def test_missing_component(self):
+        df = pd.DataFrame({"component": ["A"], "a": [1]})
+        with pytest.raises(ValueError, match="'C'"):
+            select_component(df, "C", "file.csv")

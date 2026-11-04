@@ -21,6 +21,11 @@ The columns of the file must be:
 * **Sxz**: Sxz component of the stress
 * **Syz**: Syz component of the stress
 
+Optionally, the stresses of several submodels can be collected in a single file. In this
+case, add a **component** column containing the submodel name and point all the
+submodels to the same file: each submodel only uses the rows whose *component* matches
+its name.
+
 CASSY if FEM code agnostic, but a collection of script to extract data from different workflows (e.g., APDL, Mechanical, ABAQUS, etc.) in a suitable format ready to be used in CASSY can be found [here](https://github.com/Fusion4Energy/CASSY_support)
 
 ## General Tab

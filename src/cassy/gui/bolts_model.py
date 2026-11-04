@@ -11,6 +11,7 @@ import csv
 import os
 from typing import Any
 
+from cassy.auxiliary.functions import COMPONENT_COLUMN, select_component
 from cassy.designcodes.map import BOLT_CODES as _BOLT_CODES
 
 BOLT_DESIGN_CODES: list[str] = list(_BOLT_CODES.keys())
@@ -186,11 +187,15 @@ def get_analysis_names(project: dict) -> list[str]:
     names: set[str] = set()
     for flange in project.get("flanges", []):
         path = flange.get("actions_file", "")
+        name = str(flange.get("name", "")).strip()
         if not path or not os.path.isfile(path):
             continue
         try:
             with open(path, newline="", encoding="utf-8-sig") as fh:
                 for row in csv.DictReader(fh):
+                    component = row.get(COMPONENT_COLUMN)
+                    if component is not None and component.strip() != name:
+                        continue
                     value = (row.get("analysis") or "").strip()
                     if value:
                         names.add(value)
@@ -292,7 +297,7 @@ def build_bolts_from_project(
             raise ValueError(
                 f"Actions CSV not found for flange '{flange_name}': '{actions_file}'"
             )
-        actions = pd.read_csv(actions_file)
+        actions = select_component(pd.read_csv(actions_file), flange_name, actions_file)
         missing = [c for c in ACTIONS_COLUMNS if c not in actions.columns]
         if missing:
             raise ValueError(

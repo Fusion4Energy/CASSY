@@ -100,6 +100,22 @@ def test_get_analysis_names_from_actions_files(tmp_path):
     assert get_analysis_names(proj) == ["Dead", "Seismic", "Thermal"]
 
 
+def test_get_analysis_names_shared_actions_file(tmp_path):
+    header = "component,boltID,analysis,loadstep,Fx,Fy,Fz,Mz,Mx,My\n"
+    f = tmp_path / "shared.csv"
+    f.write_text(
+        header + "F1,1,Thermal,1,0,0,0,0,0,0\nF2,1,Seismic,1,0,0,0,0,0,0\n"
+        "F3,1,Dead,1,0,0,0,0,0,0\n"
+    )
+    proj = {
+        "flanges": [
+            {"name": "F1", "actions_file": str(f)},
+            {"name": "F2", "actions_file": str(f)},
+        ]
+    }
+    assert get_analysis_names(proj) == ["Seismic", "Thermal"]
+
+
 def test_paths_material_names_include_additional_folder(tmp_path):
     builtin = Path(mat_folder.__file__).parent / "Inconel 718 RCC-MRx.yaml"
     shutil.copy(builtin, tmp_path / "My custom steel.yaml")

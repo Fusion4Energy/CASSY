@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from cassy.auxiliary.custom_errors import ConfigError, TensorInputError
+from cassy.auxiliary.functions import select_component
 from cassy.auxiliary.types import LoadTerm, PathLike
 
 
@@ -255,9 +256,17 @@ class Configuration:
         return tensor
 
 
-def read_stress_tensors(tensors_file: PathLike) -> pd.DataFrame:
-    """Read and validate a linearized stress tensors CSV."""
+def read_stress_tensors(
+    tensors_file: PathLike, component: str | None = None
+) -> pd.DataFrame:
+    """Read and validate a linearized stress tensors CSV.
+
+    If the file has a ``component`` column (one file shared by several submodels),
+    only the rows of ``component`` are kept.
+    """
     stress_tensors = pd.read_csv(tensors_file)
+    if component is not None:
+        stress_tensors = select_component(stress_tensors, component, str(tensors_file))
     stress_tensors["loadstep"] = stress_tensors["loadstep"].astype(int)
     stress_tensors["path"] = stress_tensors["path"].astype(int)
     stress_tensors["analysis"] = stress_tensors["analysis"].astype(str)

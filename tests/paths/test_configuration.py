@@ -7,6 +7,7 @@ from cassy.auxiliary.custom_errors import TensorInputError
 from cassy.auxiliary.types import LoadTerm
 from cassy.gui.paths_model import build_configs_from_project
 from cassy.paths.paths_config import Configuration, LoadConfig, LoadType
+from cassy.paths.paths_config import read_stress_tensors
 from cassy.paths.paths_config import StressClassification
 from tests.helpers import load_project
 
@@ -92,3 +93,21 @@ class TestCrossAnalysisCombination:
         self._add_load(config, "missing", [LoadTerm("+", "Other", 999)])
         with pytest.raises(TensorInputError):
             config.get_stress_tensor("missing", 1, "begin")
+
+
+def test_read_stress_tensors_shared_file(tmp_path):
+    src = Path(__file__).parent / "res" / "submodel_tensors.csv"
+    single = pd.read_csv(src)
+    shared = pd.concat(
+        [single.assign(component="SM1"), single.assign(component="SM2", Sx=0.0)]
+    )
+    shared_file = tmp_path / "shared.csv"
+    shared.to_csv(shared_file, index=False)
+
+    expected = read_stress_tensors(src)
+    pd.testing.assert_frame_equal(
+        read_stress_tensors(shared_file, "SM1"), expected, check_dtype=False
+    )
+    assert (read_stress_tensors(shared_file, "SM2")["Sx"] == 0).all()
+    with pytest.raises(ValueError):
+        read_stress_tensors(shared_file, "SM3")

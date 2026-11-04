@@ -10,6 +10,7 @@ import copy
 import os
 from typing import Any
 
+from cassy.auxiliary.functions import COMPONENT_COLUMN, select_component
 from cassy.designcodes.map import PATH_CODES as _PATH_CODES
 from cassy.paths.paths_config import (
     LoadType,
@@ -84,7 +85,10 @@ def get_available_analyses(project: dict) -> list[str]:
             try:
                 import pandas as pd
 
-                col = pd.read_csv(path, usecols=["analysis"])["analysis"]
+                df = pd.read_csv(
+                    path, usecols=lambda c: c in ("analysis", COMPONENT_COLUMN)
+                )
+                col = select_component(df, sm.get("name", ""), path)["analysis"]
                 names.update(col.dropna().astype(str).unique())
             except Exception:
                 pass
@@ -185,7 +189,7 @@ def build_configs_from_project(project: dict) -> dict:
             code=sm["design_code"],
             loads=loads,
             paths=paths,
-            stress_tensors=read_stress_tensors(tensors_file),
+            stress_tensors=read_stress_tensors(tensors_file, sm_name),
             reference_events={
                 pnum: _re_configs(res, tdpa_lut, sm_name, pnum, False) for pnum in paths
             },
