@@ -502,6 +502,71 @@ class TestTDPATabImportCSV:
         assert "tdpa_fatigue" in proj
 
 
+class TestFatigueTDPATab:
+    @pytest.fixture
+    def proj(self):
+        proj = _project()
+        proj["fatigue_reference_events"] = proj["reference_events"][:]
+        return proj
+
+    def test_cells_hold_T_begin_T_end_dpa(self, root, proj):
+        tab = FatigueTDPATab(tk.ttk.Notebook(root), proj)
+        tab.rebuild_grid()
+        key = next(iter(tab._cell_vars))
+        t_beg, t_end, dpa = tab._cell_vars[key]
+        t_beg.set("300")
+        t_end.set("350")
+        dpa.set("0.2")
+        assert tab.sync() == []
+        entry = next(e for e in proj["tdpa_fatigue"] if e["re_id"] == key[2])
+        assert (entry["T"], entry["T_end"], entry["dpa"]) == (300.0, 350.0, 0.2)
+
+    def test_empty_T_end_falls_back_to_T(self, root, proj):
+        tab = FatigueTDPATab(tk.ttk.Notebook(root), proj)
+        tab.rebuild_grid()
+        key = next(iter(tab._cell_vars))
+        tab._cell_vars[key][0].set("300")
+        assert tab.sync() == []
+        assert proj["tdpa_fatigue"][0]["T_end"] == 300.0
+
+    def test_old_project_without_T_end(self, root, proj):
+        tab = FatigueTDPATab(tk.ttk.Notebook(root), proj)
+        tab.rebuild_grid()
+        group, item, re_id = next(iter(tab._cell_vars))
+        proj["tdpa_fatigue"] = [
+            {"submodel": group, "path_num": item, "re_id": re_id, "T": 250.0, "dpa": 0}
+        ]
+        tab.rebuild_grid()
+        assert [v.get() for v in tab._cell_vars[(group, item, re_id)]] == [
+            "250.0",
+            "250.0",
+            "0",
+        ]
+
+    @pytest.mark.parametrize(
+        "header, row, expected",
+        [
+            ("T_begin,T_end,DPA", "300,350,0.1", ["300", "350", "0.1"]),
+            ("T,DPA", "300,0.1", ["300", "300", "0.1"]),  # old single-T format
+        ],
+    )
+    def test_import_csv(self, root, proj, tmp_path, header, row, expected):
+        tab = FatigueTDPATab(tk.ttk.Notebook(root), proj)
+        tab.rebuild_grid()
+        group, item, re_id = next(iter(tab._cell_vars))
+        csv_file = tmp_path / "fat.csv"
+        csv_file.write_text(
+            f"submodel,path,event,{header}\n{group},{item},{re_id},{row}\n"
+        )
+        with (
+            patch("cassy.gui.common.filedialog") as fd,
+            patch("cassy.gui.common.messagebox"),
+        ):
+            fd.askopenfilename.return_value = str(csv_file)
+            tab._import_csv()
+        assert [v.get() for v in tab._cell_vars[(group, item, re_id)]] == expected
+
+
 # ---------------------------------------------------------------------------
 # 4. GeneralTab — sync / load_from_project
 # ---------------------------------------------------------------------------

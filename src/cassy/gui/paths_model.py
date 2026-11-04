@@ -124,7 +124,11 @@ def build_configs_from_project(project: dict) -> dict:
 
     def _tdpa_lut(key: str) -> dict:
         return {
-            (e["submodel"], e["path_num"], e["re_id"]): (float(e["T"]), float(e["dpa"]))
+            (e["submodel"], e["path_num"], e["re_id"]): (
+                float(e["T"]),
+                float(e["T_end"]) if e.get("T_end") is not None else None,
+                float(e["dpa"]),
+            )
             for e in project.get(key, [])
             if "submodel" in e
         }
@@ -134,12 +138,13 @@ def build_configs_from_project(project: dict) -> dict:
     ) -> list[ReferenceEventConfig]:
         out = []
         for re in re_list:
-            T, dpa = lut.get((sm_name, pnum, re["re_id"]), (0.0, 0.0))
+            T, T_end, dpa = lut.get((sm_name, pnum, re["re_id"]), (0.0, None, 0.0))
             out.append(
                 ReferenceEventConfig(
                     service_lvl=re.get("service_lvl", "A"),
                     re_ID=re["re_id"],
                     T=T,
+                    T_end=T_end if fatigue else None,
                     dpa=dpa,
                     oc=re.get("oc", "N/A"),
                     ie=re.get("ie", "N/A"),

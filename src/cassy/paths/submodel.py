@@ -564,6 +564,9 @@ class Submodel:
                     for re_config in self.config.get_reference_events(
                         pathnum, fatigue=True
                     ):
+                        # fatigue uses the max temperature at each path point
+                        if pos == "end" and re_config.T_end is not None:
+                            re_config.T = re_config.T_end
                         self._build_RE(pathnum, re_config, pos, fatigue=True)
 
     def _build_RE(

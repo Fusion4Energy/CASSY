@@ -106,7 +106,22 @@ the following data is specified:
 
 ## T & DPA Tab
 For each combination of Reference Event, submodel and path, a temperature and DPA value must 
-be associated. Once all the previous configurations have been set, click on ``Refresh grid`` to compute the grid that needs to be filled.
+be associated. The temperature is the **average temperature along the path**, which is used
+to evaluate the material properties for all the reference event rules.
+Once all the previous configurations have been set, click on ``Refresh grid`` to compute the grid that needs to be filled.
 
 !!! note
     The grid can also be completed by importing a .csv whose columns are *submodel*, *path*, *event*, *T*, *DPA*.
+
+## T & DPA Fatigue Tab
+Same as the T & DPA tab but for the fatigue reference events. Since fatigue is assessed
+separately at the two path points, two temperatures are required for each cell: the
+**maximum temperature at the path begin** (*T max begin*) and the **maximum temperature at the path end**
+(*T max end*). Each one is used to evaluate the material properties and the fatigue curve
+at the corresponding path point. A single DPA value is used for both points.
+The same convention is applied to all design codes (SDC-IC and RCC-MRx).
+
+!!! note
+    The grid can also be completed by importing a .csv whose columns are *submodel*, *path*, *event*, *T_begin*, *T_end*, *DPA*.
+    If *T_end* is empty, *T_begin* is used for both points. A .csv with a single *T* column
+    (old format) is also accepted, in which case the same temperature is used at both points.

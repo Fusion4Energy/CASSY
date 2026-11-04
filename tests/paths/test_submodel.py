@@ -48,6 +48,29 @@ class TestSubmodel:
         submodel.build_REs(fatigue=True)
         submodel.assess(code, fatigue=True)
 
+    def test_fatigue_T_begin_end(self):
+        project = load_project(RES_DIR / "submodel.json")
+        project["tdpa_fatigue"][0]["T"] = 100.0
+        project["tdpa_fatigue"][0]["T_end"] = 200.0
+        config = build_configs_from_project(project)["Model_A"]
+        with as_file(RES.joinpath("SS316L(N)-IG_SDC-IC.yaml")) as mat_path:
+            steel = Material(mat_path)
+        submodel = Submodel("Model", config, {"SS316L(N)-IG": steel})
+        submodel.build_REs(fatigue=True)
+        # path 1 has a different T at begin and end, path 2 has a single T
+        path1, path2 = submodel.paths[1], submodel.paths[2]
+        assert path1.REs_fatigue_beg[0].config.T == 100.0
+        assert path1.REs_fatigue_end[0].config.T == 200.0
+        assert path2.REs_fatigue_beg[0].config.T == 35.0
+        assert path2.REs_fatigue_end[0].config.T == 35.0
+        # normal reference events ignore T_end
+        for RE in path1.REs_beg + path1.REs_end:
+            assert RE.config.T_end is None
+
+        submodel.assess(SDC_IC(), fatigue=True)
+        assert path1.ass_fatigue_beg["T"].iloc[0] == 100.0
+        assert path1.ass_fatigue_end["T"].iloc[0] == 200.0
+
     def test_assess_stress_fatigue(self):
         config = _config("submodel.json")
         with as_file(RES.joinpath("XM-19 SS_SDC-IC.yaml")) as mat_path:

@@ -7,8 +7,9 @@ Workflow (tabs in order):
   4. Ref. Events — reference events built from selected loads
   5. Fatigue Ref. Events — fatigue-specific reference events
   6. Paths     — path metadata and RE assignment per submodel
-  7. T & DPA   — temperature and irradiation table (submodel × path × RE)
-  8. T & DPA Fatigue — same table for fatigue reference events
+  7. T & DPA   — average temperature and irradiation table (submodel × path × RE)
+  8. T & DPA Fatigue — max temperature at path begin/end and irradiation for
+     fatigue reference events
 
 The project state is saved and loaded as JSON.
 """
@@ -651,6 +652,11 @@ class TDPATab(TDPAGridTab):
     _ITEM_LABEL = "Path"
     _CSV_ITEM_COL = "path"
     _EMPTY_MSG = "No data to display (add submodels, paths and reference events first)."
+    # SDC-IC: average temperature along the path
+    _FIELDS = (
+        ("T", "T", "T avg [°C]"),
+        ("dpa", "DPA", "DPA"),
+    )
 
     def _groups(self) -> list[tuple[str, list]]:
         return [
@@ -666,8 +672,22 @@ class TDPATab(TDPAGridTab):
 
 
 class FatigueTDPATab(TDPATab):
+    """Fatigue uses the maximum temperature at each path point (begin/end)."""
+
     _PROJECT_KEY = "tdpa_fatigue"
     _RE_KEY = "fatigue_reference_events"
+    _CELL_W = 11
+    _FIELDS = (
+        ("T", "T_begin", "T max begin [°C]"),
+        ("T_end", "T_end", "T max end [°C]"),
+        ("dpa", "DPA", "DPA"),
+    )
+
+    def _default(self, key: str, values: dict[str, str]) -> str:
+        # projects saved before T_end existed use T at both path points
+        if key == "T_end":
+            return values.get("T", "")
+        return super()._default(key, values)
 
 
 # ── Main application window ───────────────────────────────────────────────────

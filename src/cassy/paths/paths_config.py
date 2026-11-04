@@ -116,10 +116,19 @@ class LinStressConfig:
 
 @dataclass
 class ReferenceEventConfig:
+    """Configuration of a reference event on a path.
+
+    ``T`` is the average temperature along the path for reference events, and
+    the maximum temperature at the path begin for fatigue reference events.
+    ``T_end`` is the maximum temperature at the path end, used only for
+    fatigue; if None, ``T`` is used at both path points.
+    """
+
     service_lvl: str
     re_ID: str
     T: float  # °C
     dpa: float = 0
+    T_end: float | None = None  # °C
     oc: str = "N/A"
     ie: str = "N/A"
     ce: str = "N/A"

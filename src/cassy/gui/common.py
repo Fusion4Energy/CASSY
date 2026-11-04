@@ -944,10 +944,11 @@ class RunTab(ttk.Frame):
 
 
 class TDPAGridTab(ttk.Frame):
-    """Grid of (group × item) rows × reference events; each cell holds T and DPA.
+    """Grid of (group × item) rows × reference events; each cell holds the
+    values listed in ``_FIELDS`` (by default T and DPA).
 
     Groups are flanges/submodels, items are bolts/paths. Values are stored in
-    ``project[_PROJECT_KEY]`` as ``{_GROUP_FIELD, _ITEM_FIELD, re_id, T, dpa}``.
+    ``project[_PROJECT_KEY]`` as ``{_GROUP_FIELD, _ITEM_FIELD, re_id, <fields>}``.
     """
 
     _PROJECT_KEY = "tdpa"
@@ -959,11 +960,16 @@ class TDPAGridTab(ttk.Frame):
     _CSV_ITEM_COL: str
     _EMPTY_MSG = "No data to display."
     _CELL_W = 9
+    # (project key, CSV column, grid header); the first field is required
+    _FIELDS: tuple[tuple[str, str, str], ...] = (
+        ("T", "T", "T [°C]"),
+        ("dpa", "DPA", "DPA"),
+    )
 
     def __init__(self, parent: ttk.Notebook, project: dict) -> None:
         super().__init__(parent)
         self._project = project
-        self._cell_vars: dict[tuple, tuple[tk.StringVar, tk.StringVar]] = {}
+        self._cell_vars: dict[tuple, tuple[tk.StringVar, ...]] = {}
         self._var_grid: list[list[tk.StringVar]] = []
         self._build_shell()
         self.after(0, self.rebuild_grid)
@@ -975,6 +981,18 @@ class TDPAGridTab(ttk.Frame):
     def _parse_item(self, raw: str) -> str | int:
         """Convert an item key read from CSV; raise ValueError if invalid."""
         return raw
+
+    def _default(self, key: str, values: dict[str, str]) -> str:
+        """Value of an empty optional cell, given the cell values read so far."""
+        return "0" if key == "dpa" else ""
+
+    def _fill(self, values: dict[str, str]) -> dict[str, str]:
+        """Complete the empty optional fields of a cell with their defaults."""
+        out: dict[str, str] = {}
+        for k, (key, _, _) in enumerate(self._FIELDS):
+            value = values.get(key, "")
+            out[key] = value if value or k == 0 else self._default(key, out)
+        return out
 
     def _build_shell(self) -> None:
         toolbar = make_toolbar(
@@ -989,8 +1007,9 @@ class TDPAGridTab(ttk.Frame):
         ttk.Label(
             toolbar,
             text=(
-                f"CSV columns: {self._GROUP_FIELD}, {self._CSV_ITEM_COL}, event, T, DPA"
-                "   ·   Ctrl+V pastes a block copied from Excel"
+                f"CSV columns: {self._GROUP_FIELD}, {self._CSV_ITEM_COL}, event, "
+                + ", ".join(col for _, col, _ in self._FIELDS)
+                + "   ·   Ctrl+V pastes a block copied from Excel"
             ),
             style="Muted.TLabel",
         ).pack(side="left", padx=8)
@@ -1033,16 +1052,16 @@ class TDPAGridTab(ttk.Frame):
             )
             return
 
-        existing: dict[tuple, tuple[str, str]] = {
-            (e[self._GROUP_FIELD], e[self._ITEM_FIELD], e["re_id"]): (
-                str(e["T"]),
-                str(e["dpa"]),
+        existing: dict[tuple, dict[str, str]] = {
+            (e[self._GROUP_FIELD], e[self._ITEM_FIELD], e["re_id"]): self._fill(
+                {key: str(e[key]) for key, _, _ in self._FIELDS if e.get(key) is not None}
             )
             for e in self._project.get(self._PROJECT_KEY, [])
             if self._GROUP_FIELD in e and self._ITEM_FIELD in e
         }
 
         cell_w = self._CELL_W
+        n = len(self._FIELDS)
         grid_opts = {"sticky": "nsew", "padx": 1, "pady": 1}
 
         def header(text: str, width: int, **grid) -> None:
@@ -1068,9 +1087,11 @@ class TDPAGridTab(ttk.Frame):
         header(self._GROUP_LABEL, 16, row=0, column=0, rowspan=2)
         header(self._ITEM_LABEL, 10, row=0, column=1, rowspan=2)
         for c, re_id in enumerate(re_ids):
-            header(str(re_id), cell_w * 2 + 1, row=0, column=2 + c * 2, columnspan=2)
-            header("T [°C]", cell_w, row=1, column=2 + c * 2)
-            header("DPA", cell_w, row=1, column=3 + c * 2)
+            header(
+                str(re_id), cell_w * n + n - 1, row=0, column=2 + c * n, columnspan=n
+            )
+            for k, (_, _, label) in enumerate(self._FIELDS):
+                header(label, cell_w, row=1, column=2 + c * n + k)
 
         row = 2
         for group, items in groups:
@@ -1079,13 +1100,15 @@ class TDPAGridTab(ttk.Frame):
                 key_label(str(item), 10, row=row, column=1)
                 line: list[tk.StringVar] = []
                 for c, re_id in enumerate(re_ids):
-                    t_def, dpa_def = existing.get((group, item, re_id), ("", "0"))
-                    t_var = tk.StringVar(self, value=t_def)
-                    dpa_var = tk.StringVar(self, value=dpa_def)
-                    self._cell_vars[(group, item, re_id)] = (t_var, dpa_var)
-                    for k, var in enumerate((t_var, dpa_var)):
+                    defaults = existing.get((group, item, re_id)) or self._fill({})
+                    cell = tuple(
+                        tk.StringVar(self, value=defaults[key])
+                        for key, _, _ in self._FIELDS
+                    )
+                    self._cell_vars[(group, item, re_id)] = cell
+                    for k, var in enumerate(cell):
                         entry = ttk.Entry(self._inner, textvariable=var, width=cell_w)
-                        entry.grid(row=row, column=2 + c * 2 + k, padx=1, pady=1)
+                        entry.grid(row=row, column=2 + c * n + k, padx=1, pady=1)
                         entry.bind(
                             "<<Paste>>",
                             lambda _e, r=len(self._var_grid), col=len(line): (
@@ -1153,9 +1176,15 @@ class TDPAGridTab(ttk.Frame):
                             f"Line {lineno}: ({group!r}, {item!r}, {event!r}) not in grid — skipped"
                         )
                         continue
-                    t_var, dpa_var = self._cell_vars[key]
-                    t_var.set(row.get("t", ""))
-                    dpa_var.set(row.get("dpa", ""))
+                    # a missing column falls back to the field key (e.g. T_begin -> T)
+                    values = self._fill(
+                        {
+                            fkey: row.get(col.lower(), row.get(fkey.lower(), ""))
+                            for fkey, col, _ in self._FIELDS
+                        }
+                    )
+                    for var, (fkey, _, _) in zip(self._cell_vars[key], self._FIELDS):
+                        var.set(values[fkey])
                     loaded += 1
         except Exception as exc:
             messagebox.showerror("Import Error", str(exc))
@@ -1184,10 +1213,11 @@ class TDPAGridTab(ttk.Frame):
             with open(path, "w", newline="", encoding="utf-8") as fh:
                 writer = csv.writer(fh)
                 writer.writerow(
-                    [self._GROUP_FIELD, self._CSV_ITEM_COL, "event", "T", "DPA"]
+                    [self._GROUP_FIELD, self._CSV_ITEM_COL, "event"]
+                    + [col for _, col, _ in self._FIELDS]
                 )
-                for (group, item, re_id), (t_var, dpa_var) in self._cell_vars.items():
-                    writer.writerow([group, item, re_id, t_var.get(), dpa_var.get()])
+                for (group, item, re_id), cell in self._cell_vars.items():
+                    writer.writerow([group, item, re_id] + [v.get() for v in cell])
             messagebox.showinfo("Export complete", f"T & DPA data saved to:\n{path}")
         except Exception as exc:
             messagebox.showerror("Export Error", str(exc))
@@ -1195,22 +1225,25 @@ class TDPAGridTab(ttk.Frame):
     def sync(self) -> list[str]:
         """Read cells into project[_PROJECT_KEY]; return validation errors.
 
-        Cells with an empty T are skipped.
+        Cells with an empty first field (T) are skipped; other empty fields
+        take their default.
         """
         entries = []
         errors = []
-        for (group, item, re_id), (t_var, dpa_var) in self._cell_vars.items():
-            t_str = t_var.get().strip()
-            dpa_str = dpa_var.get().strip()
-            if not t_str:
+        for (group, item, re_id), cell in self._cell_vars.items():
+            raw = {
+                key: var.get().strip() for (key, _, _), var in zip(self._FIELDS, cell)
+            }
+            if not raw[self._FIELDS[0][0]]:
                 continue
             try:
-                T = float(t_str)
-                dpa = float(dpa_str) if dpa_str else 0.0
+                values = {key: float(v) for key, v in self._fill(raw).items()}
             except ValueError:
                 errors.append(
                     f"{self._GROUP_LABEL} '{group}' / {self._ITEM_LABEL} '{item}' / "
-                    f"RE '{re_id}': T and DPA must be numbers"
+                    f"RE '{re_id}': "
+                    + ", ".join(col for _, col, _ in self._FIELDS)
+                    + " must be numbers"
                 )
                 continue
             entries.append(
@@ -1218,8 +1251,7 @@ class TDPAGridTab(ttk.Frame):
                     self._GROUP_FIELD: group,
                     self._ITEM_FIELD: item,
                     "re_id": re_id,
-                    "T": T,
-                    "dpa": dpa,
+                    **values,
                 }
             )
         self._project[self._PROJECT_KEY] = entries
