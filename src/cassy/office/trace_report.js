@@ -110,6 +110,8 @@ function table(head, rows, opts) {
   t.append(el('tbody', null, rows));
   return opts && opts.noscroll ? t : el('div', {class: 'scroll'}, t);
 }
+// excel export button of a summary table (see trace_xlsx.js), named after the component
+const xlsxButton = (name, getSheets, title) => window.cassyXlsx.button((D.title || 'trace') + '_' + name, getSheets, title);
 function debounce(f, ms) {
   let t = null;
   return (...a) => { clearTimeout(t); t = setTimeout(() => f(...a), ms); };
@@ -319,15 +321,17 @@ function buildSummary(v) {
   buildRecap(root);
 
   // needs attention
-  root.append(el('h2', null, 'Needs attention'));
   const att = [];
+  root.append(el('h2', null, 'Needs attention', xlsxButton('needs_attention', () => [{name: 'Needs attention',
+    rows: [['Type', 'Item', 'Position', 'Event', 'Rule', 'Equation / quantity', 'Value', 'Detail']].concat(att.map(a =>
+      [a.kind, itemName(a.g[0]), s(a.g[1]), evLabel(a.g), s(a.g[G.RULE]), a.what, a.raw, a.note]))}])));
   D.equations.filter(e => e[E.VERD] === FAILED && !e[E.SCREEN]).sort((a, b) => (b[E.RATIO] || 0) - (a[E.RATIO] || 0)).forEach(e => {
     const g = D.groups[e[E.G]];
-    att.push({type: el('span', {class: 'verdict failed'}, 'FAILED'), g, what: s(g[G.EQ]),
+    att.push({type: el('span', {class: 'verdict failed'}, 'FAILED'), kind: 'FAILED', raw: disp(e[E.RATIO]), g, what: s(g[G.EQ]),
       value: el('span', {class: 'fail'}, ratioTxt(e[E.RATIO])), note: invalid(e) ? 'invalidated: see the warnings' : mpa(e[E.APP]) + ' > ' + mpa(e[E.ALW]) + ' MPa', h: groupHash(g)});
   });
   for (const it of ITEMS.values()) for (const [pos, u] of it.usage) if (u >= 1) {
-    att.push({type: el('span', {class: 'verdict failed'}, 'FATIGUE'), g: [it.id, pos, -1, sid('fatigue'), -1, -1, -1], what: 'ΣVj',
+    att.push({type: el('span', {class: 'verdict failed'}, 'FATIGUE'), kind: 'FATIGUE', raw: u, g: [it.id, pos, -1, sid('fatigue'), -1, -1, -1], what: 'ΣVj',
       value: el('span', {class: 'fail'}, usageTxt(u)), note: 'cumulative usage ≥ 1', h: itemHash(it.id)});
   }
   // warnings grouped by message
@@ -340,7 +344,7 @@ function buildSummary(v) {
   });
   for (const w of wg.values()) {
     const g = D.groups[w.r[R.G]];
-    att.push({type: el('span', {class: 'verdict', style: 'background:var(--warn-bg);color:var(--warn)'}, 'WARNING'), g,
+    att.push({type: el('span', {class: 'verdict', style: 'background:var(--warn-bg);color:var(--warn)'}, 'WARNING'), kind: 'WARNING', raw: w.n > 1 ? w.n : null, g,
       what: s(w.r[R.NAME]), value: w.n > 1 ? w.n + '×' : '', note: s(w.r[R.TEXT]) + (w.n > 1 ? ' (' + w.n + ' occurrences in ' + w.items.size + ' items, first one linked)' : ''),
       h: groupHash(g, w.i)});
   }
@@ -353,7 +357,9 @@ function buildSummary(v) {
   }
 
   // heatmap
-  root.append(el('h2', null, 'Utilisation map'));
+  let shown = [];
+  root.append(el('h2', null, 'Utilisation map', xlsxButton('utilisation_map', () => [heatSheet(shown)],
+    'Export the items shown (filters and order applied)')));
   root.append(el('p', {class: 'hint'}, (isSM() ? 'Minimum ' : 'Maximum ') + T().name + ' of each item over all positions and reference events' +
     (HAS_FATIGUE ? ', and maximum cumulative fatigue usage ΣVj over the positions' : '') + '. Click a cell to open the item.'));
   const fText = el('input', {type: 'search', placeholder: 'Filter items', size: 18});
@@ -388,6 +394,7 @@ function buildSummary(v) {
     if (q) items = items.filter(it => itemName(it.id).toLowerCase().includes(q));
     if (mn !== null) items = items.filter(it => typeof it.max === 'number' && it.max >= mn);
     items.sort(fSort.value === 'worst' ? (a, b) => (b.max ?? -1) - (a.max ?? -1) || a.order - b.order : (a, b) => a.order - b.order);
+    shown = items;
     const rows = items.map(it => {
       const cs = cells.get(it.id) || COLS.map(() => ({eff: null, scr: null}));
       const tds = cs.map((c, i) => {
@@ -408,6 +415,24 @@ function buildSummary(v) {
     });
     const t = el('table', {class: 'heat'}, el('thead', null, el('tr', null, el('th', {rowspan: 2}, 'Item (' + items.length + ')'), groupsHead), el('tr', null, eqHead)), el('tbody', null, rows));
     out.replaceChildren(el('div', {class: 'scroll'}, t), COLS.length ? el('p', {class: 'hint'}, '* some checks of this equation failed but were superseded by the governing equations of the sequential rule.') : null);
+  }
+  // the full-precision values of the cells, two header rows (rule, equation); a cell with
+  // only failed superseded checks is exported as text
+  function heatSheet(items) {
+    const top = ['Item'], eqs = [''], merges = [[0, 0, 1, 0]];
+    COLS.forEach((c, i) => {
+      if (i === 0 || COLS[i - 1].rule !== c.rule) { top.push(s(c.rule)); merges.push([0, i + 1, 0, i + 1]); }
+      else { top.push(''); merges[merges.length - 1][3] = i + 1; }
+      eqs.push(s(c.eq));
+    });
+    if (HAS_FATIGUE) { top.push('Fatigue ΣVj'); eqs.push(''); merges.push([0, COLS.length + 1, 1, COLS.length + 1]); }
+    const rows = items.map(it => {
+      const cs = cells.get(it.id) || COLS.map(() => ({eff: null, scr: null}));
+      const vals = cs.map(c => (c.eff !== null ? disp(c.eff) : c.scr !== null ? 'superseded ' + ratioTxt(c.scr) : null));
+      if (HAS_FATIGUE) vals.push(it.useMax);
+      return [itemName(it.id), ...vals];
+    });
+    return {name: 'Utilisation (' + T().label.toLowerCase() + ')', header: 2, merges: merges.filter(m => m[1] !== m[3] || m[0] !== m[2]), rows: [top, eqs, ...rows]};
   }
   const r = debounce(render, 150);
   fText.addEventListener('input', r); fMin.addEventListener('input', r); fSort.addEventListener('change', render);
@@ -443,7 +468,9 @@ function buildRecap(root) {
   const nFailed = d => items.filter(it => (recap.get(it.id).get(d) || {}).failed).length;
   const nAssessed = d => items.filter(it => recap.get(it.id).has(d)).length;
 
-  root.append(el('h2', null, 'Recap by damage type'));
+  let shown = [];
+  root.append(el('h2', null, 'Recap by damage type', xlsxButton('recap', () => [recapSheet(shown)],
+    'Export the items shown (filters and order applied)')));
   root.append(el('p', {class: 'hint'}, 'For each item, the verdict of each damage type over all positions and reference events, with the ' +
     (isSM() ? 'lowest ' : 'highest ') + T().name + ' (cumulative usage \u03a3Vj for fatigue) and where it occurs. As in the Word recap, a failed equation of a sequential rule ' +
     'superseded by the governing ones does not fail the item. Click a cell to open the driving calculation.'));
@@ -454,18 +481,26 @@ function buildRecap(root) {
   const out = el('div');
   root.append(out);
   const status = it => DAMAGES.some(d => (recap.get(it.id).get(d) || {}).failed);
-  function recapCell(it, d) {
+  // verdict, worst value, where it occurs and notes of an item for a damage type
+  function recapInfo(it, d) {
     const c = recap.get(it.id).get(d);
-    if (!c) return el('td', {class: 'na'}, 'not assessed');
+    if (!c) return null;
     const fatigue = d === FATIGUE;
-    const h = fatigue || !c.at ? itemHash(it.id) : groupHash(c.at);
     const where = fatigue ? s(c.pos) : c.at ? [s(c.at[1]), evLabel(c.at), s(c.at[G.EQ])].filter(Boolean).join(' \u00b7 ') : '';
-    const chip = c.failed ? el('span', {class: 'verdict failed'}, 'FAILED') : c.max === null ? el('span', {class: 'verdict notreq'}, 'not required') : el('span', {class: 'verdict ok'}, 'OK');
-    const value = c.max === null ? null : el('b', {class: level(c.max)}, fatigue ? '\u03a3Vj ' + usageTxt(c.max) : ratioTxt(c.max));
+    const verdict = c.failed ? 'FAILED' : c.max === null ? 'not required' : 'OK';
     const notes = [];
     if (c.failed > 1 && !fatigue) notes.push(c.failed + ' failed equations');
     if (c.failed > 1 && fatigue) notes.push(c.failed + ' positions');
     if (c.screening) notes.push(c.screening + ' superseded');
+    return {c, fatigue, where, verdict, notes};
+  }
+  function recapCell(it, d) {
+    const info = recapInfo(it, d);
+    if (!info) return el('td', {class: 'na'}, 'not assessed');
+    const {c, fatigue, where, verdict, notes} = info;
+    const h = fatigue || !c.at ? itemHash(it.id) : groupHash(c.at);
+    const chip = el('span', {class: 'verdict ' + (c.failed ? 'failed' : c.max === null ? 'notreq' : 'ok')}, verdict);
+    const value = c.max === null ? null : el('b', {class: level(c.max)}, fatigue ? '\u03a3Vj ' + usageTxt(c.max) : ratioTxt(c.max));
     return el('td', {class: 'recap link', onclick: () => go(h), title: 'open the driving calculation'},
       el('div', {class: 'recap-top'}, chip, value), where ? el('div', {class: 'sub'}, where) : null,
       notes.length ? el('div', {class: 'sub'}, notes.join(', ')) : null);
@@ -474,12 +509,28 @@ function buildRecap(root) {
     const q = fText.value.trim().toLowerCase();
     let rows = items.filter(it => (!q || itemName(it.id).toLowerCase().includes(q)) && (!fFail.checked || status(it)));
     if (fSort.value === 'failed') rows = [...rows].sort((a, b) => status(b) - status(a) || (b.max ?? -1) - (a.max ?? -1) || a.order - b.order);
+    shown = rows;
     const head = [el('th', null, 'Item (' + rows.length + ')'), el('th', null, 'Verdict'),
       ...DAMAGES.map(d => el('th', null, d, el('div', {class: 'sub'}, nAssessed(d) ? nFailed(d) + ' of ' + nAssessed(d) + ' failed' : 'not assessed')))];
     out.replaceChildren(table(head, rows.map(it => el('tr', null,
       el('td', {class: 'item'}, link(itemName(it.id), itemHash(it.id)), it.warnings ? el('span', {class: 'warn', title: it.warnings + ' calculation warnings'}, ' \u26a0') : null),
       td(status(it) ? el('span', {class: 'verdict failed'}, 'FAILED') : el('span', {class: 'verdict ok'}, 'OK')),
       ...DAMAGES.map(d => recapCell(it, d)))), {class: 'recap'}));
+  }
+  // two header rows: damage type, then verdict / worst value / where / notes of each
+  function recapSheet(items) {
+    const top = ['Item', 'Verdict'], sub = ['', ''], merges = [[0, 0, 1, 0], [0, 1, 1, 1]];
+    DAMAGES.forEach((d, i) => {
+      const c0 = 2 + 4 * i;
+      top.push(d, '', '', ''); sub.push('Verdict', d === FATIGUE ? 'ΣVj' : T().Worst + ' ' + T().col.toLowerCase(), 'Where', 'Notes');
+      merges.push([0, c0, 0, c0 + 3]);
+    });
+    const rows = items.map(it => [itemName(it.id), status(it) ? 'FAILED' : 'OK', ...DAMAGES.flatMap(d => {
+      const info = recapInfo(it, d);
+      if (!info) return ['not assessed', null, null, null];
+      return [info.verdict, info.c.max === null ? null : info.fatigue ? info.c.max : disp(info.c.max), info.where, info.notes.join(', ')];
+    })]);
+    return {name: 'Recap by damage type', header: 2, merges, rows: [top, sub, ...rows]};
   }
   const r = debounce(render, 150);
   fText.addEventListener('input', r);

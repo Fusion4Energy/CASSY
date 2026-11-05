@@ -49,6 +49,7 @@ input[type=search], input[type=number], select, button { font: inherit; padding:
 button { cursor: pointer; border: 1px solid var(--line); background: var(--soft); border-radius: 4px; }
 button:hover { background: var(--hover); }
 button:disabled { opacity: .45; cursor: default; }
+h2 .xlsx { margin-left: 10px; font-size: 12px; font-weight: normal; vertical-align: middle; }
 
 /* --- tables --- */
 table { border-collapse: collapse; margin: 4px 0 10px; }

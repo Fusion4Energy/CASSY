@@ -32,8 +32,8 @@ SUPERSEDED_NAMES = ("superseded", "screening")
 INVALIDATED = "invalidated"
 MAX_ROWS = 500
 WARN_RATIO = 0.9
-# three.js of the 3D location map, loaded from a CDN (the rest of the report works
-# offline)
+# three.js of the 3D location map, loaded from a CDN as SheetJS for the excel export of
+# the tables (see trace_xlsx.js); the rest of the report works offline
 THREE_URL = "https://cdn.jsdelivr.net/npm/three@0.170.0/"
 # folder (next to the pages) of the meshes of the other flanges shown as context
 CONTEXT_FOLDER = "geometry"
@@ -280,7 +280,8 @@ def _component_page(title: str, payload: dict, metadata: dict | None) -> str:
         "<a href='#/explore' data-tab='explore'>Explore</a></nav></header>"
         "<main id='app'><p class='hint pad'>Loading…</p></main>"
         f"<script type='application/json' id='data'>{_json_for_script(payload)}"
-        f"</script><script>{_asset('trace_report.js')}</script>"
+        f"</script><script>{_asset('trace_xlsx.js')}</script>"
+        f"<script>{_asset('trace_report.js')}</script>"
         f"{view3d}</body></html>"
     )
 
@@ -364,6 +365,7 @@ def _index_page(components: list[tuple[str, str, dict]], metadata: dict | None) 
         + "<th>Failed equations</th>"
         "<th>Warnings</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>{_events_tables(metadata)}</main>"
+        f"<script>{_asset('trace_xlsx.js')}</script>"
         f"<script>{_asset('trace_index.js')}</script></body></html>"
     )
 
