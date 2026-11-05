@@ -16,6 +16,7 @@ The project state is saved and loaded as JSON.
 
 from __future__ import annotations
 
+import copy
 import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Callable
@@ -604,6 +605,11 @@ class PathsTab(GroupedTableTab):
             item["welding_f"],
         )
 
+    def _extra_toolbar(self, toolbar: ttk.Frame) -> None:
+        ttk.Button(toolbar, text="Duplicate", command=self._duplicate).pack(
+            side="left", padx=(0, 4)
+        )
+
     def _add(self) -> None:
         sm = self._current_group()
         if not sm:
@@ -636,6 +642,25 @@ class PathsTab(GroupedTableTab):
         if dlg.result:
             paths[idx] = dlg.result
             self._refresh_table()
+
+    def _duplicate(self) -> None:
+        sm = self._current_group()
+        if not sm:
+            return
+        idx = self._selected_index()
+        if idx is None:
+            messagebox.showwarning("Selection", "Select a path to duplicate.")
+            return
+        paths = self._project["paths"].get(sm, [])
+        new_path = copy.deepcopy(paths[idx])
+        new_path["path_num"] = max(p["path_num"] for p in paths) + 1
+        paths.append(new_path)
+        self._refresh_table()
+        # Select the newly added row
+        children = self._tree.get_children()
+        if children:
+            self._tree.selection_set(children[-1])
+            self._tree.see(children[-1])
 
 
 # ── T & DPA tab ───────────────────────────────────────────────────────────────
