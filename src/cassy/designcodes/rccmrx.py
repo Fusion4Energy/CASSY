@@ -1,5 +1,6 @@
 import math
 import logging
+import numpy as np
 
 from cassy.auxiliary import trace
 from cassy.designcodes.codes import Code, Rule
@@ -66,7 +67,9 @@ class RCC_MRx(Code):
             )
 
         # de3 is derived assuming de_i = 0
-        de3 = material.Keps(T_ds) * math.sqrt(de1 * (de1 + de2)) - de2 - de1
+        root_argument = de1 * (de1 + de2)
+        root = np.sqrt(root_argument) if np.ndim(root_argument) > 0 else math.sqrt(root_argument)
+        de3 = material.Keps(T_ds) * root - de2 - de1
         de4 = de1 * (material.Kmu(T_ds) - 1)
         detot = de1 + de2 + de3 + de4
         # total allowable cycles calculation

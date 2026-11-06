@@ -51,6 +51,37 @@ There are attributes that are general and can be specified in each data format. 
 - `upper_bound`: a list of upper bounds to delimit the range of validity of the data provided. A value for each argument needs to be provided. If there is no limit to the validity of a specific value, the keyword `null` can be used. By default, no bounds are applied.
 
 When a property is requested outside its bounds during an assessment, the rule (or the fatigue event) that needs it is invalidated and counted as failed, with a warning in the log and in the [trace](trace.md); the rest of the assessment goes on.
+
+When using the Python API, material properties also accept NumPy arrays and
+broadcast scalar and array arguments to a common shape. Array entries outside
+the property bounds, with non-finite inputs, or above the fatigue curve return
+`NaN` and produce a warning; other entries are still evaluated. Scalar calls
+keep their existing return types and raise `OutOfBoundsError` outside the bounds.
+Piecewise properties retain first-matching-range precedence, including at shared
+boundaries. Fatigue interpolation retains exact table hits, the largest cycle
+count on flat segments, and the last table cycle count below the curve.
+Array property lookups are not added to the intermediate-results trace and do
+not enter tracing contexts. Scalar property lookups still use the existing trace
+when it is active; array validation warnings remain in the log.
+
+```python
+import numpy as np
+
+# material is a Material loaded from a material YAML file
+T = np.array([20.0, 200.0, 400.0])
+young = material.E(T, 0.0)
+cycles = material.N(T, np.array([0.004, 0.004, 0.004]))
+valid = np.isfinite(cycles)
+```
+
+The strain-based fatigue kernels `SDC_IC.computeVj`, `RCC_MRx.computeVj`, and
+`RCC_MR.computeVj` accept an event whose `config.T`, `config.dpa`,
+`config.welding_f`, `PQF`, and `tresca` are arrays. Their assessment dictionaries
+contain arrays for numeric results. Existing stress-curve support is unchanged:
+SDC-IC supports stress-based curves; RCC-MR and RCC-MRx still reject them.
+This does not make the path assessment/export interfaces or Neuber root solver
+array-aware.
+
 - `scale_result`: data may be provided in differen units than the standard (e.g. Young modulus in GPa instead of Pa). This factor can be used to scale the provided data accordingly. By default equal to 1.
 - `scale_x`, `scale_y` and `scale_z`: to ensure a correct interpolation, especially on tables, it is
 better to stick with the units the data is provided. cassy will enter these interpolation functions though with standard units (e.g. Pa, rel strain, etc.) hence, before entering into the interpolation range, this arguments (x, y, z) may need to be scaled accordingly. By default equal to 1. The only exception are stress based [fatigue](#fatigue) curves, which cassy enters in MPa.
@@ -516,8 +547,6 @@ Input parameters are:
 - `y`, DPA.
 
 Output unit expected: Pa.
-
-
 
 
 

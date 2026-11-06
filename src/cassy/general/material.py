@@ -100,13 +100,33 @@ class Property(ABC):
         self.name = name
         self.material_name = material_name
 
-    def __call__(self, *args) -> float:
+    def __call__(self, *args) -> float | np.ndarray:
         """
         Compute the property value and bounds.
+
+        Array inputs broadcast; invalid entries are NaN. Scalar inputs retain
+        their original return types and raise OutOfBoundsError outside the bounds.
         """
         # For legacy purposes, allow to provide all input in a tuple
         if len(args) == 1 and isinstance(args[0], tuple):
             args = args[0]
+        if any(np.ndim(arg) > 0 for arg in args):
+            arrays = np.broadcast_arrays(*(arg for arg in args if arg is not None))
+            array_iter = iter(arrays)
+            broadcast_args = tuple(
+                next(array_iter) if arg is not None else None for arg in args
+            )
+            valid = self._array_in_bounds(*broadcast_args)
+            result = np.full(valid.shape, np.nan)
+            result[valid] = self._function_to_call(
+                *(arg[valid] if arg is not None else None for arg in broadcast_args)
+            ) * self.scale_result
+            if np.any(~valid):
+                logging.warning(
+                    "Invalid array arguments for property %s of material %s: %d entries",
+                    self.name, self.material_name, np.count_nonzero(~valid),
+                )
+            return result
         # Check bounds if they are defined
         for i, arg in enumerate(args):
             if (
@@ -135,8 +155,20 @@ class Property(ABC):
             trace.record_property(self.name, result, args, self.material_name)
         return result
 
+    def _array_in_bounds(self, *args) -> np.ndarray:
+        valid = np.ones(next(arg.shape for arg in args if arg is not None), dtype=bool)
+        for i, arg in enumerate(args):
+            if arg is None:
+                continue
+            valid &= np.isfinite(arg)
+            if self.lower_bound is not None and self.lower_bound[i] is not None:
+                valid &= arg >= self.lower_bound[i]
+            if self.upper_bound is not None and self.upper_bound[i] is not None:
+                valid &= arg <= self.upper_bound[i]
+        return valid
+
     @abstractmethod
-    def _function_to_call(self, *args) -> float:
+    def _function_to_call(self, *args) -> float | np.ndarray:
         """
         Call the function associated with the property.
 
@@ -426,8 +458,9 @@ class Fatigue(Property):
             self.upper_bound.append(None)
 
     def _function_to_call(
-        self, x: float, y: float, s_mean: float | None = None
-    ) -> float:
+        self, x: float | np.ndarray, y: float | np.ndarray,
+        s_mean: float | np.ndarray | None = None,
+    ) -> float | np.ndarray:
         """Return the value from the table at a given point.
 
         Parameters
@@ -443,6 +476,23 @@ class Fatigue(Property):
         float
             Value from the table at (x, y).
         """
+        if s_mean is not None and np.ndim(s_mean) > 0:
+            x, y, s_mean = np.broadcast_arrays(x, y, s_mean)
+            result = np.full(x.shape, np.nan)
+            remaining = np.ones(x.shape, dtype=bool)
+            for mean_stress, table in self.tables.items():
+                selected = remaining & (s_mean <= float(mean_stress))
+                if np.any(selected):
+                    result[selected] = self._interpolate(table, x[selected], y[selected])
+                remaining &= ~selected
+            if np.any(remaining):
+                logging.warning(
+                    "Mean stress is above the maximum fatigue table for %s: "
+                    "using the last table for %d entries",
+                    self.material_name, np.count_nonzero(remaining),
+                )
+                result[remaining] = self._interpolate(table, x[remaining], y[remaining])
+            return result
         if s_mean is None:
             # Use the All table
             table = self.tables["All"]
@@ -470,13 +520,48 @@ class Fatigue(Property):
         return self._interpolate(table, x, y)
 
     def _interpolate(
-        self, table: tuple[np.ndarray, np.ndarray, np.ndarray], x: float, y: float
-    ) -> float:
+        self, table: tuple[np.ndarray, np.ndarray, np.ndarray],
+        x: float | np.ndarray, y: float | np.ndarray,
+    ) -> float | np.ndarray:
         """Interpolate the number of cycles. The curve at temperature x is obtained
         interpolating linearly in T the strain/stress of each N row, then N is
         interpolated log-log on that curve. Below the last row the allowable is the
         last N of the table, above the first row an OutOfBoundsError is raised."""
         T, N_cycles, matrix = table
+        if np.ndim(x) > 0 or np.ndim(y) > 0:
+            x, y = np.broadcast_arrays(x, y)
+            T_val = x.ravel() * self.scale_x
+            y_val = y.ravel() * self.scale_y
+            if len(T) == 1:
+                curves = np.broadcast_to(matrix[:, 0], (T_val.size, len(N_cycles)))
+            else:
+                j = np.clip(np.searchsorted(T, T_val), 1, len(T) - 1)
+                w = (T_val - T[j - 1]) / (T[j] - T[j - 1])
+                curves = matrix[:, j - 1].T * (1 - w[:, None]) + matrix[:, j].T * w[:, None]
+            n_above = np.sum(curves >= y_val[:, None], axis=1)
+            result = np.full(y_val.shape, np.nan)
+            result[n_above == len(N_cycles)] = N_cycles[-1]
+            bracket = (n_above > 0) & (n_above < len(N_cycles))
+            rows = np.flatnonzero(bracket)
+            i = n_above[bracket] - 1
+            y1, y2 = curves[rows, i], curves[rows, i + 1]
+            N1, N2 = N_cycles[i], N_cycles[i + 1]
+            exact = y_val[bracket] == y1
+            values = N1.copy()
+            interpolate = ~exact
+            values[interpolate] = 10 ** (
+                np.log10(N1[interpolate])
+                + np.log10(y_val[bracket][interpolate] / y1[interpolate])
+                * np.log10(N2[interpolate] / N1[interpolate])
+                / np.log10(y2[interpolate] / y1[interpolate])
+            )
+            result[bracket] = values
+            if np.any(n_above == 0):
+                logging.warning(
+                    "Array entries above the fatigue curve for %s: %d entries",
+                    self.material_name, np.count_nonzero(n_above == 0),
+                )
+            return result.reshape(x.shape)
         T_val = x * self.scale_x
         y_val = y * self.scale_y
         if len(T) == 1:
@@ -529,8 +614,9 @@ class FatigueInconelRCCMRx(Fatigue):
         self.upper_bound.extend([None, None])  # first one added already for mean stress
 
     def _function_to_call(
-        self, x: float, y: float, Sm: float, Smb: float, ds_tot: float
-    ) -> float:
+        self, x: float | np.ndarray, y: float | np.ndarray,
+        Sm: float | np.ndarray, Smb: float | np.ndarray, ds_tot: float | np.ndarray,
+    ) -> float | np.ndarray:
         """Return the value from the table at a given point.
 
         Parameters
@@ -551,6 +637,25 @@ class FatigueInconelRCCMRx(Fatigue):
             Value from the table at (x, y).
         """
         # Use the All table for this specific fatigue property
+        if any(np.ndim(arg) > 0 for arg in (x, y, Sm, Smb, ds_tot)):
+            x, y, Sm, Smb, ds_tot = np.broadcast_arrays(x, y, Sm, Smb, ds_tot)
+            curve1 = (ds_tot < 2.7 * Sm) | (ds_tot < 2.7 * Smb)
+            curve2 = np.logical_not(curve1) & (
+                ((ds_tot < 3 * Sm) & (ds_tot >= 2.7 * Sm))
+                | ((ds_tot < 3 * Smb) & (ds_tot >= 2.7 * Smb))
+            )
+            result = np.full(x.shape, np.nan)
+            for curve, selected in (("Curve1", curve1), ("Curve2", curve2)):
+                if np.any(selected):
+                    result[selected] = self._interpolate(
+                        self.tables[curve], x[selected], y[selected],
+                    )
+            if np.any(~(curve1 | curve2)):
+                logging.warning(
+                    "Total stress range above Inconel fatigue limits for %s: %d entries",
+                    self.material_name, np.count_nonzero(~(curve1 | curve2)),
+                )
+            return result
         if ds_tot < 2.7 * Sm or ds_tot < 2.7 * Smb:
             curve = "Curve1"
         elif (ds_tot < 3 * Sm and ds_tot >= 2.7 * Sm) or (
@@ -710,7 +815,14 @@ class MultiProperty(Property):
                         for i in range(len(self.upper_bound))
                     ]
 
-    def _function_to_call(self, *args) -> float:
+    def _array_in_bounds(self, *args) -> np.ndarray:
+        valid = super()._array_in_bounds(*args)
+        in_range = np.zeros(valid.shape, dtype=bool)
+        for prop in self.ranges:
+            in_range |= prop._array_in_bounds(*args)
+        return valid & in_range
+
+    def _function_to_call(self, *args) -> float | np.ndarray:
         """Return the value of the property based on the input arguments.
 
         Parameters
@@ -723,6 +835,22 @@ class MultiProperty(Property):
         float
             Value of the property based on the input arguments.
         """
+        if any(np.ndim(arg) > 0 for arg in args):
+            args = np.broadcast_arrays(*args)
+            result = np.full(args[0].shape, np.nan)
+            remaining = np.ones(result.shape, dtype=bool)
+            for prop in self.ranges:
+                selected = remaining & prop._array_in_bounds(*args)
+                if np.any(selected):
+                    values = prop(*(arg[selected] for arg in args))
+                    result[selected] = values
+                    remaining[selected] = False
+            if np.any(remaining):
+                logging.warning(
+                    "Array arguments outside all ranges for %s of %s: %d entries",
+                    self.name, self.material_name, np.count_nonzero(remaining),
+                )
+            return result
         for prop in self.ranges:
             try:
                 return prop(*args)
@@ -851,7 +979,10 @@ class Material:
         return res
 
     @trace.traced_method
-    def cyclic_stress_strain(self, T: float, ds: float, dpa: float = 0) -> float:
+    def cyclic_stress_strain(
+        self, T: float | np.ndarray, ds: float | np.ndarray,
+        dpa: float | np.ndarray = 0,
+    ) -> float | np.ndarray:
         """returns the plastic cyclic de_strain given a d_sigma (Pa) and T"""
         E = self.E(T, dpa) * 1e-6  # convert from Pa to MPa
         K = self.K(T)

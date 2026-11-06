@@ -1,5 +1,6 @@
 import json
 from importlib.resources import as_file, files
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -8,6 +9,8 @@ from cassy.additional_data import materials as mat_folder
 from cassy.auxiliary import trace
 from cassy.auxiliary.custom_errors import OutOfBoundsError
 from cassy.designcodes.codes import INVALID_VJ
+from cassy.designcodes.rccmr import RCC_MR
+from cassy.designcodes.rccmrx import RCC_MRx
 from cassy.designcodes.sdcic import (
     SDC_IC,
     IC3121_1_1_2a,
@@ -313,3 +316,60 @@ class TestSDCICPaths:
         result = ref_event.computeVj(SDC_IC(), material_ss316)
         assert result["Vj"] == INVALID_VJ
         assert result["Note"].startswith("invalidated:")
+
+
+@pytest.mark.parametrize("code_type,material_name", [
+    (SDC_IC, "SS316L(N)-IG_SDC-IC.yaml"),
+    (SDC_IC, "XM-19 SS_SDC-IC.yaml"),
+    (RCC_MRx, "SS316L(N)-IG_RCC-MRx.yaml"),
+    (RCC_MR, "SS316L(N)-IG_RCC-MRx.yaml"),
+])
+def test_computeVj_array_matches_scalar_assessments(code_type, material_name):
+    with as_file(files(mat_folder).joinpath(material_name)) as path:
+        material = Material(path)
+    code = code_type()
+    inputs = (
+        np.array([20., 150., 300., 400.]),
+        np.zeros(4),
+        np.array([1., 1.2, 1.5, 2.]),
+        np.array([100e6, 150e6, 200e6, 250e6]),
+        np.array([0., 25e6, 50e6, 100e6]),
+    )
+
+    def event(T, dpa, factor, total, primary):
+        return SimpleNamespace(
+            config=SimpleNamespace(T=T, dpa=dpa, welding_f=factor),
+            PQF=total, tresca=primary,
+        )
+
+    scalar = [
+        code.computeVj(event(*(float(values[index]) for values in inputs)), material)
+        for index in range(4)
+    ]
+    actual = code.computeVj(event(*inputs), material)
+    assert actual.keys() == scalar[0].keys()
+    for key, value in actual.items():
+        if value is None or isinstance(value, str):
+            assert all(assessment[key] == value for assessment in scalar)
+        else:
+            assert isinstance(value, np.ndarray)
+            np.testing.assert_allclose(value, [assessment[key] for assessment in scalar],
+                                       rtol=1e-12, equal_nan=True)
+    ncycles = np.array([10., 20., 30., 40.])
+    np.testing.assert_allclose(ncycles / actual["N"],
+                               [ncycles[i] / scalar[i]["N"] for i in range(4)])
+
+
+def test_array_fatigue_invalid_temperature_does_not_invalidate_other_nodes(material_ss316):
+    inputs = SimpleNamespace(
+        config=SimpleNamespace(T=np.array([200., 2000.]), dpa=0., welding_f=1.),
+        PQF=np.array([100e6, 100e6]), tresca=np.zeros(2),
+    )
+    result = SDC_IC().computeVj(inputs, material_ss316)
+    scalar = SimpleNamespace(
+        config=SimpleNamespace(T=200., dpa=0., welding_f=1.),
+        PQF=100e6, tresca=0.,
+    )
+    expected = SDC_IC().computeVj(scalar, material_ss316)
+    assert result["N"][0] == pytest.approx(expected["N"])
+    assert np.isnan(result["N"][1])
