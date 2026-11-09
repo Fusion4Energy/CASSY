@@ -116,33 +116,16 @@ class Property(ABC):
             broadcast_args = tuple(
                 next(array_iter) if arg is not None else None for arg in args
             )
-            valid = self._array_in_bounds(*broadcast_args)
-            result = np.full(valid.shape, np.nan)
-            result[valid] = self._function_to_call(
-                *(arg[valid] if arg is not None else None for arg in broadcast_args)
-            ) * self.scale_result
-            if np.any(~valid):
-                logging.warning(
-                    "Invalid array arguments for property %s of material %s: %d entries",
-                    self.name, self.material_name, np.count_nonzero(~valid),
-                )
-            return result
+            return self._call_array(*broadcast_args)[0]
         # Check bounds if they are defined
         for i, arg in enumerate(args):
-            if (
-                self.lower_bound is not None
-                and self.lower_bound[i] is not None
-                and arg < self.lower_bound[i]
-            ):
+            below, above = self._outside_bounds(i, arg)
+            if below:
                 raise OutOfBoundsError(
                     f"Argument {arg} is below the lower bound {self.lower_bound[i]}."
                     f" Property: {self.name}, Material: {self.material_name}"
                 )
-            if (
-                self.upper_bound is not None
-                and self.upper_bound[i] is not None
-                and arg > self.upper_bound[i]
-            ):
+            if above:
                 raise OutOfBoundsError(
                     f"Argument {arg} is above the upper bound {self.upper_bound[i]}."
                     f" Property: {self.name}, Material: {self.material_name}"
@@ -155,16 +138,49 @@ class Property(ABC):
             trace.record_property(self.name, result, args, self.material_name)
         return result
 
+    def _call_array(self, *args) -> tuple[np.ndarray, np.ndarray]:
+        """Array counterpart of __call__ on broadcast arguments. Return the values
+        and the mask of failed entries (NaN), i.e. those for which a scalar call
+        would raise OutOfBoundsError. A NaN value is not a failure by itself."""
+        valid = self._array_in_bounds(*args)
+        result = np.full(valid.shape, np.nan)
+        failed = ~valid
+        if np.any(~valid):
+            logging.warning(
+                "Invalid array arguments for property %s of material %s: %d entries",
+                self.name, self.material_name, np.count_nonzero(~valid),
+            )
+        values, value_failed = self._function_to_call_array(
+            *(arg[valid] if arg is not None else None for arg in args)
+        )
+        result[valid] = values * self.scale_result
+        failed[valid] = value_failed
+        return result, failed
+
+    def _function_to_call_array(self, *args) -> tuple[np.ndarray, np.ndarray]:
+        """_function_to_call on array arguments, with the mask of the entries that
+        failed. By default nothing fails once the bounds are satisfied."""
+        values = self._function_to_call(*args)
+        shape = next(arg.shape for arg in args if arg is not None)
+        return values, np.zeros(shape, dtype=bool)
+
+    def _outside_bounds(self, i: int, arg):
+        """Return (below, above) for argument i: booleans for a scalar argument,
+        boolean arrays for an array argument. The single definition of the bounds
+        used by both the scalar and the array paths."""
+        lower = self.lower_bound[i] if self.lower_bound is not None else None
+        upper = self.upper_bound[i] if self.upper_bound is not None else None
+        below = np.less(arg, lower) if lower is not None else np.zeros_like(arg, bool)
+        above = np.greater(arg, upper) if upper is not None else np.zeros_like(arg, bool)
+        return below, above
+
     def _array_in_bounds(self, *args) -> np.ndarray:
         valid = np.ones(next(arg.shape for arg in args if arg is not None), dtype=bool)
         for i, arg in enumerate(args):
             if arg is None:
                 continue
-            valid &= np.isfinite(arg)
-            if self.lower_bound is not None and self.lower_bound[i] is not None:
-                valid &= arg >= self.lower_bound[i]
-            if self.upper_bound is not None and self.upper_bound[i] is not None:
-                valid &= arg <= self.upper_bound[i]
+            below, above = self._outside_bounds(i, arg)
+            valid &= np.isfinite(arg) & ~below & ~above
         return valid
 
     @abstractmethod
@@ -476,35 +492,17 @@ class Fatigue(Property):
         float
             Value from the table at (x, y).
         """
-        if s_mean is not None and np.ndim(s_mean) > 0:
-            x, y, s_mean = np.broadcast_arrays(x, y, s_mean)
-            result = np.full(x.shape, np.nan)
-            remaining = np.ones(x.shape, dtype=bool)
-            for mean_stress, table in self.tables.items():
-                selected = remaining & (s_mean <= float(mean_stress))
-                if np.any(selected):
-                    result[selected] = self._interpolate(table, x[selected], y[selected])
-                remaining &= ~selected
-            if np.any(remaining):
-                logging.warning(
-                    "Mean stress is above the maximum fatigue table for %s: "
-                    "using the last table for %d entries",
-                    self.material_name, np.count_nonzero(remaining),
-                )
-                result[remaining] = self._interpolate(table, x[remaining], y[remaining])
-            return result
         if s_mean is None:
             # Use the All table
-            table = self.tables["All"]
-        else:
-            table = None
-            for mean_stress, table_s in self.tables.items():
-                if s_mean <= float(mean_stress):
-                    table = table_s
-                    break
-            if table is None:
-                # insteading of raising an error, we can use the last table
-                # with a warning
+            return self._interpolate(self.tables["All"], x, y)
+        # first table whose mean stress key is >= s_mean, -1 if above all of them
+        keys = np.array([float(key) for key in self.tables])
+        below_key = np.asarray(s_mean, dtype=float)[..., None] <= keys
+        index = np.where(below_key.any(axis=-1), below_key.argmax(axis=-1), -1)
+        if np.any(index < 0):
+            # insteading of raising an error, we can use the last table
+            # with a warning
+            if np.ndim(index) == 0:
                 logging.warning(
                     f"Mean stress {s_mean} is above the maximum defined in the "
                     f"fatigue table. Using the last table."
@@ -515,9 +513,34 @@ class Fatigue(Property):
                     kind="warning",
                     source=self.material_name,
                 )
-                table = table_s
+            else:
+                logging.warning(
+                    "Mean stress is above the maximum fatigue table for %s: "
+                    "using the last table for %d entries",
+                    self.material_name, np.count_nonzero(index < 0),
+                )
+            index = np.where(index < 0, len(keys) - 1, index)
+        return self._interpolate_selected(list(self.tables.values()), index, x, y)
 
-        return self._interpolate(table, x, y)
+    def _function_to_call_array(self, *args) -> tuple[np.ndarray, np.ndarray]:
+        # fatigue values are never NaN unless the evaluation failed
+        values = self._function_to_call(*args)
+        return values, np.isnan(values)
+
+    def _interpolate_selected(
+        self, tables: list, index, x: float | np.ndarray, y: float | np.ndarray
+    ) -> float | np.ndarray:
+        """Interpolate each entry on tables[index]. Entries with a negative index
+        are NaN (array inputs only: scalar callers must raise before)."""
+        if np.ndim(index) == 0 and np.ndim(x) == 0 and np.ndim(y) == 0:
+            return self._interpolate(tables[int(index)], x, y)
+        x, y, index = np.broadcast_arrays(x, y, index)
+        result = np.full(x.shape, np.nan)
+        for k, table in enumerate(tables):
+            selected = index == k
+            if np.any(selected):
+                result[selected] = self._interpolate(table, x[selected], y[selected])
+        return result
 
     def _interpolate(
         self, table: tuple[np.ndarray, np.ndarray, np.ndarray],
@@ -527,70 +550,62 @@ class Fatigue(Property):
         interpolating linearly in T the strain/stress of each N row, then N is
         interpolated log-log on that curve. Below the last row the allowable is the
         last N of the table, above the first row an OutOfBoundsError is raised."""
-        T, N_cycles, matrix = table
-        if np.ndim(x) > 0 or np.ndim(y) > 0:
-            x, y = np.broadcast_arrays(x, y)
-            T_val = x.ravel() * self.scale_x
-            y_val = y.ravel() * self.scale_y
-            if len(T) == 1:
-                curves = np.broadcast_to(matrix[:, 0], (T_val.size, len(N_cycles)))
-            else:
-                j = np.clip(np.searchsorted(T, T_val), 1, len(T) - 1)
-                w = (T_val - T[j - 1]) / (T[j] - T[j - 1])
-                curves = matrix[:, j - 1].T * (1 - w[:, None]) + matrix[:, j].T * w[:, None]
-            n_above = np.sum(curves >= y_val[:, None], axis=1)
-            result = np.full(y_val.shape, np.nan)
-            result[n_above == len(N_cycles)] = N_cycles[-1]
-            bracket = (n_above > 0) & (n_above < len(N_cycles))
-            rows = np.flatnonzero(bracket)
-            i = n_above[bracket] - 1
-            y1, y2 = curves[rows, i], curves[rows, i + 1]
-            N1, N2 = N_cycles[i], N_cycles[i + 1]
-            exact = y_val[bracket] == y1
-            values = N1.copy()
-            interpolate = ~exact
-            values[interpolate] = 10 ** (
-                np.log10(N1[interpolate])
-                + np.log10(y_val[bracket][interpolate] / y1[interpolate])
-                * np.log10(N2[interpolate] / N1[interpolate])
-                / np.log10(y2[interpolate] / y1[interpolate])
-            )
-            result[bracket] = values
-            if np.any(n_above == 0):
-                logging.warning(
-                    "Array entries above the fatigue curve for %s: %d entries",
-                    self.material_name, np.count_nonzero(n_above == 0),
+        N = self._interpolate_array(table, np.atleast_1d(x), np.atleast_1d(y))
+        above_curve = np.isnan(N)
+        if np.ndim(x) == 0 and np.ndim(y) == 0:
+            if above_curve[0]:
+                raise OutOfBoundsError(
+                    f"{self.ftype.capitalize()} {y} at T={x} is above the fatigue "
+                    f"curve. Property: {self.name}, Material: {self.material_name}"
                 )
-            return result.reshape(x.shape)
-        T_val = x * self.scale_x
-        y_val = y * self.scale_y
+            return float(N[0])
+        if np.any(above_curve):
+            logging.warning(
+                "Array entries above the fatigue curve for %s: %d entries",
+                self.material_name, np.count_nonzero(above_curve),
+            )
+        return N
+
+    def _interpolate_array(
+        self, table: tuple[np.ndarray, np.ndarray, np.ndarray],
+        x: np.ndarray, y: np.ndarray,
+    ) -> np.ndarray:
+        """Vectorised core of _interpolate, shared by scalar and array calls.
+        Entries above the curve are NaN."""
+        T, N_cycles, matrix = table
+        x, y = np.broadcast_arrays(x, y)
+        T_val = x.ravel() * self.scale_x
+        y_val = y.ravel() * self.scale_y
         if len(T) == 1:
-            curve = matrix[:, 0]
+            curves = np.broadcast_to(matrix[:, 0], (T_val.size, len(N_cycles)))
         else:
-            j = min(max(int(np.searchsorted(T, T_val)), 1), len(T) - 1)
+            j = np.clip(np.searchsorted(T, T_val), 1, len(T) - 1)
             w = (T_val - T[j - 1]) / (T[j] - T[j - 1])
-            curve = matrix[:, j - 1] * (1 - w) + matrix[:, j] * w
+            curves = matrix[:, j - 1].T * (1 - w[:, None]) + matrix[:, j].T * w[:, None]
 
         # The curve is non-increasing with N: the bracket starts at the last row
         # with curve >= y_val, which also picks the largest N on flat segments.
-        n_above = int(np.sum(curve >= y_val))
-        if n_above == 0:
-            raise OutOfBoundsError(
-                f"{self.ftype.capitalize()} {y} at T={x} is above the fatigue curve."
-                f" Property: {self.name}, Material: {self.material_name}"
-            )
-        if n_above == len(curve):
-            return float(N_cycles[-1])
-        i = n_above - 1
-        y1, y2 = curve[i], curve[i + 1]
+        n_above = np.sum(curves >= y_val[:, None], axis=1)
+        result = np.full(y_val.shape, np.nan)
+        # below the last row the allowable is the last N of the table
+        result[n_above == len(N_cycles)] = N_cycles[-1]
+        bracket = (n_above > 0) & (n_above < len(N_cycles))
+        rows = np.flatnonzero(bracket)
+        i = n_above[bracket] - 1
+        y_b = y_val[bracket]
+        y1, y2 = curves[rows, i], curves[rows, i + 1]
         N1, N2 = N_cycles[i], N_cycles[i + 1]
-        if y_val == y1:
-            # on a table row, avoid the round-off of the log interpolation
-            return float(N1)
-        log_N = np.log10(N1) + np.log10(y_val / y1) * np.log10(N2 / N1) / np.log10(
-            y2 / y1
+        # on a table row, keep N1 to avoid the round-off of the log interpolation
+        values = N1.copy()
+        interpolate = y_b != y1
+        values[interpolate] = 10 ** (
+            np.log10(N1[interpolate])
+            + np.log10(y_b[interpolate] / y1[interpolate])
+            * np.log10(N2[interpolate] / N1[interpolate])
+            / np.log10(y2[interpolate] / y1[interpolate])
         )
-        return float(10**log_N)
+        result[bracket] = values
+        return result.reshape(x.shape)
 
 
 class FatigueInconelRCCMRx(Fatigue):
@@ -636,38 +651,24 @@ class FatigueInconelRCCMRx(Fatigue):
         float
             Value from the table at (x, y).
         """
-        # Use the All table for this specific fatigue property
-        if any(np.ndim(arg) > 0 for arg in (x, y, Sm, Smb, ds_tot)):
-            x, y, Sm, Smb, ds_tot = np.broadcast_arrays(x, y, Sm, Smb, ds_tot)
-            curve1 = (ds_tot < 2.7 * Sm) | (ds_tot < 2.7 * Smb)
-            curve2 = np.logical_not(curve1) & (
-                ((ds_tot < 3 * Sm) & (ds_tot >= 2.7 * Sm))
-                | ((ds_tot < 3 * Smb) & (ds_tot >= 2.7 * Smb))
-            )
-            result = np.full(x.shape, np.nan)
-            for curve, selected in (("Curve1", curve1), ("Curve2", curve2)):
-                if np.any(selected):
-                    result[selected] = self._interpolate(
-                        self.tables[curve], x[selected], y[selected],
-                    )
-            if np.any(~(curve1 | curve2)):
-                logging.warning(
-                    "Total stress range above Inconel fatigue limits for %s: %d entries",
-                    self.material_name, np.count_nonzero(~(curve1 | curve2)),
+        ds_tot, Sm, Smb = np.asarray(ds_tot), np.asarray(Sm), np.asarray(Smb)
+        curve1 = (ds_tot < 2.7 * Sm) | (ds_tot < 2.7 * Smb)
+        curve2 = ((ds_tot < 3 * Sm) & (ds_tot >= 2.7 * Sm)) | (
+            (ds_tot < 3.0 * Smb) & (ds_tot >= 2.7 * Smb)
+        )
+        index = np.where(curve1, 0, np.where(curve2, 1, -1))
+        if np.any(index < 0):
+            if all(np.ndim(arg) == 0 for arg in (x, y, index)):
+                raise OutOfBoundsError(
+                    f"Total stress range {ds_tot} is above the maximum defined in the "
+                    f"fatigue table."
                 )
-            return result
-        if ds_tot < 2.7 * Sm or ds_tot < 2.7 * Smb:
-            curve = "Curve1"
-        elif (ds_tot < 3 * Sm and ds_tot >= 2.7 * Sm) or (
-            ds_tot < 3.0 * Smb and ds_tot >= 2.7 * Smb
-        ):
-            curve = "Curve2"
-        else:
-            raise OutOfBoundsError(
-                f"Total stress range {ds_tot} is above the maximum defined in the "
-                f"fatigue table."
+            logging.warning(
+                "Total stress range above Inconel fatigue limits for %s: %d entries",
+                self.material_name, np.count_nonzero(index < 0),
             )
-        return self._interpolate(self.tables[curve], x, y)
+        tables = [self.tables["Curve1"], self.tables["Curve2"]]
+        return self._interpolate_selected(tables, index, x, y)
 
 
 class PolynomialProperty(Property):
@@ -836,21 +837,7 @@ class MultiProperty(Property):
             Value of the property based on the input arguments.
         """
         if any(np.ndim(arg) > 0 for arg in args):
-            args = np.broadcast_arrays(*args)
-            result = np.full(args[0].shape, np.nan)
-            remaining = np.ones(result.shape, dtype=bool)
-            for prop in self.ranges:
-                selected = remaining & prop._array_in_bounds(*args)
-                if np.any(selected):
-                    values = prop(*(arg[selected] for arg in args))
-                    result[selected] = values
-                    remaining[selected] = False
-            if np.any(remaining):
-                logging.warning(
-                    "Array arguments outside all ranges for %s of %s: %d entries",
-                    self.name, self.material_name, np.count_nonzero(remaining),
-                )
-            return result
+            return self._function_to_call_array(*args)[0]
         for prop in self.ranges:
             try:
                 return prop(*args)
@@ -860,6 +847,27 @@ class MultiProperty(Property):
             f"Input arguments {args} are out of bounds for all ranges."
             f" Property: {self.name}, Material: {self.material_name}"
         )
+
+
+    def _function_to_call_array(self, *args) -> tuple[np.ndarray, np.ndarray]:
+        """Array counterpart of the scalar range loop: the first matching range
+        wins and, as the scalar loop moves on to the next range on any
+        OutOfBoundsError, entries that failed in a range go on to the next one."""
+        args = np.broadcast_arrays(*args)
+        result = np.full(args[0].shape, np.nan)
+        remaining = np.ones(result.shape, dtype=bool)
+        for prop in self.ranges:
+            selected = remaining & prop._array_in_bounds(*args)
+            if np.any(selected):
+                values, failed = prop._call_array(*(arg[selected] for arg in args))
+                result[selected] = values
+                remaining[selected] = failed
+        if np.any(remaining):
+            logging.warning(
+                "Array arguments outside all ranges for %s of %s: %d entries",
+                self.name, self.material_name, np.count_nonzero(remaining),
+            )
+        return result, remaining
 
 
 class PropertyFactory:

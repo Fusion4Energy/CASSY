@@ -205,3 +205,19 @@ def test_constant_broadcasts_unused_arguments_and_keeps_scalar_type():
     prop = make_property({"type": "constant", "value": 7})
     assert type(prop()) is float
     assert_scalar_parity(prop, np.array([0, 1])[:, None], np.array([2, 3, 4])[None, :])
+
+
+def test_traced_method_skips_array_calls():
+    with as_file(files(materials).joinpath("SS316L(N)-IG_SDC-IC.yaml")) as path:
+        from cassy.general.material import Material
+        material = Material(path)
+    tracer = trace.Tracer()
+    with trace.activate(tracer):
+        values = material.cyclic_stress_strain(np.array([20., 200.]), np.array([1e8, 2e8]))
+    assert isinstance(values, np.ndarray)
+    # scalar lookups done inside (e.g. nu()) are still traced, the array one is not
+    assert "cyclic_stress_strain" not in [record["name"] for record in tracer.records]
+    tracer = trace.Tracer()
+    with trace.activate(tracer):
+        material.cyclic_stress_strain(20., 1e8)
+    assert [record["name"] for record in tracer.records] == ["cyclic_stress_strain"]

@@ -52,6 +52,23 @@ There are attributes that are general and can be specified in each data format. 
 
 When a property is requested outside its bounds during an assessment, the rule (or the fatigue event) that needs it is invalidated and counted as failed, with a warning in the log and in the [trace](trace.md); the rest of the assessment goes on.
 
+- `scale_result`: data may be provided in differen units than the standard (e.g. Young modulus in GPa instead of Pa). This factor can be used to scale the provided data accordingly. By default equal to 1.
+- `scale_x`, `scale_y` and `scale_z`: to ensure a correct interpolation, especially on tables, it is
+better to stick with the units the data is provided. cassy will enter these interpolation functions though with standard units (e.g. Pa, rel strain, etc.) hence, before entering into the interpolation range, this arguments (x, y, z) may need to be scaled accordingly. By default equal to 1. The only exception are stress based [fatigue](#fatigue) curves, which cassy enters in MPa.
+
+This is an example of a general property would look like:
+
+```yaml
+Young Modulus: # property name from the supported ones
+    type: equation # one of the supported format types
+    lower_bound: [20, null] # degrees Celsius, dpa
+    upper_bound: [700, null] # degrees Celsius, dpa
+    scale_result: 1e9 # to convert GPa to Pa
+    ...
+```
+
+### Array inputs
+
 When using the Python API, material properties also accept NumPy arrays and
 broadcast scalar and array arguments to a common shape. Array entries outside
 the property bounds, with non-finite inputs, or above the fatigue curve return
@@ -60,7 +77,8 @@ keep their existing return types and raise `OutOfBoundsError` outside the bounds
 Piecewise properties retain first-matching-range precedence, including at shared
 boundaries. Fatigue interpolation retains exact table hits, the largest cycle
 count on flat segments, and the last table cycle count below the curve.
-Array property lookups are not added to the intermediate-results trace and do
+Array property lookups (and array calls of material methods such as
+`cyclic_stress_strain`) are not added to the intermediate-results trace and do
 not enter tracing contexts. Scalar property lookups still use the existing trace
 when it is active; array validation warnings remain in the log.
 
@@ -81,21 +99,6 @@ contain arrays for numeric results. Existing stress-curve support is unchanged:
 SDC-IC supports stress-based curves; RCC-MR and RCC-MRx still reject them.
 This does not make the path assessment/export interfaces or Neuber root solver
 array-aware.
-
-- `scale_result`: data may be provided in differen units than the standard (e.g. Young modulus in GPa instead of Pa). This factor can be used to scale the provided data accordingly. By default equal to 1.
-- `scale_x`, `scale_y` and `scale_z`: to ensure a correct interpolation, especially on tables, it is
-better to stick with the units the data is provided. cassy will enter these interpolation functions though with standard units (e.g. Pa, rel strain, etc.) hence, before entering into the interpolation range, this arguments (x, y, z) may need to be scaled accordingly. By default equal to 1. The only exception are stress based [fatigue](#fatigue) curves, which cassy enters in MPa.
-
-This is an example of a general property would look like:
-
-```yaml
-Young Modulus: # property name from the supported ones
-    type: equation # one of the supported format types
-    lower_bound: [20, null] # degrees Celsius, dpa
-    upper_bound: [700, null] # degrees Celsius, dpa
-    scale_result: 1e9 # to convert GPa to Pa
-    ...
-```
 
 ### Constant
 The easiest format, it provides a constant value
