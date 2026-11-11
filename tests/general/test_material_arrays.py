@@ -207,6 +207,25 @@ def test_constant_broadcasts_unused_arguments_and_keeps_scalar_type():
     assert_scalar_parity(prop, np.array([0, 1])[:, None], np.array([2, 3, 4])[None, :])
 
 
+@pytest.mark.parametrize("equation", [
+    "T if T >= 100 else 100", "max(T, 100)", "100 + 0*T if T < 100 else T",
+])
+def test_non_vectorizable_equation_falls_back_to_entries(equation):
+    prop = make_property(
+        {"type": "equation", "equation": equation, "args": ["T"],
+         "lower_bound": [0], "upper_bound": [500]}
+    )
+    np.testing.assert_array_equal(prop(np.array([50., 150.])), [100., 150.])
+    result = prop(np.array([[50., -1.], [150., 600.]]))
+    np.testing.assert_array_equal(result, [[100., np.nan], [150., np.nan]])
+    assert_scalar_parity(prop, np.array([0., 50., 100., 150., 500.]))
+
+
+def test_constant_equation_broadcasts():
+    prop = make_property({"type": "equation", "equation": "200", "args": ["T"]})
+    np.testing.assert_array_equal(prop(np.array([1., 2., 3.])), [200., 200., 200.])
+
+
 def test_traced_method_skips_array_calls():
     with as_file(files(materials).joinpath("SS316L(N)-IG_SDC-IC.yaml")) as path:
         from cassy.general.material import Material

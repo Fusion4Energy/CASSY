@@ -769,6 +769,24 @@ class EquationProperty(Property):
     def _function_to_call(self, *args) -> float:
         return self.equation_func(*args)
 
+    def _function_to_call_array(self, *args) -> tuple[np.ndarray, np.ndarray]:
+        """Evaluate the equation on whole arrays when it is vector-safe, otherwise
+        (e.g. Python conditionals, max/min) fall back to one entry at a time."""
+        shape = next(arg.shape for arg in args if arg is not None)
+        try:
+            values = np.broadcast_to(self.equation_func(*args), shape)
+        except (ValueError, TypeError):
+            values = np.array(
+                [
+                    self.equation_func(
+                        *(arg[idx] if arg is not None else None for arg in args)
+                    )
+                    for idx in np.ndindex(shape)
+                ],
+                dtype=float,
+            ).reshape(shape)
+        return values, np.zeros(shape, dtype=bool)
+
 
 class MultiProperty(Property):
     ALLOWED_KEYS = COMMON_KEYS | {"ranges"}

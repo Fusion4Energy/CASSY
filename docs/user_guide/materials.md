@@ -72,7 +72,10 @@ Young Modulus: # property name from the supported ones
 When using the Python API, material properties also accept NumPy arrays and
 broadcast scalar and array arguments to a common shape. Array entries outside
 the property bounds, with non-finite inputs, or above the fatigue curve return
-`NaN` and produce a warning; other entries are still evaluated. Scalar calls
+`NaN` and produce a warning; other entries are still evaluated. Equations are
+evaluated on whole arrays when possible; equations that only work on scalars
+(e.g. `T if T >= 100 else 100` or `max(T, 100)`) are evaluated entry by entry.
+Scalar calls
 keep their existing return types and raise `OutOfBoundsError` outside the bounds.
 Piecewise properties retain first-matching-range precedence, including at shared
 boundaries. Fatigue interpolation retains exact table hits, the largest cycle
