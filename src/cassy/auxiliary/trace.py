@@ -287,7 +287,10 @@ def traced_method(func: Callable) -> Callable:
 
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
-        if _active.get() is None:
+        # array calls (e.g. vectorised fatigue) are not traced, as property calls
+        if _active.get() is None or any(
+            np.ndim(arg) > 0 for arg in (*args, *kwargs.values())
+        ):
             return func(self, *args, **kwargs)
         with nested() as outermost:
             result = func(self, *args, **kwargs)
