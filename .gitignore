@@ -14,3 +14,4 @@ coverage.xml
 prof/
 site/**
 cassy_test
+build
